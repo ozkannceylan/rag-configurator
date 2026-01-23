@@ -1,0 +1,281 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://rag-configurator.dev/schemas/config.json",
+  "title": "RAGPipelineConfig",
+  "description": "Complete RAG pipeline configuration",
+  "type": "object",
+  "required": ["name", "data_source", "models", "retrieval", "agent", "prompts"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "description": { "type": "string", "default": "" },
+    "version": { "type": "string", "default": "1.0.0" },
+    "created_by": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "status": { "$ref": "#/$defs/IngestionStatus" },
+    "api_endpoint": { "type": ["string", "null"] },
+    "data_source": { "$ref": "#/$defs/DataSourceConfig" },
+    "rbac": { "$ref": "#/$defs/RBACConfig" },
+    "models": { "$ref": "#/$defs/ModelConfig" },
+    "retrieval": { "$ref": "#/$defs/RetrievalConfig" },
+    "chunking": { "$ref": "#/$defs/ChunkingConfig" },
+    "agent": { "$ref": "#/$defs/AgentConfig" },
+    "prompts": { "$ref": "#/$defs/PromptConfig" },
+    "stats": { "type": ["object", "null"] }
+  },
+  "$defs": {
+    "DataSourceType": {
+      "type": "string",
+      "enum": ["local", "s3", "gcs", "azure_blob"]
+    },
+    "DataType": {
+      "type": "string",
+      "enum": ["text", "pdf", "image", "docx", "xlsx", "csv", "markdown"]
+    },
+    "LLMProvider": {
+      "type": "string",
+      "enum": ["openai", "ollama", "vllm", "anthropic", "azure_openai"]
+    },
+    "EmbeddingProvider": {
+      "type": "string",
+      "enum": ["openai", "ollama", "huggingface"]
+    },
+    "RetrievalMethod": {
+      "type": "string",
+      "enum": ["naive", "keyword", "hybrid", "graph", "hybrid_graph"]
+    },
+    "AgentTemplate": {
+      "type": "string",
+      "enum": ["naive_rag", "react", "crag", "self_rag", "multi_query", "plan_solve"]
+    },
+    "ChunkingStrategy": {
+      "type": "string",
+      "enum": ["recursive", "semantic", "document"]
+    },
+    "IngestionStatus": {
+      "type": "string",
+      "enum": ["pending", "processing", "completed", "failed"],
+      "default": "pending"
+    },
+    "FolderConfig": {
+      "type": "object",
+      "required": ["path", "name"],
+      "properties": {
+        "path": { "type": "string" },
+        "name": { "type": "string" },
+        "detected_types": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DataType" },
+          "default": []
+        },
+        "allowed_roles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["*"]
+        },
+        "recursive": { "type": "boolean", "default": true },
+        "file_patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["*"]
+        },
+        "file_count": { "type": "integer", "default": 0 }
+      }
+    },
+    "DataSourceConfig": {
+      "type": "object",
+      "required": ["type", "base_path"],
+      "properties": {
+        "type": { "$ref": "#/$defs/DataSourceType" },
+        "base_path": { "type": "string" },
+        "credentials": { "type": ["object", "null"] },
+        "folders": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FolderConfig" },
+          "default": []
+        },
+        "has_multimodal": { "type": "boolean", "default": false }
+      }
+    },
+    "RoleConfig": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string", "default": "" },
+        "allowed_folders": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["*"]
+        },
+        "can_query": { "type": "boolean", "default": true },
+        "can_view_sources": { "type": "boolean", "default": true },
+        "rate_limit": { "type": ["integer", "null"] }
+      }
+    },
+    "RBACConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "roles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RoleConfig" },
+          "default": []
+        },
+        "default_role": { "type": "string", "default": "user" }
+      }
+    },
+    "LLMConfig": {
+      "type": "object",
+      "required": ["provider", "model_name"],
+      "properties": {
+        "provider": { "$ref": "#/$defs/LLMProvider" },
+        "model_name": { "type": "string" },
+        "base_url": { "type": ["string", "null"] },
+        "api_key": { "type": ["string", "null"] },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2, "default": 0.7 },
+        "max_tokens": { "type": "integer", "minimum": 1, "default": 2048 },
+        "is_multimodal": { "type": "boolean", "default": false }
+      }
+    },
+    "EmbeddingConfig": {
+      "type": "object",
+      "required": ["provider", "model_name"],
+      "properties": {
+        "provider": { "$ref": "#/$defs/EmbeddingProvider" },
+        "model_name": { "type": "string" },
+        "base_url": { "type": ["string", "null"] },
+        "api_key": { "type": ["string", "null"] },
+        "dimensions": { "type": "integer", "default": 1536 }
+      }
+    },
+    "DocumentProcessingConfig": {
+      "type": "object",
+      "properties": {
+        "use_docling": { "type": "boolean", "default": false },
+        "use_vision_llm": { "type": "boolean", "default": false },
+        "vision_llm": { "$ref": "#/$defs/LLMConfig" },
+        "ocr_enabled": { "type": "boolean", "default": true }
+      }
+    },
+    "ModelConfig": {
+      "type": "object",
+      "required": ["llm", "embedding"],
+      "properties": {
+        "llm": { "$ref": "#/$defs/LLMConfig" },
+        "embedding": { "$ref": "#/$defs/EmbeddingConfig" },
+        "document_processing": { "$ref": "#/$defs/DocumentProcessingConfig" }
+      }
+    },
+    "VectorSearchConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "top_k": { "type": "integer", "minimum": 1, "maximum": 100, "default": 5 },
+        "score_threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.7 }
+      }
+    },
+    "KeywordSearchConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "top_k": { "type": "integer", "minimum": 1, "maximum": 100, "default": 5 },
+        "use_fuzzy": { "type": "boolean", "default": true },
+        "boost_factor": { "type": "number", "default": 1.0 }
+      }
+    },
+    "GraphSearchConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "max_depth": { "type": "integer", "minimum": 1, "maximum": 5, "default": 2 },
+        "top_k": { "type": "integer", "minimum": 1, "maximum": 100, "default": 5 }
+      }
+    },
+    "GraphSchemaNode": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string", "default": "" },
+        "properties": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "GraphSchemaRelation": {
+      "type": "object",
+      "required": ["name", "source_node", "target_node"],
+      "properties": {
+        "name": { "type": "string" },
+        "source_node": { "type": "string" },
+        "target_node": { "type": "string" },
+        "description": { "type": "string", "default": "" }
+      }
+    },
+    "GraphSchema": {
+      "type": "object",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/GraphSchemaNode" },
+          "default": []
+        },
+        "relations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/GraphSchemaRelation" },
+          "default": []
+        },
+        "auto_extract": { "type": "boolean", "default": true }
+      }
+    },
+    "RetrievalConfig": {
+      "type": "object",
+      "required": ["method"],
+      "properties": {
+        "method": { "$ref": "#/$defs/RetrievalMethod" },
+        "vector": { "$ref": "#/$defs/VectorSearchConfig" },
+        "keyword": { "$ref": "#/$defs/KeywordSearchConfig" },
+        "graph": { "$ref": "#/$defs/GraphSearchConfig" },
+        "graph_schema": { "$ref": "#/$defs/GraphSchema" },
+        "reranker_enabled": { "type": "boolean", "default": false },
+        "reranker_model": { "type": ["string", "null"] }
+      }
+    },
+    "ChunkingConfig": {
+      "type": "object",
+      "properties": {
+        "strategy": { "$ref": "#/$defs/ChunkingStrategy" },
+        "chunk_size": { "type": "integer", "minimum": 100, "maximum": 4000, "default": 512 },
+        "chunk_overlap": { "type": "integer", "minimum": 0, "maximum": 500, "default": 50 },
+        "separators": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["\n\n", "\n", " ", ""]
+        }
+      }
+    },
+    "AgentConfig": {
+      "type": "object",
+      "required": ["template"],
+      "properties": {
+        "template": { "$ref": "#/$defs/AgentTemplate" },
+        "max_iterations": { "type": "integer", "minimum": 1, "maximum": 20, "default": 5 },
+        "enable_judge": { "type": "boolean", "default": false },
+        "judge_llm": { "$ref": "#/$defs/LLMConfig" }
+      }
+    },
+    "PromptConfig": {
+      "type": "object",
+      "required": ["system_prompt", "rag_prompt_template"],
+      "properties": {
+        "system_prompt": { "type": "string" },
+        "rag_prompt_template": { "type": "string" },
+        "judge_prompts": { "type": ["object", "null"] }
+      }
+    }
+  }
+}
