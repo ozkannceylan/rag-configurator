@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker inspect:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" mod tidy)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" build ./...)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./... -v)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" get github.com/golang-jwt/jwt/v5)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./pkg/jwt/... -v)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./internal/middleware/... -v)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./internal/proxy/... -v)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./internal/router/... -v)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./internal/middleware/... -v -run TestCORS)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" test:*)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./...)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" get golang.org/x/time/rate)",
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./internal/middleware/... -v -run TestRateLimit)"
+    ]
+  }
+}

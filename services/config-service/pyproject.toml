@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "config-service"
+version = "1.0.0"
+description = "RAG Configurator - Config Service"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]

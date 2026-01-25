@@ -271,7 +271,4 @@ class RAGPipelineConfig(BaseModel):
 
     model_config = {
         "populate_by_name": True,
-        "json_encoders": {
-            datetime: lambda v: v.isoformat()
-        }
     }

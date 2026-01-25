@@ -1,0 +1,85 @@
+package config
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/caarlos0/env/v10"
+	"github.com/joho/godotenv"
+)
+
+// Config holds all gateway configuration
+type Config struct {
+	// Server
+	Port        int    `env:"GATEWAY_PORT" envDefault:"8000"`
+	Environment string `env:"ENVIRONMENT" envDefault:"development"`
+	LogLevel    string `env:"LOG_LEVEL" envDefault:"info"`
+
+	// JWT - must match Phase 1 Config Service
+	JWTSecretKey string `env:"JWT_SECRET_KEY,required"`
+	JWTAlgorithm string `env:"JWT_ALGORITHM" envDefault:"HS256"`
+
+	// Backend Services
+	ConfigServiceURL    string `env:"CONFIG_SERVICE_URL" envDefault:"http://localhost:8001"`
+	IngestionServiceURL string `env:"INGESTION_SERVICE_URL" envDefault:"http://localhost:8002"`
+	RAGServiceURL       string `env:"RAG_SERVICE_URL" envDefault:"http://localhost:8003"`
+
+	// CORS
+	CORSOriginsRaw string   `env:"CORS_ORIGINS" envDefault:"http://localhost:3000,http://localhost:3001"`
+	CORSOrigins    []string `env:"-"`
+
+	// Rate Limiting
+	RateLimitRPS   int `env:"RATE_LIMIT_RPS" envDefault:"100"`
+	RateLimitBurst int `env:"RATE_LIMIT_BURST" envDefault:"200"`
+}
+
+// IsDevelopment returns true if running in development mode
+func (c *Config) IsDevelopment() bool {
+	return c.Environment == "development"
+}
+
+// Load reads configuration from environment variables
+func Load() (*Config, error) {
+	// Load .env file if it exists (ignore error if not found)
+	_ = godotenv.Load()
+
+	cfg := &Config{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse environment config: %w", err)
+	}
+
+	// Parse CORS origins from comma-separated string
+	cfg.CORSOrigins = parseCSV(cfg.CORSOriginsRaw)
+
+	// Validate
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+func (c *Config) validate() error {
+	if c.JWTSecretKey == "" {
+		return fmt.Errorf("JWT_SECRET_KEY is required")
+	}
+	if c.JWTAlgorithm != "HS256" && c.JWTAlgorithm != "HS384" && c.JWTAlgorithm != "HS512" {
+		return fmt.Errorf("JWT_ALGORITHM must be HS256, HS384, or HS512")
+	}
+	return nil
+}
+
+func parseCSV(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
