@@ -521,3 +521,136 @@ curl http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"testpass"}'
 ```
+
+# CLAUDE.md Addendum - Phase 3: Ingestion Service
+
+## Phase 3 Context
+
+- ✅ Phase 1: Config Service (port 8001) - Running
+- ✅ Phase 2: Go Gateway (port 8000) - Running
+- 🔨 Phase 3: Ingestion Service (port 8002) - Building now
+
+## Architecture
+
+```
+Gateway:8000 → Ingestion Service:8002
+                      │
+                      ├── Celery Workers (async processing)
+                      │      ├── Text Processor
+                      │      ├── PDF Processor (Docling)
+                      │      ├── Image Processor
+                      │      └── DOCX Processor
+                      │
+                      ├── Chunkers
+                      │      ├── Recursive
+                      │      ├── Semantic
+                      │      └── Document
+                      │
+                      ├── Embedders
+                      │      ├── OpenAI
+                      │      ├── Ollama
+                      │      └── HuggingFace
+                      │
+                      ├── Graph Builder (optional)
+                      │      └── LLM-based entity extraction
+                      │
+                      └── Storage
+                             ├── MongoDB (chunks, vectors, graph)
+                             └── Redis (Celery broker)
+```
+
+## Tech Stack
+
+- **Framework**: FastAPI
+- **Task Queue**: Celery + Redis
+- **PDF Processing**: Docling, PyMuPDF
+- **Embeddings**: OpenAI, Ollama, sentence-transformers
+- **Database**: MongoDB (motor async driver)
+
+## Project Structure
+
+```
+services/ingestion-service/
+├── app/
+│   ├── main.py
+│   ├── api/v1/
+│   │   ├── router.py
+│   │   └── ingest.py
+│   ├── core/
+│   │   ├── settings.py
+│   │   └── celery_app.py
+│   ├── tasks/
+│   │   └── ingestion_task.py
+│   ├── processors/
+│   │   ├── factory.py
+│   │   ├── text.py
+│   │   ├── pdf.py
+│   │   ├── image.py
+│   │   └── docx.py
+│   ├── chunkers/
+│   │   ├── factory.py
+│   │   ├── recursive.py
+│   │   ├── semantic.py
+│   │   └── document.py
+│   ├── embedders/
+│   │   ├── factory.py
+│   │   ├── openai.py
+│   │   ├── ollama.py
+│   │   └── huggingface.py
+│   ├── graph/
+│   │   ├── extractor.py
+│   │   └── builder.py
+│   └── storage/
+│       ├── vector_store.py
+│       └── graph_store.py
+├── tests/
+├── requirements.txt
+└── Dockerfile
+```
+
+## Key Patterns
+
+### Factory Pattern for Components
+```python
+def get_processor(file_type: DataType) -> BaseProcessor:
+    processors = {
+        DataType.TEXT: TextProcessor,
+        DataType.PDF: PDFProcessor,
+        DataType.IMAGE: ImageProcessor,
+        DataType.DOCX: DOCXProcessor,
+    }
+    return processors[file_type]()
+```
+
+### Celery Task Pattern
+```python
+@celery_app.task(bind=True)
+def run_ingestion(self, config_id: str):
+    # Update status to processing
+    # Process files
+    # Update progress
+    # Store results
+    # Update status to completed
+```
+
+## Environment Variables
+
+```bash
+# Service
+INGESTION_SERVICE_PORT=8002
+
+# MongoDB (same as Phase 1)
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DATABASE=rag_configurator
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
+
+# Embeddings
+OPENAI_API_KEY=sk-...
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Celery
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+```

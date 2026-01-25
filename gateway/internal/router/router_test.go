@@ -295,9 +295,10 @@ func TestWebSocketRouteExists(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	// WebSocket handler stub returns 501 (will be implemented in P2-8)
-	if resp.StatusCode != 501 {
-		t.Errorf("Expected status code 501 (WebSocket stub), got %d", resp.StatusCode)
+	// WebSocket handler returns 400 for non-WebSocket requests (missing upgrade headers)
+	// This confirms the route exists and the WebSocket handler is active
+	if resp.StatusCode != 400 {
+		t.Errorf("Expected status code 400 (WebSocket upgrade required), got %d", resp.StatusCode)
 	}
 }
 

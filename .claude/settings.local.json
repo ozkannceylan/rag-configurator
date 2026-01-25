@@ -19,7 +19,30 @@
       "Bash(\"C:/Program Files/Go/bin/go.exe\" test:*)",
       "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./...)",
       "Bash(\"C:/Program Files/Go/bin/go.exe\" get golang.org/x/time/rate)",
-      "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./internal/middleware/... -v -run TestRateLimit)"
+      "Bash(\"C:/Program Files/Go/bin/go.exe\" test ./internal/middleware/... -v -run TestRateLimit)",
+      "Bash(go get:*)",
+      "Bash(cmd.exe /c \"cd C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway && go get github.com/gorilla/websocket@v1.5.1\")",
+      "Bash(cmd.exe /c \"cd C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway && go test ./... -v -count=1 2>&1\")",
+      "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway && go test ./...\")",
+      "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway && go test ./... 2>&1 > test_output.txt && type test_output.txt\")",
+      "Bash(powershell -Command \"cd ''C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway''; go test ./...\")",
+      "Bash(cmd.exe /c \"where go\")",
+      "Bash(cmd.exe /c \"echo %GOPATH% && echo %PATH%\")",
+      "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway && go version\")",
+      "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway & go version\")",
+      "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway & go test ./... > C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway\\\\test_result.txt 2>&1 & type C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway\\\\test_result.txt\")",
+      "Bash(go test:*)",
+      "Bash(\"/c/Program Files/Go/bin/go.exe\" mod tidy)",
+      "Bash(\"/c/Program Files/Go/bin/go.exe\" test ./...)",
+      "Bash(powershell.exe -Command \"cd ''C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway''; go test ./...\")",
+      "Bash(powershell.exe -Command \"Get-Command go -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source; if \\(-not $?\\) { Write-Host ''Go not found in PATH''; Get-ChildItem -Path ''C:\\\\Go'', ''C:\\\\Program Files\\\\Go'', ''C:\\\\Program Files \\(x86\\)\\\\Go'', \"\"$env:USERPROFILE\\\\go\"\" -ErrorAction SilentlyContinue | Select-Object -First 1 }\")",
+      "Bash(powershell.exe -Command \"where.exe go 2>$null; if \\(-not $? { Write-Host ''Go not found in PATH'' }\")",
+      "Bash(powershell.exe -Command \"where.exe go\")",
+      "Bash(powershell.exe -Command \"Test-Path ''C:\\\\Go\\\\bin\\\\go.exe''; Test-Path ''C:\\\\Program Files\\\\Go\\\\bin\\\\go.exe''\")",
+      "Bash(powershell.exe -Command \"Set-Location ''C:\\\\Users\\\\ozkan\\\\projects\\\\rag-configurator\\\\gateway''; & ''C:\\\\Program Files\\\\Go\\\\bin\\\\go.exe'' test ./...\")",
+      "Bash(cmd.exe /c:*)",
+      "Bash(/c/Program Files/Go/bin/go.exe test:*)",
+      "Bash(/c/Program Files/Go/bin/go.exe build:*)"
     ]
   }
 }

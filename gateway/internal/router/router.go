@@ -19,8 +19,9 @@ func New(cfg *config.Config) *gin.Engine {
 	r.Use(middleware.CORS(cfg.CORSOrigins))
 	r.Use(middleware.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst))
 
-	// Health check - no additional middleware
+	// Health check endpoints - no additional middleware
 	r.GET("/health", handlers.Health(cfg))
+	r.GET("/health/detailed", handlers.HealthDetailed(cfg))
 
 	// Create reverse proxy
 	proxyHandler := proxy.New(cfg)
