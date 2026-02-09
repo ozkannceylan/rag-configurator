@@ -1,0 +1,122 @@
+# Simple RAG Configuration
+# A basic Naive RAG pipeline with OpenAI GPT-4
+# Perfect for getting started with minimal configuration
+
+apiVersion: rag.techcorp.com/v1
+kind: RAGPipelineConfig
+metadata:
+  name: simple-naive-rag
+  description: "Simple Naive RAG with OpenAI - Perfect for beginners"
+  version: "1.0.0"
+  createdBy: "demo@techcorp.com"
+  tags:
+    - simple
+    - beginner
+    - openai
+    - naive-rag
+
+spec:
+  # Data source configuration
+  dataSource:
+    type: local
+    name: "Company Knowledge Base"
+    description: "Local documents for RAG processing"
+    paths:
+      - "/data/documents"
+    supportedFormats:
+      - pdf
+      - docx
+      - txt
+      - md
+    scanInterval: "0 */6 * * *"  # Every 6 hours
+    
+  # Processing configuration
+  processing:
+    chunking:
+      strategy: recursive
+      chunkSize: 1000
+      chunkOverlap: 200
+      separators:
+        - "\n\n"
+        - "\n"
+        - ". "
+        - " "
+    
+    embedding:
+      provider: openai
+      model: text-embedding-3-large
+      dimensions: 3072
+      batchSize: 100
+      
+    storage:
+      type: mongodb-atlas
+      collection: "simple_rag_chunks"
+      vectorIndex:
+        type: hnsw
+        m: 16
+        efConstruction: 200
+        similarity: cosine
+      
+  # LLM configuration
+  model:
+    provider: openai
+    model: gpt-4
+    temperature: 0.7
+    maxTokens: 2000
+    topP: 1.0
+    frequencyPenalty: 0.0
+    presencePenalty: 0.0
+    timeout: 30
+    
+  # Retrieval configuration
+  retrieval:
+    strategy: vector
+    topK: 5
+    similarityThreshold: 0.7
+    
+  # Agent configuration
+  agent:
+    type: naive
+    maxIterations: 1
+    
+  # Prompt configuration
+  prompts:
+    system: |
+      You are a helpful assistant that answers questions based on the provided context.
+      Always use the information from the context to answer questions.
+      If the answer is not in the context, say "I don't have enough information to answer that."
+      Be concise but complete in your answers.
+      
+    rag: |
+      Context information is below.
+      ---------------------
+      {context}
+      ---------------------
+      Given the context information and not prior knowledge, answer the question: {question}
+      
+  # API configuration
+  api:
+    enabled: true
+    authentication:
+      type: api-key
+      rateLimit:
+        requestsPerMinute: 60
+        burstSize: 10
+    endpoints:
+      - query
+      - chat
+      - health
+      
+  # RBAC (disabled for simple setup)
+  rbac:
+    enabled: false
+    
+  # Monitoring
+  monitoring:
+    enabled: true
+    logLevel: info
+    metrics:
+      - query_latency
+      - retrieval_recall
+      - token_usage
+      - error_rate

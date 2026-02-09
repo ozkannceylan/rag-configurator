@@ -1,4 +1,203 @@
 services:
+  # ==========================================
+  # Frontend Applications
+  # ==========================================
+
+  # Configurator UI (Vue 3)
+  configurator-ui:
+    build:
+      context: ./apps/configurator-ui
+      dockerfile: Dockerfile
+      target: development
+    container_name: rag-configurator-ui
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=/api
+      - VITE_API_PROXY_TARGET=http://gateway:8000
+    volumes:
+      - ./apps/configurator-ui:/app
+      - /app/node_modules
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Sandbox UI (Vue 3)
+  sandbox-ui:
+    build:
+      context: ./apps/sandbox-ui
+      dockerfile: Dockerfile
+      target: development
+    container_name: rag-sandbox-ui
+    ports:
+      - "3001:5173"
+    environment:
+      - VITE_API_URL=/api
+      - VITE_API_PROXY_TARGET=http://gateway:8000
+    volumes:
+      - ./apps/sandbox-ui:/app
+      - /app/node_modules
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # ==========================================
+  # Backend Services
+  # ==========================================
+
+  # Gateway (API entry point)
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: rag-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - GATEWAY_PORT=8000
+      - CONFIG_SERVICE_URL=http://config-service:8001
+      - INGESTION_SERVICE_URL=http://ingestion-service:8002
+      - RAG_SERVICE_URL=http://rag-service:8003
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3001
+      - RATE_LIMIT_RPS=100
+      - LOG_LEVEL=info
+    depends_on:
+      config-service:
+        condition: service_started
+      rag-service:
+        condition: service_started
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Config Service (FastAPI)
+  config-service:
+    build:
+      context: .
+      dockerfile: services/config-service/Dockerfile
+    container_name: rag-config-service
+    ports:
+      - "8001:8001"
+    environment:
+      - SERVICE_NAME=config-service
+      - CONFIG_SERVICE_PORT=8001
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/rag_configurator?authSource=admin
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/config-service:/app
+      - ./demo/sample-docs:/app/sample-docs
+      - ${LOCAL_DATA_PATH:-.}:/data/local
+      - /app/__pycache__
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Ingestion Service (FastAPI + Celery)
+  ingestion-service:
+    build:
+      context: .
+      dockerfile: services/ingestion-service/Dockerfile
+    container_name: rag-ingestion-service
+    ports:
+      - "8002:8002"
+    environment:
+      - SERVICE_NAME=ingestion-service
+      - INGESTION_SERVICE_PORT=8002
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/rag_configurator?authSource=admin
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/ingestion-service:/app
+      - ./demo/sample-docs:/app/sample-docs
+      - ${LOCAL_DATA_PATH:-.}:/data/local
+      - ./data:/data
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Celery Worker for Ingestion
+  celery-worker:
+    build:
+      context: .
+      dockerfile: services/ingestion-service/Dockerfile
+    container_name: rag-celery-worker
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - SERVICE_NAME=celery-worker
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/rag_configurator?authSource=admin
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/ingestion-service:/app
+      - ./demo/sample-docs:/app/sample-docs
+      - ${LOCAL_DATA_PATH:-.}:/data/local
+      - ./data:/data
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # RAG Service (FastAPI + LangGraph)
+  rag-service:
+    build:
+      context: .
+      dockerfile: services/rag-service/Dockerfile
+    container_name: rag-rag-service
+    ports:
+      - "8003:8003"
+    environment:
+      - SERVICE_NAME=rag-service
+      - RAG_SERVICE_PORT=8003
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/rag_configurator?authSource=admin
+      - MONGODB_DATABASE=rag_configurator
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - VLLM_BASE_URL=${VLLM_BASE_URL:-http://localhost:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./services/rag-service:/app
+    networks:
+      - rag-network
+    restart: unless-stopped
+
   # MongoDB for all data storage
   mongodb:
     image: mongo:7.0
@@ -70,6 +269,7 @@ services:
 volumes:
   mongodb_data:
   redis_data:
+  data:
 
 networks:
   rag-network:

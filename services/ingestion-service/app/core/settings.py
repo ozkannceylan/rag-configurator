@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     # OpenAI Configuration
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
 
+    # Ollama Configuration
+    ollama_base_url: str = Field(
+        default="http://host.docker.internal:11434",
+        alias="OLLAMA_BASE_URL",
+    )
+
     # Vector Store Configuration
     vector_store_type: str = Field(default="chroma", alias="VECTOR_STORE_TYPE")
     chroma_host: str = Field(default="localhost", alias="CHROMA_HOST")

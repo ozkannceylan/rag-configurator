@@ -1,0 +1,504 @@
+# Production Docker Compose
+# Multi-stage builds, security hardening, resource limits
+
+version: '3.8'
+
+services:
+  # ==========================================
+  # Infrastructure Services
+  # ==========================================
+  
+  mongodb:
+    image: mongo:7.0
+    container_name: rag-mongodb
+    restart: unless-stopped
+    # Production: Do not expose MongoDB port externally
+    # Use VPN or private network for admin access
+    environment:
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongodb_root_username
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongodb_root_password
+      MONGO_INITDB_DATABASE: rag_configurator
+    volumes:
+      - mongodb_data:/data/db
+      - ../infrastructure/mongo/init-db.js:/docker-entrypoint-initdb.d/init-db.js:ro
+      - /etc/localtime:/etc/localtime:ro
+    secrets:
+      - mongodb_root_username
+      - mongodb_root_password
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - rag-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    environment:
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    volumes:
+      - redis_data:/data
+      - /etc/localtime:/etc/localtime:ro
+    secrets:
+      - redis_password
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - rag-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # Backend Services
+  # ==========================================
+  
+  config-service:
+    build:
+      context: ../services/config-service
+      dockerfile: Dockerfile
+      target: production
+    image: ${DOCKER_REGISTRY}/rag-configurator/config-service:${IMAGE_TAG:-latest}
+    container_name: rag-config-service
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      - CONFIG_SERVICE_PORT=8001
+      - MONGODB_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@mongodb:27017/rag_configurator?authSource=admin
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=production
+    secrets:
+      - jwt_secret_key
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+    networks:
+      - rag-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ingestion-service:
+    build:
+      context: ../services/ingestion-service
+      dockerfile: Dockerfile
+      target: production
+    image: ${DOCKER_REGISTRY}/rag-configurator/ingestion-service:${IMAGE_TAG:-latest}
+    container_name: rag-ingestion-service
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      - INGESTION_SERVICE_PORT=8002
+      - MONGODB_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@mongodb:27017/rag_configurator?authSource=admin
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=production
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    secrets:
+      - openai_api_key
+      - anthropic_api_key
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - rag-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  celery-worker:
+    build:
+      context: ../services/ingestion-service
+      dockerfile: Dockerfile
+      target: production
+    image: ${DOCKER_REGISTRY}/rag-configurator/celery-worker:${IMAGE_TAG:-latest}
+    container_name: rag-celery-worker
+    restart: unless-stopped
+    user: "1000:1000"
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - MONGODB_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@mongodb:27017/rag_configurator?authSource=admin
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=production
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    secrets:
+      - openai_api_key
+      - anthropic_api_key
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      replicas: 2
+    networks:
+      - rag-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rag-service:
+    build:
+      context: ../services/rag-service
+      dockerfile: Dockerfile
+      target: production
+    image: ${DOCKER_REGISTRY}/rag-configurator/rag-service:${IMAGE_TAG:-latest}
+    container_name: rag-rag-service
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      - RAG_SERVICE_PORT=8003
+      - MONGODB_URI=mongodb://${MONGODB_USERNAME}:${MONGODB_PASSWORD}@mongodb:27017/rag_configurator?authSource=admin
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CONFIG_SERVICE_URL=http://config-service:8001
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=production
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+      - VLLM_BASE_URL=${VLLM_BASE_URL:-http://localhost:8080}
+    secrets:
+      - openai_api_key
+      - anthropic_api_key
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      config-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+    networks:
+      - rag-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  gateway:
+    build:
+      context: ../gateway
+      dockerfile: Dockerfile
+      target: production
+    image: ${DOCKER_REGISTRY}/rag-configurator/gateway:${IMAGE_TAG:-latest}
+    container_name: rag-gateway
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      - GATEWAY_PORT=8000
+      - ENVIRONMENT=production
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - CONFIG_SERVICE_URL=http://config-service:8001
+      - INGESTION_SERVICE_URL=http://ingestion-service:8002
+      - RAG_SERVICE_URL=http://rag-service:8003
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - RATE_LIMIT_RPS=${RATE_LIMIT_RPS:-100}
+      - RATE_LIMIT_BURST=${RATE_LIMIT_BURST:-200}
+    secrets:
+      - jwt_secret_key
+    depends_on:
+      config-service:
+        condition: service_healthy
+      ingestion-service:
+        condition: service_healthy
+      rag-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
+    networks:
+      - rag-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # Frontend Applications
+  # ==========================================
+  
+  configurator-ui:
+    build:
+      context: ../apps/configurator-ui
+      dockerfile: Dockerfile
+      target: production
+    image: ${DOCKER_REGISTRY}/rag-configurator/configurator-ui:${IMAGE_TAG:-latest}
+    container_name: rag-configurator-ui
+    restart: unless-stopped
+    environment:
+      - VITE_API_BASE_URL=/api
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    networks:
+      - rag-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  sandbox-ui:
+    build:
+      context: ../apps/sandbox-ui
+      dockerfile: Dockerfile
+      target: production
+    image: ${DOCKER_REGISTRY}/rag-configurator/sandbox-ui:${IMAGE_TAG:-latest}
+    container_name: rag-sandbox-ui
+    restart: unless-stopped
+    environment:
+      - VITE_API_BASE_URL=/api
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    networks:
+      - rag-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # Nginx Reverse Proxy
+  # ==========================================
+  
+  nginx:
+    image: nginx:alpine
+    container_name: rag-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      gateway:
+        condition: service_healthy
+      configurator-ui:
+        condition: service_started
+      sandbox-ui:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256M
+    networks:
+      - rag-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ==========================================
+# Volumes
+# ==========================================
+
+volumes:
+  mongodb_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/mongodb
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/redis
+
+# ==========================================
+# Networks
+# ==========================================
+
+networks:
+  rag-backend:
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ==========================================
+# Secrets
+# ==========================================
+
+secrets:
+  mongodb_root_username:
+    file: ./secrets/mongodb_root_username.txt
+  mongodb_root_password:
+    file: ./secrets/mongodb_root_password.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  jwt_secret_key:
+    file: ./secrets/jwt_secret_key.txt
+  openai_api_key:
+    file: ./secrets/openai_api_key.txt
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key.txt

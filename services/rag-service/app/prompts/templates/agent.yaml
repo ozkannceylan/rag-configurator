@@ -1,0 +1,126 @@
+# Agent-specific prompts
+
+query_rewriter: |
+  Rewrite the user's query to improve retrieval quality.
+  The rewritten query should:
+  - Be more specific and clear
+  - Include relevant keywords
+  - Expand abbreviations if appropriate
+  - Correct any obvious typos
+
+  Original Query: {query}
+
+  Conversation History (if any):
+  {history}
+
+  Rewritten Query:
+
+query_decomposer: |
+  Break down the complex query into simpler sub-queries that can be answered independently.
+
+  Original Query: {query}
+
+  If this query has multiple parts or requires multiple pieces of information,
+  decompose it into separate, focused questions.
+
+  Sub-queries:
+
+hypothetical_document: |
+  Generate a hypothetical document passage that would perfectly answer the query.
+  This will be used to improve retrieval (HyDE technique).
+
+  Query: {query}
+
+  Write a detailed passage that would contain the ideal answer:
+
+router: |
+  Determine the best retrieval strategy for this query.
+
+  Query: {query}
+
+  Available strategies:
+  - vector: Semantic similarity search (best for conceptual questions)
+  - keyword: Full-text search (best for specific terms, names, codes)
+  - graph: Knowledge graph traversal (best for relationship questions)
+  - hybrid: Combined approach (best for complex queries)
+
+  Select the most appropriate strategy and explain why:
+
+summarizer: |
+  Summarize the following retrieved chunks into a coherent context for the LLM.
+
+  Retrieved Chunks:
+  {context}
+
+  Query: {query}
+
+  Create a concise summary that:
+  - Removes redundant information
+  - Preserves key facts relevant to the query
+  - Maintains source attribution
+
+  Summarized Context:
+
+fact_checker: |
+  Verify the factual accuracy of the response against the provided context.
+
+  Context:
+  {context}
+
+  Response to verify:
+  {answer}
+
+  For each factual claim in the response:
+  1. Identify the claim
+  2. Find supporting/contradicting evidence in context
+  3. Mark as VERIFIED, CONTRADICTED, or UNVERIFIABLE
+
+  Verification Report:
+
+response_refiner: |
+  Refine the initial response to be more accurate and helpful.
+
+  Original Question: {query}
+
+  Context:
+  {context}
+
+  Initial Response:
+  {answer}
+
+  Improve the response by:
+  - Fixing any inaccuracies
+  - Adding missing relevant information
+  - Improving clarity and structure
+  - Ensuring proper citations
+
+  Refined Response:
+
+intent_classifier: |
+  Classify the intent of the user's query.
+
+  Query: {query}
+
+  Possible intents:
+  - question: Seeking information or explanation
+  - action: Wanting to perform an action
+  - clarification: Asking for clarification on previous response
+  - comparison: Comparing multiple items
+  - opinion: Asking for recommendations or opinions
+  - definition: Asking what something is
+  - procedure: Asking how to do something
+  - troubleshooting: Seeking help with a problem
+
+  Intent classification and confidence:
+
+follow_up_generator: |
+  Generate relevant follow-up questions based on the conversation.
+
+  Context:
+  {context}
+
+  Question: {query}
+
+  Answer: {answer}
+
+  Generate 2-3 natural follow-up questions the user might want to ask:

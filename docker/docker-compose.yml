@@ -1,0 +1,313 @@
+# Development Docker Compose
+# Full stack for local development
+
+version: '3.8'
+
+services:
+  # ==========================================
+  # Infrastructure Services
+  # ==========================================
+  
+  mongodb:
+    image: mongo:7.0
+    container_name: rag-mongodb-dev
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: rag_configurator
+    volumes:
+      - mongodb_data:/data/db
+      - ../infrastructure/mongo/init-db.js:/docker-entrypoint-initdb.d/init-db.js:ro
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+
+  # MongoDB Web UI (optional, for development)
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: rag-mongo-express-dev
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongodb:27017/
+      ME_CONFIG_BASICAUTH: false
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+  # Redis Commander (optional, for development)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: rag-redis-commander-dev
+    ports:
+      - "8082:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+  # ==========================================
+  # Backend Services
+  # ==========================================
+  
+  config-service:
+    build:
+      context: ../services/config-service
+      dockerfile: Dockerfile
+    container_name: rag-config-service-dev
+    ports:
+      - "8001:8001"
+    environment:
+      - CONFIG_SERVICE_PORT=8001
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=dev-secret-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+      - LOG_LEVEL=INFO
+    volumes:
+      - ../services/config-service:/app
+      - /app/__pycache__
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    networks:
+      - rag-network
+
+  ingestion-service:
+    build:
+      context: ../services/ingestion-service
+      dockerfile: Dockerfile
+    container_name: rag-ingestion-service-dev
+    ports:
+      - "8002:8002"
+    environment:
+      - INGESTION_SERVICE_PORT=8002
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - LOG_LEVEL=INFO
+    volumes:
+      - ../services/ingestion-service:/app
+      - /app/__pycache__
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    networks:
+      - rag-network
+
+  celery-worker:
+    build:
+      context: ../services/ingestion-service
+      dockerfile: Dockerfile
+    container_name: rag-celery-worker-dev
+    command: celery -A app.core.celery_app worker --loglevel=info
+    environment:
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - LOG_LEVEL=INFO
+    volumes:
+      - ../services/ingestion-service:/app
+      - /app/__pycache__
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+  rag-service:
+    build:
+      context: ../services/rag-service
+      dockerfile: Dockerfile
+    container_name: rag-rag-service-dev
+    ports:
+      - "8003:8003"
+    environment:
+      - RAG_SERVICE_PORT=8003
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017
+      - MONGODB_DATABASE=rag_configurator
+      - REDIS_URL=redis://redis:6379/0
+      - CONFIG_SERVICE_URL=http://config-service:8001
+      - LOG_LEVEL=INFO
+    volumes:
+      - ../services/rag-service:/app
+      - /app/__pycache__
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      config-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    networks:
+      - rag-network
+
+  gateway:
+    build:
+      context: ../gateway
+      dockerfile: Dockerfile
+    container_name: rag-gateway-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - GATEWAY_PORT=8000
+      - ENVIRONMENT=development
+      - LOG_LEVEL=info
+      - JWT_SECRET_KEY=dev-secret-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - CONFIG_SERVICE_URL=http://config-service:8001
+      - INGESTION_SERVICE_URL=http://ingestion-service:8002
+      - RAG_SERVICE_URL=http://rag-service:8003
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173
+      - RATE_LIMIT_RPS=100
+      - RATE_LIMIT_BURST=200
+    volumes:
+      - ../gateway:/app
+    depends_on:
+      config-service:
+        condition: service_healthy
+      ingestion-service:
+        condition: service_healthy
+      rag-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    networks:
+      - rag-network
+
+  # ==========================================
+  # Frontend Applications
+  # ==========================================
+  
+  configurator-ui:
+    build:
+      context: ../apps/configurator-ui
+      dockerfile: Dockerfile
+    container_name: rag-configurator-ui-dev
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    volumes:
+      - ../apps/configurator-ui:/app
+      - /app/node_modules
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+  sandbox-ui:
+    build:
+      context: ../apps/sandbox-ui
+      dockerfile: Dockerfile
+    container_name: rag-sandbox-ui-dev
+    ports:
+      - "3001:80"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    volumes:
+      - ../apps/sandbox-ui:/app
+      - /app/node_modules
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+  # ==========================================
+  # Nginx Reverse Proxy (Optional for dev)
+  # ==========================================
+  
+  nginx:
+    image: nginx:alpine
+    container_name: rag-nginx-dev
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - ../apps/configurator-ui/dist:/usr/share/nginx/html/configurator:ro
+      - ../apps/sandbox-ui/dist:/usr/share/nginx/html/sandbox:ro
+    depends_on:
+      gateway:
+        condition: service_healthy
+      configurator-ui:
+        condition: service_started
+      sandbox-ui:
+        condition: service_started
+    networks:
+      - rag-network
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  rag-network:
+    driver: bridge

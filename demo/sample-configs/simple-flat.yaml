@@ -1,0 +1,44 @@
+name: simple-naive-rag
+description: "Simple Naive RAG with OpenAI - Perfect for beginners"
+data_source:
+  type: local
+  base_path: "/data/documents"
+  file_types:
+    - pdf
+    - docx
+    - txt
+    - md
+
+models:
+  llm:
+    provider: openai
+    model_name: gpt-4
+    temperature: 0.7
+    max_tokens: 2000
+  embedding:
+    provider: openai
+    model_name: text-embedding-3-large
+    dimensions: 3072
+
+retrieval:
+  method: naive
+  top_k: 5
+  similarity_threshold: 0.7
+
+agent:
+  template: naive_rag
+  max_iterations: 1
+
+prompts:
+  system_prompt: |
+    You are a helpful assistant that answers questions based on the provided context.
+    Always use the information from the context to answer questions.
+    If the answer is not in the context, say "I don't have enough information to answer that."
+    Be concise but complete in your answers.
+
+  rag_prompt_template: |
+    Context information is below.
+    ---------------------
+    {context}
+    ---------------------
+    Given the context information and not prior knowledge, answer the question: {question}

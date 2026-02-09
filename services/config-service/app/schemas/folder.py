@@ -14,6 +14,29 @@ class FolderScanRequest(BaseModel):
     credentials: Optional[dict] = Field(None, description="Cloud credentials if needed")
 
 
+class FolderBrowseRequest(BaseModel):
+    """Request to browse directories at a given path."""
+
+    path: str = Field(default="", description="Path to browse (empty for roots)")
+
+
+class BrowseEntry(BaseModel):
+    """A directory entry in browse results."""
+
+    name: str
+    path: str
+    type: str = "folder"  # folder or file
+    has_children: bool = False
+
+
+class FolderBrowseResponse(BaseModel):
+    """Response with browsable directory listing."""
+
+    current_path: str
+    parent_path: Optional[str] = None
+    entries: List[BrowseEntry]
+
+
 class FolderInfo(BaseModel):
     """Information about a scanned folder."""
 

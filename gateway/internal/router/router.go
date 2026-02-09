@@ -42,6 +42,13 @@ func New(cfg *config.Config) *gin.Engine {
 			auth.POST("/logout", proxyHandler.ToConfigService())
 		}
 
+		// Auth /me endpoint - requires auth, proxy to users/me on Config Service
+		authMe := v1.Group("/auth")
+		authMe.Use(middleware.Auth(cfg.JWTSecretKey, cfg.JWTAlgorithm))
+		{
+			authMe.GET("/me", proxyHandler.ToConfigServiceRewrite("/api/v1/users/me"))
+		}
+
 		// ============================================================
 		// PROTECTED ROUTES (authentication required)
 		// ============================================================
@@ -62,8 +69,8 @@ func New(cfg *config.Config) *gin.Engine {
 		configs := v1.Group("/configs")
 		configs.Use(authMiddleware)
 		{
-			configs.GET("", proxyHandler.ToConfigService())
-			configs.POST("", proxyHandler.ToConfigService())
+			configs.GET("/", proxyHandler.ToConfigService())
+			configs.POST("/", proxyHandler.ToConfigService())
 			configs.GET("/:id", proxyHandler.ToConfigService())
 			configs.PUT("/:id", proxyHandler.ToConfigService())
 			configs.DELETE("/:id", proxyHandler.ToConfigService())
@@ -77,6 +84,7 @@ func New(cfg *config.Config) *gin.Engine {
 		folders.Use(authMiddleware)
 		{
 			folders.POST("/scan", proxyHandler.ToConfigService())
+			folders.POST("/browse", proxyHandler.ToConfigService())
 		}
 
 		// Ingestion endpoints - proxy to Ingestion Service
@@ -105,11 +113,18 @@ func New(cfg *config.Config) *gin.Engine {
 			chat.POST("", proxyHandler.ToRAGService())
 		}
 
-		// Stream endpoints - WebSocket proxy to RAG Service
+		// Stream endpoints - SSE proxy to RAG Service
 		stream := v1.Group("/stream")
 		stream.Use(authMiddleware)
 		{
-			stream.GET("", handlers.WebSocketProxy(cfg.RAGServiceURL))
+			ragStreamProxy := proxyHandler.ToRAGService()
+			// Handle both with and without trailing slash to avoid 307 redirect
+			stream.GET("", func(c *gin.Context) {
+				// Append trailing slash for FastAPI compatibility
+				c.Request.URL.Path = c.Request.URL.Path + "/"
+				ragStreamProxy(c)
+			})
+			stream.GET("/", proxyHandler.ToRAGService())
 		}
 	}
 

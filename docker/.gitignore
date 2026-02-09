@@ -1,0 +1,28 @@
+# Docker secrets - NEVER commit these
+secrets/
+*.pem
+*.key
+*.crt
+
+# SSL certificates
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+nginx/ssl/*.chain
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Docker volumes data
+/data/
+volumes/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp

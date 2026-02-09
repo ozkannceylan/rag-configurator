@@ -1,0 +1,107 @@
+# RAG prompt templates
+
+default: |
+  Answer the following question based on the provided context.
+
+  Context:
+  {context}
+
+  Question: {query}
+
+  Answer:
+
+with_history: |
+  Answer the following question based on the provided context and conversation history.
+
+  Context:
+  {context}
+
+  Conversation History:
+  {history}
+
+  Current Question: {query}
+
+  Answer:
+
+structured: |
+  Based on the context below, provide a structured answer to the question.
+
+  ## Context
+  {context}
+
+  ## Question
+  {query}
+
+  ## Instructions
+  - Use the context to answer accurately
+  - If multiple sources are relevant, synthesize the information
+  - If the context doesn't contain the answer, say "I don't have enough information to answer this question."
+
+  ## Answer
+
+step_by_step: |
+  Answer the question using the provided context. Think step by step.
+
+  Context:
+  {context}
+
+  Question: {query}
+
+  Let me think through this step by step:
+
+citations: |
+  Answer the question based on the context. Include citations in [Source N] format.
+
+  Context:
+  {context}
+
+  Question: {query}
+
+  Provide your answer with citations:
+
+comparison: |
+  Based on the context, analyze and compare the information requested.
+
+  Context:
+  {context}
+
+  Question: {query}
+
+  Analysis:
+
+summary: |
+  Based on the following context, provide a summary that addresses the question.
+
+  Context:
+  {context}
+
+  Question: {query}
+
+  Summary:
+
+qa_pair: |
+  You will answer a question based only on the following context.
+  Do not use any external knowledge.
+
+  <context>
+  {context}
+  </context>
+
+  <question>
+  {query}
+  </question>
+
+  <answer>
+
+multi_turn: |
+  Continue the conversation based on the context and history.
+
+  Retrieved Context:
+  {context}
+
+  Previous Messages:
+  {history}
+
+  User: {query}
+
+  Assistant:

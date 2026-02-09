@@ -90,21 +90,47 @@ class IngestionPipeline:
 
     async def cleanup(self) -> None:
         """Clean up resources."""
-        if self._embedder:
+        if self._embedder and hasattr(self._embedder, 'close'):
             await self._embedder.close()
-        if self._graph_builder:
+        if self._graph_builder and hasattr(self._graph_builder, 'close'):
             await self._graph_builder.close()
         if self.client:
             self.client.close()
 
     async def _load_config(self) -> Optional[Dict[str, Any]]:
         """Load configuration from MongoDB."""
+        from bson import ObjectId
+        
         configs = self.db["configs"]
+        
+        # Try with ObjectId first (MongoDB default)
+        try:
+            config = await configs.find_one({"_id": ObjectId(self.config_id)})
+            if config:
+                return config
+        except Exception:
+            pass
+        
+        # Try with string _id
         config = await configs.find_one({"_id": self.config_id})
         if not config:
-            # Try with string ID
+            # Try with string ID field
             config = await configs.find_one({"id": self.config_id})
         return config
+
+    def _config_filter(self) -> Dict[str, Any]:
+        """Build a safe filter for config lookups/updates."""
+        from bson import ObjectId
+
+        filters: List[Dict[str, Any]] = []
+        if ObjectId.is_valid(self.config_id):
+            filters.append({"_id": ObjectId(self.config_id)})
+        filters.append({"_id": self.config_id})
+        filters.append({"id": self.config_id})
+
+        if len(filters) == 1:
+            return filters[0]
+        return {"$or": filters}
 
     async def _update_ingestion_status(
         self,
@@ -130,6 +156,8 @@ class IngestionPipeline:
             **kwargs,
         )
 
+        await self._update_config_status(status)
+
         if stats:
             await store.update_ingestion_progress(
                 self.ingestion_id,
@@ -137,6 +165,26 @@ class IngestionPipeline:
                 failed_files=stats.get("failed_files"),
                 total_chunks=stats.get("total_chunks"),
             )
+
+    async def _update_config_status(self, status: str) -> None:
+        """Update config status to reflect ingestion progress."""
+        status_map = {
+            "pending": "pending",
+            "running": "processing",
+            "processing": "processing",
+            "completed": "completed",
+            "failed": "failed",
+            "cancelled": "failed",
+        }
+        mapped_status = status_map.get(status, status)
+
+        try:
+            await self.db["configs"].update_one(
+                self._config_filter(),
+                {"$set": {"status": mapped_status, "updated_at": datetime.utcnow()}},
+            )
+        except Exception as e:
+            logger.error(f"Failed to update config status: {e}")
 
     async def _get_processor(self, file_path: str):
         """Get the appropriate processor for a file."""
@@ -147,13 +195,14 @@ class IngestionPipeline:
         if not processor_type:
             return None
 
-        # Get processing config from pipeline config
-        processing_config = self.config.get("processing", {})
+        # Get processing config from pipeline config (stored under models.document_processing)
+        models_config = self.config.get("models", {})
+        processing_config = models_config.get("document_processing", {})
 
         config = DocumentProcessingConfig(
             extract_tables=processing_config.get("extract_tables", True),
             extract_images=processing_config.get("extract_images", False),
-            ocr_enabled=processing_config.get("ocr_enabled", True),
+            enable_ocr=processing_config.get("ocr_enabled", True),
         )
 
         return get_processor(file_path, config)
@@ -174,10 +223,16 @@ class IngestionPipeline:
         config = ChunkingConfig(
             chunk_size=chunking_config.get("chunk_size", settings.chunk_size),
             chunk_overlap=chunking_config.get("chunk_overlap", settings.chunk_overlap),
-            separators=chunking_config.get("separators"),
         )
 
-        return get_chunker(strategy, config)
+        chunker = get_chunker(strategy, config)
+
+        # Pass custom separators to recursive chunker if provided
+        separators = chunking_config.get("separators")
+        if separators and hasattr(chunker, "separators"):
+            chunker.separators = separators
+
+        return chunker
 
     async def _get_embedder(self):
         """Get the embedding provider based on config."""
@@ -185,8 +240,11 @@ class IngestionPipeline:
             return self._embedder
 
         from app.embedders.factory import get_embedder, EmbeddingProvider
+        from app.embedders.base import EmbeddingConfig
 
-        embedding_config = self.config.get("embedding", {})
+        # Config stores embedding under models.embedding
+        models_config = self.config.get("models", {})
+        embedding_config = models_config.get("embedding", {})
 
         provider_name = embedding_config.get("provider", settings.embedding_provider)
         try:
@@ -194,16 +252,23 @@ class IngestionPipeline:
         except ValueError:
             provider = EmbeddingProvider.OPENAI
 
-        model = embedding_config.get("model", settings.embedding_model)
-
-        # Get API keys from config or settings
+        model = embedding_config.get("model_name") or embedding_config.get("model", settings.embedding_model)
         api_key = embedding_config.get("api_key") or settings.openai_api_key
+        base_url = embedding_config.get("base_url")
+        dimensions = embedding_config.get("dimensions")
 
-        self._embedder = get_embedder(
-            provider=provider,
+        # Use service-level Ollama URL for Ollama provider (handles Docker networking)
+        if provider == EmbeddingProvider.OLLAMA:
+            base_url = settings.ollama_base_url
+
+        config = EmbeddingConfig(
             model=model,
             api_key=api_key,
+            base_url=base_url,
+            dimensions=dimensions,
         )
+
+        self._embedder = get_embedder(provider=provider, config=config)
         return self._embedder
 
     async def _get_vector_store(self):
@@ -221,7 +286,9 @@ class IngestionPipeline:
         if self._graph_builder:
             return self._graph_builder
 
-        graph_config = self.config.get("graph", {})
+        # Graph config is stored under retrieval.graph
+        retrieval_config = self.config.get("retrieval", {})
+        graph_config = retrieval_config.get("graph", {})
         if not graph_config.get("enabled", False):
             return None
 
@@ -252,18 +319,32 @@ class IngestionPipeline:
         source_type = data_source.get("type", "local")
 
         if source_type == "local":
-            path = data_source.get("path", "")
-            recursive = data_source.get("recursive", True)
-            include_extensions = data_source.get("include_extensions")
+            base_path = data_source.get("base_path", "")
+            folders = data_source.get("folders", [])
             exclude_patterns = data_source.get("exclude_patterns", [])
 
-            files = scan_directory(
-                path,
-                recursive=recursive,
-                include_extensions=include_extensions,
-                exclude_patterns=exclude_patterns,
-            )
-            return files
+            all_files = []
+            if folders:
+                # Scan each configured folder
+                for folder in folders:
+                    folder_path = folder.get("path", "") if isinstance(folder, dict) else folder
+                    recursive = folder.get("recursive", True) if isinstance(folder, dict) else True
+                    full_path = str(Path(base_path) / folder_path) if folder_path else base_path
+
+                    files = scan_directory(
+                        full_path,
+                        recursive=recursive,
+                        exclude_patterns=exclude_patterns,
+                    )
+                    all_files.extend(files)
+            else:
+                # No folders specified, scan base_path
+                all_files = scan_directory(
+                    base_path,
+                    recursive=True,
+                    exclude_patterns=exclude_patterns,
+                )
+            return all_files
 
         elif source_type == "s3":
             # TODO: Implement S3 scanning
@@ -301,6 +382,7 @@ class IngestionPipeline:
             "embeddings_created": 0,
             "error": None,
         }
+        document_id = None
 
         try:
             # Check if file is supported
@@ -462,6 +544,15 @@ class IngestionPipeline:
             logger.exception(f"Error processing file {file_path}: {e}")
             result["error"] = str(e)
 
+            # Clean up orphaned document record if it was stored before the error
+            if document_id:
+                try:
+                    vector_store = await self._get_vector_store()
+                    await vector_store.delete_document(document_id)
+                    logger.info(f"Cleaned up orphaned document {document_id} after error")
+                except Exception as cleanup_err:
+                    logger.warning(f"Failed to clean up document {document_id}: {cleanup_err}")
+
         return result
 
     async def run(self) -> Dict[str, Any]:
@@ -477,9 +568,15 @@ class IngestionPipeline:
             # Update status to processing
             await self._update_ingestion_status("running")
 
+            # Clear previous ingestion data so files are not skipped as duplicates
+            vector_store = await self._get_vector_store()
+            deleted = await vector_store.delete_documents_by_config(self.config_id)
+            if deleted:
+                logger.info(f"Cleared {deleted} previous documents for config {self.config_id}")
+
             # Scan for files
             data_source = self.config.get("data_source", {})
-            base_path = data_source.get("path", "")
+            base_path = data_source.get("base_path", "")
 
             files = await self._scan_data_source()
 
@@ -581,19 +678,21 @@ class IngestionPipeline:
         """Update configuration with final statistics."""
         try:
             await self.db["configs"].update_one(
-                {"_id": self.config_id},
+                self._config_filter(),
                 {
                     "$set": {
                         "last_ingestion_at": datetime.utcnow(),
-                        "stats.total_documents": stats.get("processed_files", 0),
-                        "stats.total_chunks": stats.get("total_chunks", 0),
-                        "stats.graph_nodes": stats.get("graph_nodes", 0),
-                        "stats.graph_edges": stats.get("graph_edges", 0),
+                        "stats": {
+                            "total_documents": stats.get("processed_files", 0),
+                            "total_chunks": stats.get("total_chunks", 0),
+                            "graph_nodes": stats.get("graph_nodes", 0),
+                            "graph_edges": stats.get("graph_edges", 0),
+                        },
                     }
                 },
             )
         except Exception as e:
-            logger.error(f"Failed to update config stats: {e}")
+            logger.error(f"Failed to update config stats: {e}, full error: {e}")
 
 
 def run_async(coro):

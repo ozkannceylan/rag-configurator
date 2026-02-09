@@ -46,6 +46,25 @@ dist/
 *~
 .DS_Store
 
+# Claude Code
+.claude/
+CLAUDE.md
+CLAUDE_CODE_GUIDE.md
+
+# Internal planning docs
+PROJECT_PLAN.md
+FINAL_PRODUCT_SUMMARY.md
+SECURITY_AUDIT.md
+TESTING_GUIDE.md
+PHASE_1_CODER_PROMPT.md
+phase4/
+phase5/
+phase6/
+phase7/
+
+# Windows artifacts
+nul
+
 # Environment
 .env
 .env.local
@@ -70,3 +89,4 @@ coverage/
 
 # LangGraph
 .langgraph_api/
+docs/

@@ -40,8 +40,8 @@ class OllamaEmbedder(BaseEmbedder):
         """
         super().__init__(config)
 
-        # Set defaults for Ollama
-        if not self.config.model:
+        # Set defaults for Ollama - override base class defaults
+        if not self.config.model or self.config.model == "text-embedding-3-small":
             self.config.model = DEFAULT_OLLAMA_MODEL
         if not self.config.base_url:
             self.config.base_url = DEFAULT_OLLAMA_URL
@@ -95,15 +95,19 @@ class OllamaEmbedder(BaseEmbedder):
                 dimensions=self.dimensions,
             )
 
-        # Build API URL
-        api_url = f"{cfg.base_url.rstrip('/')}/api/embeddings"
+        # Build API URL - use /api/embed for batch embedding
+        api_url = f"{cfg.base_url.rstrip('/')}/api/embed"
 
         all_embeddings = []
 
         async with httpx.AsyncClient(timeout=cfg.timeout_seconds) as client:
-            # Ollama processes one text at a time
-            for idx, text in enumerate(texts):
-                self.logger.debug(f"Processing text {idx + 1}/{len(texts)}")
+            # Batch texts for efficiency (Ollama supports multiple inputs)
+            for batch_start in range(0, len(texts), cfg.batch_size):
+                batch = texts[batch_start : batch_start + cfg.batch_size]
+                self.logger.debug(
+                    f"Processing batch {batch_start // cfg.batch_size + 1}, "
+                    f"texts {batch_start + 1}-{batch_start + len(batch)}/{len(texts)}"
+                )
 
                 for attempt in range(cfg.max_retries):
                     try:
@@ -111,28 +115,28 @@ class OllamaEmbedder(BaseEmbedder):
                             api_url,
                             json={
                                 "model": cfg.model,
-                                "prompt": text,
+                                "input": batch,
                             },
                         )
                         response.raise_for_status()
 
                         data = response.json()
-                        embedding = data.get("embedding", [])
+                        embeddings = data.get("embeddings", [])
 
-                        if not embedding:
-                            raise ValueError("No embedding returned from Ollama")
+                        if not embeddings:
+                            raise ValueError("No embeddings returned from Ollama")
 
-                        all_embeddings.append(embedding)
+                        all_embeddings.extend(embeddings)
 
                         # Update dimensions from response
-                        if self._dimensions is None:
-                            self._dimensions = len(embedding)
+                        if self._dimensions is None and embeddings:
+                            self._dimensions = len(embeddings[0])
 
                         break  # Success
 
                     except httpx.HTTPStatusError as e:
                         self.logger.warning(
-                            f"Text {idx + 1} attempt {attempt + 1} failed: "
+                            f"Batch {batch_start // cfg.batch_size + 1} attempt {attempt + 1} failed: "
                             f"HTTP {e.response.status_code}"
                         )
                         if attempt < cfg.max_retries - 1:
@@ -152,7 +156,7 @@ class OllamaEmbedder(BaseEmbedder):
 
                     except Exception as e:
                         self.logger.warning(
-                            f"Text {idx + 1} attempt {attempt + 1} failed: {e}"
+                            f"Batch {batch_start // cfg.batch_size + 1} attempt {attempt + 1} failed: {e}"
                         )
                         if attempt < cfg.max_retries - 1:
                             import asyncio

@@ -1,0 +1,250 @@
+# Hybrid RAG Configuration
+# Advanced RAG with hybrid retrieval (vector + keyword)
+# and Multi-Query agent for improved results
+
+apiVersion: rag.techcorp.com/v1
+kind: RAGPipelineConfig
+metadata:
+  name: hybrid-multiquery-rag
+  description: "Hybrid retrieval with Multi-Query agent for optimal results"
+  version: "1.0.0"
+  createdBy: "demo@techcorp.com"
+  tags:
+    - advanced
+    - hybrid
+    - multi-query
+    - production
+
+spec:
+  # Data source configuration
+  dataSource:
+    type: local
+    name: "Enterprise Knowledge Hub"
+    description: "Comprehensive document repository"
+    paths:
+      - "/data/technical-docs"
+      - "/data/research-papers"
+      - "/data/company-handbook"
+    supportedFormats:
+      - pdf
+      - docx
+      - txt
+      - md
+      - html
+    scanInterval: "0 */4 * * *"  # Every 4 hours
+    
+  # Processing configuration
+  processing:
+    chunking:
+      strategy: semantic
+      chunkSize: 800
+      chunkOverlap: 150
+      embeddingModel: text-embedding-3-large
+      
+    embedding:
+      provider: openai
+      model: text-embedding-3-large
+      dimensions: 3072
+      batchSize: 50
+      cacheEnabled: true
+      
+    storage:
+      type: mongodb-atlas
+      collection: "hybrid_rag_chunks"
+      vectorIndex:
+        type: hnsw
+        m: 32
+        efConstruction: 200
+        similarity: cosine
+        ef: 100
+      keywordIndex:
+        type: atlas-search
+        analyzer: standard
+        
+  # LLM configuration
+  model:
+    provider: openai
+    model: gpt-4-turbo
+    temperature: 0.5
+    maxTokens: 4000
+    topP: 0.9
+    frequencyPenalty: 0.1
+    presencePenalty: 0.1
+    timeout: 45
+    
+  # Hybrid retrieval configuration
+  retrieval:
+    strategy: hybrid
+    weights:
+      vector: 0.7
+      keyword: 0.3
+    vector:
+      topK: 10
+      similarityThreshold: 0.65
+      reranker:
+        enabled: true
+        model: cross-encoder/ms-marco-MiniLM-L-6-v2
+        topK: 5
+    keyword:
+      topK: 10
+      fuzzyMatching: true
+      boostFields:
+        title: 3.0
+        content: 1.0
+        tags: 2.0
+    fusion:
+      algorithm: rrf  # Reciprocal Rank Fusion
+      k: 60
+    
+  # Multi-Query Agent configuration
+  agent:
+    type: multi-query
+    maxIterations: 3
+    queryExpansion:
+      enabled: true
+      numVariants: 3
+      strategy: paraphrase
+    retrievalStrategy:
+      type: parallel
+      maxQueries: 5
+    deduplication:
+      enabled: true
+      similarityThreshold: 0.95
+    
+  # Prompt configuration
+  prompts:
+    system: |
+      You are an expert assistant specializing in retrieving and synthesizing information.
+      You have access to a comprehensive knowledge base including technical documentation,
+      research papers, and company policies.
+      
+      Guidelines:
+      - Always provide specific citations from the context
+      - If information is incomplete, acknowledge limitations
+      - Synthesize information from multiple sources when relevant
+      - Use a professional but approachable tone
+      
+    rag: |
+      Answer the question based on the retrieved context below.
+      
+      Context:
+      {context}
+      
+      Question: {question}
+      
+      Instructions:
+      1. Synthesize information from the provided context
+      2. Cite specific sources when possible
+      3. If the context doesn't fully answer the question, state what information is missing
+      4. Keep the response focused and relevant
+      
+      Answer:
+      
+    multiQuery: |
+      Generate {num_queries} different versions of the user question to retrieve relevant documents from a vector database.
+      
+      Original question: {question}
+      
+      Provide the alternative questions separated by newlines:
+      
+  # Advanced features
+  features:
+    contextualCompression:
+      enabled: true
+      compressor: llm-chain-extractor
+      targetSize: 3000
+      
+    citationTracking:
+      enabled: true
+      format: inline
+      includeMetadata:
+        - source
+        - page
+        - chunk_id
+        
+    answerValidation:
+      enabled: true
+      checkHallucination: true
+      minFaithfulnessScore: 0.8
+      
+  # API configuration
+  api:
+    enabled: true
+    authentication:
+      type: jwt
+      rateLimit:
+        requestsPerMinute: 300
+        burstSize: 50
+    endpoints:
+      - query
+      - chat
+      - stream
+      - health
+    cors:
+      enabled: true
+      origins:
+        - "https://app.techcorp.com"
+        - "http://localhost:3000"
+      
+  # RBAC configuration
+  rbac:
+    enabled: true
+    roles:
+      - name: reader
+        permissions:
+          - query:read
+          - chat:read
+      - name: power-user
+        permissions:
+          - query:read
+          - chat:read
+          - stream:read
+          - export:read
+    folders:
+      - path: "/data/technical-docs"
+        roles:
+          - role: reader
+            access: read
+          - role: power-user
+            access: read
+      - path: "/data/company-handbook"
+        roles:
+          - role: reader
+            access: read
+            
+  # Monitoring and logging
+  monitoring:
+    enabled: true
+    logLevel: info
+    metrics:
+      - query_latency
+      - retrieval_latency
+      - retrieval_recall
+      - generation_latency
+      - token_usage
+      - error_rate
+      - hybrid_fusion_score
+    tracing:
+      enabled: true
+      sampleRate: 0.1
+    alerts:
+      - metric: error_rate
+        threshold: 0.05
+        window: 5m
+      - metric: query_latency
+        threshold: 2000
+        window: 5m
+        
+  # Performance optimization
+  optimization:
+    cache:
+      queryCache:
+        enabled: true
+        ttl: 300
+        maxSize: 1000
+      embeddingCache:
+        enabled: true
+        ttl: 3600
+    compression:
+      responseCompression: true
+      minSize: 1024

@@ -57,6 +57,7 @@ func (p *Proxy) createReverseProxy(targetURL string) *httputil.ReverseProxy {
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Transport = p.httpClient.Transport
+	proxy.FlushInterval = -1 // Flush immediately for SSE streaming
 
 	// Custom director to modify the request
 	originalDirector := proxy.Director
@@ -132,6 +133,23 @@ func (p *Proxy) ToIngestionService() gin.HandlerFunc {
 // ToRAGService returns a handler that proxies to RAG Service
 func (p *Proxy) ToRAGService() gin.HandlerFunc {
 	return p.createProxyHandler(p.ragProxy, p.cfg.RAGServiceURL)
+}
+
+// ToConfigServiceRewrite returns a handler that proxies to Config Service with path rewriting
+func (p *Proxy) ToConfigServiceRewrite(newPath string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Rewrite the request path before proxying
+		c.Request.URL.Path = newPath
+
+		log.Info().
+			Str("method", c.Request.Method).
+			Str("path", newPath).
+			Str("target", p.cfg.ConfigServiceURL).
+			Str("client_ip", c.ClientIP()).
+			Msg("Proxying request (rewritten)")
+
+		p.configProxy.ServeHTTP(c.Writer, c.Request)
+	}
 }
 
 // createProxyHandler creates a Gin handler that uses the reverse proxy

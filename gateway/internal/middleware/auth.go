@@ -22,9 +22,14 @@ func Auth(secretKey string, algorithm string) gin.HandlerFunc {
 		// Get Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			log.Debug().Msg("Missing Authorization header")
-			abortWithAuthError(c, "Authorization header is required")
-			return
+			// Support query parameter token for SSE/EventSource (can't set headers)
+			if token := c.Query("token"); token != "" {
+				authHeader = "Bearer " + token
+			} else {
+				log.Debug().Msg("Missing Authorization header")
+				abortWithAuthError(c, "Authorization header is required")
+				return
+			}
 		}
 
 		// Extract bearer token

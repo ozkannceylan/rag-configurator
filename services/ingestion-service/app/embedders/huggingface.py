@@ -45,8 +45,8 @@ class HuggingFaceEmbedder(BaseEmbedder):
         """
         super().__init__(config)
 
-        # Set default model
-        if not self.config.model:
+        # Set default model - override base class defaults
+        if not self.config.model or self.config.model == "text-embedding-3-small":
             self.config.model = DEFAULT_HF_MODEL
 
         self._model = None

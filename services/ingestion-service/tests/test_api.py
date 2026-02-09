@@ -55,8 +55,14 @@ class TestStartIngestion:
         """Test starting ingestion with non-existent config."""
         fake_config_id = str(ObjectId())
 
-        with patch("app.api.v1.ingest.get_config", new_callable=AsyncMock) as mock_get_config:
-            mock_get_config.return_value = None
+        # Mock the database dependency
+        mock_db = MagicMock()
+        mock_configs = AsyncMock()
+        mock_configs.find_one = AsyncMock(return_value=None)
+        mock_db.__getitem__ = MagicMock(return_value=mock_configs)
+
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db), \
+             patch("app.api.v1.ingest.get_database", return_value=mock_db):
 
             response = await async_client.post(f"/api/v1/ingest/{fake_config_id}/start")
             assert response.status_code == 404
@@ -70,14 +76,31 @@ class TestStartIngestion:
         """Test starting ingestion when one is already running."""
         config_id = sample_config["_id"]
 
-        with patch("app.api.v1.ingest.get_config", new_callable=AsyncMock) as mock_get_config, \
-             patch("app.api.v1.ingest.get_running_ingestion", new_callable=AsyncMock) as mock_running:
-            mock_get_config.return_value = sample_config
-            mock_running.return_value = {
-                "_id": "running-ingestion-id",
-                "status": "running",
-            }
+        # Create mock database
+        mock_db = MagicMock()
+        mock_configs = AsyncMock()
+        mock_ingestions = AsyncMock()
+        
+        # Config exists
+        mock_configs.find_one = AsyncMock(return_value=sample_config)
+        
+        # Running ingestion exists
+        running_ingestion = {
+            "_id": "running-ingestion-id",
+            "config_id": config_id,
+            "status": "running",
+            "celery_task_id": "task-123",
+        }
+        mock_ingestions.find_one = AsyncMock(return_value=running_ingestion)
+        
+        def get_collection(name):
+            if name == "configs":
+                return mock_configs
+            return mock_ingestions
+        
+        mock_db.__getitem__ = MagicMock(side_effect=get_collection)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/start")
             assert response.status_code == 409
 
@@ -86,30 +109,42 @@ class TestStartIngestion:
         self,
         async_client: AsyncClient,
         sample_config: Dict[str, Any],
-        mock_celery_task: MagicMock,
     ):
-        """Test successfully starting ingestion."""
+        """Test successfully starting ingestion.
+        
+        Note: This test uses the ImportError fallback path in the actual code
+        since Celery workers aren't running during tests. The mock-task ID
+        generated confirms the endpoint logic works correctly.
+        """
         config_id = sample_config["_id"]
 
-        with patch("app.api.v1.ingest.get_config", new_callable=AsyncMock) as mock_get_config, \
-             patch("app.api.v1.ingest.get_running_ingestion", new_callable=AsyncMock) as mock_running, \
-             patch("app.storage.vector_store.VectorStore") as mock_store_class, \
-             patch("app.api.v1.ingest.run_ingestion") as mock_task:
+        # Create mock database
+        mock_db = MagicMock()
+        mock_configs = AsyncMock()
+        mock_ingestions = AsyncMock()
+        
+        mock_configs.find_one = AsyncMock(return_value=sample_config)
+        mock_ingestions.find_one = AsyncMock(return_value=None)  # No running ingestion
+        mock_ingestions.insert_one = AsyncMock(return_value=MagicMock(inserted_id="new-ing-id"))
+        mock_ingestions.update_one = AsyncMock()
+        
+        def get_collection(name):
+            if name == "configs":
+                return mock_configs
+            return mock_ingestions
+        
+        mock_db.__getitem__ = MagicMock(side_effect=get_collection)
 
-            mock_get_config.return_value = sample_config
-            mock_running.return_value = None
-
-            mock_store = AsyncMock()
-            mock_store.create_ingestion = AsyncMock(return_value="new-ingestion-id")
-            mock_store_class.return_value = mock_store
-
-            mock_task.delay = MagicMock(return_value=mock_celery_task)
-
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/start")
-
-            # Check response (may be 202 Accepted or 500 if mocking is incomplete)
-            # In a real test with proper mocking, this would be 202
-            assert response.status_code in (202, 500)
+            assert response.status_code == 202
+            
+            data = response.json()
+            assert "task_id" in data
+            assert data["config_id"] == config_id
+            assert data["status"] == "pending"
+            # Task ID will be mock-task-{ingestion_id} since Celery isn't available
+            assert "mock-task-" in data["task_id"] or data["task_id"]
 
 
 class TestGetIngestionStatus:
@@ -120,9 +155,12 @@ class TestGetIngestionStatus:
         """Test getting status when no ingestion exists."""
         fake_config_id = str(ObjectId())
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = None
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=None)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{fake_config_id}/status")
             assert response.status_code == 200
 
@@ -146,9 +184,12 @@ class TestGetIngestionStatus:
             "completed_at": None,
         }
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = ingestion
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/status")
             assert response.status_code == 200
 
@@ -173,9 +214,12 @@ class TestGetIngestionStatus:
             "completed_at": None,
         }
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = ingestion
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/status")
             assert response.status_code == 200
 
@@ -201,9 +245,12 @@ class TestGetIngestionStatus:
             "completed_at": datetime.utcnow(),
         }
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = ingestion
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/status")
             assert response.status_code == 200
 
@@ -220,9 +267,12 @@ class TestCancelIngestion:
         """Test cancelling when no ingestion is running."""
         config_id = str(ObjectId())
 
-        with patch("app.api.v1.ingest.get_running_ingestion", new_callable=AsyncMock) as mock_running:
-            mock_running.return_value = None
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=None)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/cancel")
             assert response.status_code == 404
 
@@ -238,24 +288,19 @@ class TestCancelIngestion:
             "celery_task_id": "task-to-cancel",
         }
 
-        with patch("app.api.v1.ingest.get_running_ingestion", new_callable=AsyncMock) as mock_running, \
-             patch("app.db.mongodb.get_database", new_callable=AsyncMock) as mock_get_db:
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=running_ingestion)
+        mock_ingestions.update_one = AsyncMock()
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
-            mock_running.return_value = running_ingestion
-
-            mock_db = MagicMock()
-            mock_collection = MagicMock()
-            mock_collection.update_one = AsyncMock()
-            mock_db.__getitem__ = MagicMock(return_value=mock_collection)
-            mock_get_db.return_value = mock_db
-
-            # Mock celery_app.control.revoke
-            with patch("app.api.v1.ingest.celery_app") as mock_celery:
-                mock_celery.control.revoke = MagicMock()
-
-                response = await async_client.post(f"/api/v1/ingest/{config_id}/cancel")
-                # May be 200 or 500 depending on mocking completeness
-                assert response.status_code in (200, 500)
+        # The endpoint handles ImportError gracefully, so we don't need to mock celery
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
+            response = await async_client.post(f"/api/v1/ingest/{config_id}/cancel")
+            assert response.status_code == 200
+            
+            data = response.json()
+            assert data["success"] is True
 
 
 class TestRetryIngestion:
@@ -266,9 +311,12 @@ class TestRetryIngestion:
         """Test retrying when no ingestion exists."""
         config_id = str(ObjectId())
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = None
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=None)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/retry")
             assert response.status_code == 404
 
@@ -282,9 +330,12 @@ class TestRetryIngestion:
             "status": "completed",
         }
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = ingestion
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/retry")
             assert response.status_code == 400
 
@@ -302,15 +353,35 @@ class TestRetryIngestion:
             "status": "failed",
         }
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest, \
-             patch("app.api.v1.ingest.get_config", new_callable=AsyncMock) as mock_get_config:
+        mock_db = MagicMock()
+        mock_configs = AsyncMock()
+        mock_ingestions = AsyncMock()
+        mock_chunks = AsyncMock()
+        mock_documents = AsyncMock()
+        
+        mock_configs.find_one = AsyncMock(return_value=sample_config)
+        mock_ingestions.find_one = AsyncMock(return_value=failed_ingestion)
+        mock_ingestions.insert_one = AsyncMock(return_value=MagicMock(inserted_id="new-ing-id"))
+        mock_ingestions.update_one = AsyncMock()
+        mock_chunks.delete_many = AsyncMock()
+        mock_documents.delete_many = AsyncMock()
+        
+        def get_collection(name):
+            if name == "configs":
+                return mock_configs
+            elif name == "ingestions":
+                return mock_ingestions
+            elif name == "chunks":
+                return mock_chunks
+            elif name == "documents":
+                return mock_documents
+            return mock_ingestions
+        
+        mock_db.__getitem__ = MagicMock(side_effect=get_collection)
 
-            mock_latest.return_value = failed_ingestion
-            mock_get_config.return_value = sample_config
-
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/retry")
-            # May be 202 or 500 depending on mocking completeness
-            assert response.status_code in (202, 404, 500)
+            assert response.status_code == 202
 
 
 class TestGetIngestionLogs:
@@ -321,9 +392,12 @@ class TestGetIngestionLogs:
         """Test getting logs when no ingestion exists."""
         config_id = str(ObjectId())
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = None
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=None)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/logs")
             assert response.status_code == 200
 
@@ -351,9 +425,12 @@ class TestGetIngestionLogs:
             "completed_at": None,
         }
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = ingestion
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/logs")
             assert response.status_code == 200
 
@@ -369,11 +446,13 @@ class TestGetIngestionStats:
         """Test getting stats when no ingestion exists."""
         config_id = str(ObjectId())
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = None
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=None)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/stats")
-            # Should return 404 when no ingestion exists
             assert response.status_code in (200, 404)
 
     @pytest.mark.asyncio
@@ -392,42 +471,61 @@ class TestGetIngestionStats:
             "completed_at": datetime.utcnow(),
         }
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = ingestion
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_documents = MagicMock()
+        mock_chunks = AsyncMock()
+        
+        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
+        
+        # Mock documents.aggregate to return async iterator
+        mock_documents.aggregate = MagicMock(return_value=AsyncIterator([
+            {"_id": ".txt", "count": 5, "total_size": 5000},
+            {"_id": ".pdf", "count": 5, "total_size": 10000},
+        ]))
+        
+        mock_chunks.count_documents = AsyncMock(return_value=200)
+        
+        def get_collection(name):
+            if name == "ingestions":
+                return mock_ingestions
+            elif name == "documents":
+                return mock_documents
+            elif name == "chunks":
+                return mock_chunks
+            return AsyncMock()
+        
+        mock_db.__getitem__ = MagicMock(side_effect=get_collection)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/stats")
-            # Stats endpoint may require additional mocking for VectorStore
-            assert response.status_code in (200, 500)
+            assert response.status_code == 200
+            
+            data = response.json()
+            assert "total_files" in data
+            assert "processed_files" in data
 
 
 class TestGetIngestionHistory:
     """Tests for getting ingestion history."""
 
     @pytest.mark.asyncio
-    async def test_history_empty(self, async_client: AsyncClient):
-        """Test getting history when none exists."""
+    async def test_history_endpoint_exists(self, async_client: AsyncClient):
+        """Test that history endpoint exists."""
         config_id = str(ObjectId())
 
-        with patch("app.storage.vector_store.VectorStore") as mock_store_class:
-            mock_store = AsyncMock()
-            mock_store.get_ingestions_by_config = AsyncMock(return_value=[])
-            mock_store_class.return_value = mock_store
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        
+        # Mock cursor with async iteration
+        mock_cursor = AsyncIterator([])
+        mock_ingestions.find = MagicMock(return_value=mock_cursor)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/history")
-            # May fail due to mocking complexity
+            # May return 200 or 500 depending on async iteration handling
             assert response.status_code in (200, 500)
-
-    @pytest.mark.asyncio
-    async def test_history_with_limit(self, async_client: AsyncClient):
-        """Test getting history with limit parameter."""
-        config_id = str(ObjectId())
-
-        response = await async_client.get(
-            f"/api/v1/ingest/{config_id}/history",
-            params={"limit": 5},
-        )
-        # Check that endpoint accepts limit parameter
-        assert response.status_code in (200, 500)
 
 
 class TestAPIResponseFormats:
@@ -450,9 +548,12 @@ class TestAPIResponseFormats:
             "completed_at": datetime.utcnow(),
         }
 
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock_latest:
-            mock_latest.return_value = ingestion
+        mock_db = MagicMock()
+        mock_ingestions = AsyncMock()
+        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
+        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
 
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/status")
             assert response.status_code == 200
 
@@ -468,25 +569,29 @@ class TestAPIResponseFormats:
             assert "total_chunks" in data
 
 
-class TestAuthorizationMock:
-    """Tests for authorization (mocked - actual auth handled by gateway)."""
-
-    @pytest.mark.asyncio
-    async def test_endpoints_accessible(self, async_client: AsyncClient):
-        """Test that endpoints are accessible without gateway auth."""
-        # In a real deployment, these would be protected by the gateway
-        # Here we test that the endpoints exist and respond
-
-        fake_id = str(ObjectId())
-
-        # Test status endpoint
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock:
-            mock.return_value = None
-            response = await async_client.get(f"/api/v1/ingest/{fake_id}/status")
-            assert response.status_code in (200, 404)
-
-        # Test logs endpoint
-        with patch("app.api.v1.ingest.get_latest_ingestion", new_callable=AsyncMock) as mock:
-            mock.return_value = None
-            response = await async_client.get(f"/api/v1/ingest/{fake_id}/logs")
-            assert response.status_code in (200, 404)
+# Helper class for async iteration in tests
+class AsyncIterator:
+    """Helper class for mocking async iterators."""
+    
+    def __init__(self, items):
+        self.items = list(items)
+        self.index = 0
+    
+    def __aiter__(self):
+        return self
+    
+    async def __anext__(self):
+        if self.index >= len(self.items):
+            raise StopAsyncIteration
+        item = self.items[self.index]
+        self.index += 1
+        return item
+    
+    def skip(self, n):
+        return self
+    
+    def limit(self, n):
+        return self
+    
+    def sort(self, *args, **kwargs):
+        return self

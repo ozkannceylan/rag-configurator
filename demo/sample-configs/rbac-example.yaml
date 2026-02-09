@@ -1,0 +1,375 @@
+# RBAC Example Configuration
+# Demonstrates role-based access control with 3 roles
+# and granular folder permissions
+
+apiVersion: rag.techcorp.com/v1
+kind: RAGPipelineConfig
+metadata:
+  name: rbac-example-rag
+  description: "RBAC-enabled RAG with 3 roles and folder-level permissions"
+  version: "1.0.0"
+  createdBy: "admin@techcorp.com"
+  tags:
+    - rbac
+    - security
+    - permissions
+    - enterprise
+
+spec:
+  # Data source with multiple folders
+  dataSource:
+    type: local
+    name: "Multi-Tier Knowledge Base"
+    description: "Documents organized by sensitivity level"
+    paths:
+      - "/data/public"
+      - "/data/internal"
+      - "/data/confidential"
+      - "/data/hr-handbook"
+      - "/data/financial"
+    supportedFormats:
+      - pdf
+      - docx
+      - txt
+      - md
+    scanInterval: "0 */6 * * *"
+    
+  # Processing configuration
+  processing:
+    chunking:
+      strategy: recursive
+      chunkSize: 1000
+      chunkOverlap: 200
+      
+    embedding:
+      provider: openai
+      model: text-embedding-3-large
+      dimensions: 3072
+      batchSize: 100
+      
+    storage:
+      type: mongodb-atlas
+      collection: "rbac_rag_chunks"
+      vectorIndex:
+        type: hnsw
+        m: 16
+        efConstruction: 200
+        similarity: cosine
+      # RBAC-aware indexing
+      indexMetadata:
+        - folder_path
+        - access_level
+        - allowed_roles
+        
+  # LLM configuration
+  model:
+    provider: openai
+    model: gpt-4
+    temperature: 0.7
+    maxTokens: 2000
+    timeout: 30
+    
+  # Retrieval with RBAC filtering
+  retrieval:
+    strategy: vector
+    topK: 5
+    similarityThreshold: 0.7
+    # Filter chunks by user's permissions
+    rbacFilter: true
+    enforceFolderPermissions: true
+    
+  # Naive agent (simple for this example)
+  agent:
+    type: naive
+    maxIterations: 1
+    
+  # Prompts
+  prompts:
+    system: |
+      You are a secure enterprise assistant. You only provide information
+      from documents the user is authorized to access.
+      
+      Never reveal the existence of documents the user cannot access.
+      Never infer information from patterns in accessible vs inaccessible content.
+      
+    rag: |
+      Answer based on the authorized context provided.
+      
+      Context:
+      {context}
+      
+      Question: {question}
+      
+  # RBAC Configuration (Primary focus)
+  rbac:
+    enabled: true
+    
+    # Role Definitions
+    roles:
+      # Role 1: Employee - Basic access
+      - name: employee
+        description: "Standard employee with access to public and internal documents"
+        permissions:
+          - query:read
+          - chat:read
+          - health:read
+        default: true  # New users get this role by default
+        
+      # Role 2: Manager - Extended access
+      - name: manager
+        description: "Team manager with access to HR and team documents"
+        permissions:
+          - query:read
+          - chat:read
+          - stream:read
+          - health:read
+          - export:read
+        inherits:
+          - employee
+          
+      # Role 3: Executive - Full access
+      - name: executive
+        description: "C-level executive with access to confidential and financial data"
+        permissions:
+          - query:read
+          - chat:read
+          - stream:read
+          - health:read
+          - export:read
+          - admin:read
+          - analytics:read
+        inherits:
+          - manager
+          - employee
+          
+    # Folder-Level Permissions
+    folders:
+      # Public folder - All roles
+      - path: "/data/public"
+        name: "Public Documents"
+        description: "Company public information and marketing materials"
+        sensitivity: public
+        roles:
+          - role: employee
+            access: read
+            permissions:
+              - search
+              - view
+          - role: manager
+            access: read
+            permissions:
+              - search
+              - view
+              - export
+          - role: executive
+            access: read
+            permissions:
+              - search
+              - view
+              - export
+              - share
+              
+      # Internal folder - All roles
+      - path: "/data/internal"
+        name: "Internal Documents"
+        description: "Company procedures, policies, and internal communications"
+        sensitivity: internal
+        roles:
+          - role: employee
+            access: read
+            permissions:
+              - search
+              - view
+          - role: manager
+            access: read
+            permissions:
+              - search
+              - view
+              - export
+          - role: executive
+            access: read
+            permissions:
+              - search
+              - view
+              - export
+              - modify
+              
+      # HR Handbook - Managers and above
+      - path: "/data/hr-handbook"
+        name: "HR Handbook"
+        description: "Human resources policies and employee information"
+        sensitivity: restricted
+        roles:
+          - role: employee
+            access: none  # Employees cannot access
+            
+          - role: manager
+            access: read
+            permissions:
+              - search
+              - view
+            conditions:
+              - "user.department == 'HR' or user.isManager == true"
+              
+          - role: executive
+            access: read
+            permissions:
+              - search
+              - view
+              - export
+              - modify
+              
+      # Confidential - Executives only
+      - path: "/data/confidential"
+        name: "Confidential Documents"
+        description: "Strategic plans and sensitive company information"
+        sensitivity: confidential
+        roles:
+          - role: employee
+            access: none
+          - role: manager
+            access: none
+          - role: executive
+            access: read
+            permissions:
+              - search
+              - view
+              - export
+              - modify
+              - delete
+              
+      # Financial - Executives only with audit
+      - path: "/data/financial"
+        name: "Financial Data"
+        description: "Financial reports, forecasts, and budget information"
+        sensitivity: confidential
+        auditAccess: true  # Log all access
+        roles:
+          - role: employee
+            access: none
+          - role: manager
+            access: none
+          - role: executive
+            access: read
+            permissions:
+              - search
+              - view
+              - export
+            requires:
+              - mfa: true
+              - justification: true
+              
+    # User-to-Role Mappings (Examples)
+    users:
+      # Demo users for testing
+      - email: "john.doe@techcorp.com"
+        roles:
+          - employee
+        department: "Engineering"
+        
+      - email: "jane.smith@techcorp.com"
+        roles:
+          - employee
+          - manager
+        department: "Engineering"
+        isManager: true
+        
+      - email: "ceo@techcorp.com"
+        roles:
+          - employee
+          - manager
+          - executive
+        department: "Executive"
+        
+    # Permission Inheritance
+    inheritance:
+      enabled: true
+      strategy: additive
+      # manager inherits from employee
+      # executive inherits from manager and employee
+      
+    # Dynamic Permission Rules
+    rules:
+      - name: "department-restriction"
+        description: "Restrict access to departmental folders"
+        condition: "folder.department != null && folder.department != user.department"
+        action: deny
+        
+      - name: "time-based-access"
+        description: "Restrict confidential access outside business hours"
+        condition: "folder.sensitivity == 'confidential' && (hour < 8 || hour > 18)"
+        action: deny
+        message: "Confidential access restricted to business hours (8 AM - 6 PM)"
+        
+      - name: "mfa-requirement"
+        description: "Require MFA for sensitive data"
+        condition: "folder.sensitivity in ['restricted', 'confidential'] && !user.mfaEnabled"
+        action: deny
+        message: "Multi-factor authentication required for this folder"
+        
+  # API with RBAC enforcement
+  api:
+    enabled: true
+    authentication:
+      type: jwt
+      rbacEnforcement: strict
+      rateLimit:
+        requestsPerMinute: 100
+        burstSize: 20
+        perRole:
+          employee: 60
+          manager: 150
+          executive: 300
+    endpoints:
+      - query
+      - chat
+      - health
+    cors:
+      enabled: true
+      origins:
+        - "https://app.techcorp.com"
+        
+  # Security settings
+  security:
+    auditLog:
+      enabled: true
+      logAllQueries: true
+      logAccessDenied: true
+      retentionDays: 90
+      
+    dataMasking:
+      enabled: true
+      piiDetection: true
+      maskInResults: true
+      
+    queryEncryption:
+      enabled: true
+      encryptAtRest: true
+      
+  # Monitoring with RBAC focus
+  monitoring:
+    enabled: true
+    logLevel: info
+    metrics:
+      - query_latency
+      - retrieval_latency
+      - rbac_check_latency
+      - access_denied_count
+      - token_usage
+      - error_rate
+      - per_role_usage:
+          - employee
+          - manager
+          - executive
+    alerts:
+      - metric: access_denied_count
+        threshold: 10
+        window: 5m
+        severity: warning
+        message: "High number of access denials detected"
+        
+      - metric: rbac_check_latency
+        threshold: 100
+        window: 5m
+        severity: warning
+        message: "RBAC checks are slow"

@@ -1,5 +1,7 @@
 """Tests for embedding providers."""
 
+import os
+
 import pytest
 
 from app.embedders.base import BaseEmbedder, EmbeddingConfig, EmbeddingResult
@@ -252,3 +254,61 @@ class TestBaseEmbedder:
         assert batches[0] == ["a", "b"]
         assert batches[1] == ["c", "d"]
         assert batches[2] == ["e"]
+
+
+class TestOllamaEmbedderIntegration:
+    """Integration tests for Ollama embedder (requires Ollama running)."""
+
+    @pytest.mark.skipif(
+        os.environ.get("RUN_OLLAMA_TESTS", "").lower() != "true",
+        reason="Ollama integration tests require RUN_OLLAMA_TESTS=true and running Ollama",
+    )
+    @pytest.mark.asyncio
+    async def test_embed_single_text(self):
+        """Test embedding a single text with Ollama."""
+        from app.embedders.ollama import OllamaEmbedder
+
+        embedder = OllamaEmbedder()
+        result = await embedder.embed(["Hello world"])
+
+        assert result.count == 1
+        assert len(result.embeddings[0]) == 768
+        assert result.model == "nomic-embed-text"
+
+    @pytest.mark.skipif(
+        os.environ.get("RUN_OLLAMA_TESTS", "").lower() != "true",
+        reason="Ollama integration tests require RUN_OLLAMA_TESTS=true and running Ollama",
+    )
+    @pytest.mark.asyncio
+    async def test_embed_multiple_texts(self):
+        """Test embedding multiple texts with Ollama."""
+        from app.embedders.ollama import OllamaEmbedder
+
+        embedder = OllamaEmbedder()
+        texts = [
+            "The quick brown fox jumps over the lazy dog",
+            "Machine learning is transforming industries",
+            "RAG systems combine retrieval with generation",
+        ]
+        result = await embedder.embed(texts)
+
+        assert result.count == 3
+        for emb in result.embeddings:
+            assert len(emb) == 768
+
+    @pytest.mark.skipif(
+        os.environ.get("RUN_OLLAMA_TESTS", "").lower() != "true",
+        reason="Ollama integration tests require RUN_OLLAMA_TESTS=true and running Ollama",
+    )
+    @pytest.mark.asyncio
+    async def test_embed_with_custom_model(self):
+        """Test embedding with specific model configuration."""
+        from app.embedders.ollama import OllamaEmbedder
+
+        config = EmbeddingConfig(model="nomic-embed-text")
+        embedder = OllamaEmbedder(config)
+
+        result = await embedder.embed(["Test text"])
+
+        assert result.model == "nomic-embed-text"
+        assert result.count == 1

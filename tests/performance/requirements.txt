@@ -1,0 +1,21 @@
+# Performance Testing Requirements
+
+# Core Load Testing Framework
+locust>=2.24.0
+
+# HTTP Client
+requests>=2.31.0
+
+# Additional utilities for performance testing
+Faker>=23.0.0          # For generating realistic test data
+numpy>=1.26.0          # For statistical analysis
+pandas>=2.2.0          # For test result analysis
+
+# Optional: Distributed load testing
+pyzmq>=25.1.0          # For Locust distributed mode
+
+# Optional: Metrics and monitoring
+prometheus-client>=0.19.0  # For custom metrics export
+
+# Optional: WebSocket support for streaming tests
+websocket-client>=1.7.0

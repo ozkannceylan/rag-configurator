@@ -1,0 +1,383 @@
+# Graph RAG Configuration
+# Advanced RAG with graph-based knowledge extraction
+# and ReAct agent for complex reasoning
+
+apiVersion: rag.techcorp.com/v1
+kind: RAGPipelineConfig
+metadata:
+  name: graph-react-rag
+  description: "Graph-enabled RAG with ReAct agent and custom entity schema"
+  version: "1.0.0"
+  createdBy: "demo@techcorp.com"
+  tags:
+    - graph
+    - react
+    - advanced
+    - knowledge-graph
+    - reasoning
+
+spec:
+  # Data source configuration
+  dataSource:
+    type: local
+    name: "Structured Knowledge Repository"
+    description: "Documents with rich entity relationships"
+    paths:
+      - "/data/research-papers"
+      - "/data/technical-docs"
+    supportedFormats:
+      - pdf
+      - docx
+      - txt
+      - md
+      - json
+    scanInterval: "0 */12 * * *"  # Every 12 hours
+    
+  # Processing configuration
+  processing:
+    chunking:
+      strategy: agentic
+      chunkSize: 1200
+      chunkOverlap: 200
+      
+    embedding:
+      provider: openai
+      model: text-embedding-3-large
+      dimensions: 3072
+      batchSize: 25
+      
+    storage:
+      type: mongodb-atlas
+      collections:
+        chunks: "graph_rag_chunks"
+        entities: "graph_rag_entities"
+        relationships: "graph_rag_relationships"
+      vectorIndex:
+        type: hnsw
+        m: 32
+        efConstruction: 200
+        similarity: cosine
+      graphIndex:
+        type: mongodb-graph
+        edgeCollection: "relationships"
+        
+  # Graph extraction configuration
+  graph:
+    enabled: true
+    extraction:
+      provider: openai
+      model: gpt-4-turbo
+      strategy: llm-based
+      batchSize: 5
+      
+    schema:
+      # Define entity types
+      entityTypes:
+        - name: Person
+          description: "Human individuals mentioned in documents"
+          properties:
+            - name
+            - role
+            - department
+            - email
+            
+        - name: Organization
+          description: "Companies, teams, or departments"
+          properties:
+            - name
+            - type
+            - location
+            
+        - name: Technology
+          description: "Software, frameworks, or technical concepts"
+          properties:
+            - name
+            - category
+            - version
+            
+        - name: Project
+          description: "Initiatives, products, or development efforts"
+          properties:
+            - name
+            - status
+            - startDate
+            - endDate
+            
+        - name: Document
+          description: "Referenced documents or content"
+          properties:
+            - title
+            - type
+            - author
+            - date
+            
+      # Define relationship types
+      relationshipTypes:
+        - name: WORKS_AT
+          from: Person
+          to: Organization
+          description: "Person's employment or affiliation"
+          
+        - name: MANAGES
+          from: Person
+          to: Person
+          description: "Management relationship"
+          
+        - name: USES
+          from: Person
+          to: Technology
+          description: "Technology usage by person"
+          
+        - name: DEPENDS_ON
+          from: Technology
+          to: Technology
+          description: "Technical dependency"
+          
+        - name: PART_OF
+          from: Project
+          to: Organization
+          description: "Project ownership"
+          
+        - name: AUTHORED_BY
+          from: Document
+          to: Person
+          description: "Document authorship"
+          
+        - name: REFERENCES
+          from: Document
+          to: Document
+          description: "Document citation"
+          
+        - name: IMPLEMENTS
+          from: Project
+          to: Technology
+          description: "Technology implementation"
+    
+    # Graph building settings
+    builder:
+      mergeEntities: true
+      similarityThreshold: 0.9
+      maxHops: 3
+      
+    # Graph query settings
+    traversal:
+      maxDepth: 3
+      expansionFactor: 2
+      relevanceThreshold: 0.7
+      
+  # LLM configuration
+  model:
+    provider: openai
+    model: gpt-4-turbo
+    temperature: 0.3
+    maxTokens: 4000
+    topP: 0.9
+    timeout: 60
+    
+  # Hybrid retrieval with graph
+  retrieval:
+    strategy: hybrid-graph
+    weights:
+      vector: 0.5
+      keyword: 0.2
+      graph: 0.3
+    vector:
+      topK: 8
+      similarityThreshold: 0.7
+    keyword:
+      topK: 5
+      fuzzyMatching: true
+    graph:
+      traversalDepth: 2
+      entityExpansion: true
+      relationshipBoost: 0.5
+      maxEntities: 20
+    fusion:
+      algorithm: weighted
+      
+  # ReAct Agent configuration
+  agent:
+    type: react
+    maxIterations: 5
+    maxSteps: 10
+    
+    tools:
+      - name: vector_search
+        description: "Search documents using vector similarity"
+        parameters:
+          query: string
+          top_k: integer
+          
+      - name: keyword_search
+        description: "Search documents using keyword matching"
+        parameters:
+          query: string
+          top_k: integer
+          
+      - name: graph_traversal
+        description: "Traverse knowledge graph from entities"
+        parameters:
+          entity_names: array
+          depth: integer
+          
+      - name: entity_lookup
+        description: "Look up specific entities in the knowledge graph"
+        parameters:
+          entity_name: string
+          entity_type: string
+          
+    reasoning:
+      format: step-by-step
+      showIntermediates: true
+      confidenceThreshold: 0.8
+      
+    selfCorrection:
+      enabled: true
+      maxAttempts: 2
+      
+  # Prompt configuration
+  prompts:
+    system: |
+      You are an intelligent research assistant with access to a knowledge graph
+      containing entities, relationships, and documents.
+      
+      Capabilities:
+      - Search documents using semantic similarity
+      - Traverse entity relationships in the knowledge graph
+      - Combine information from multiple sources
+      - Provide structured, well-reasoned answers
+      
+      Guidelines:
+      - Always show your reasoning process
+      - Cite specific sources and entities
+      - Use the knowledge graph for relationship queries
+      - Acknowledge uncertainty when appropriate
+      
+    rag: |
+      Use the following context to answer the question.
+      
+      Retrieved Documents:
+      {context}
+      
+      Knowledge Graph Entities:
+      {entities}
+      
+      Question: {question}
+      
+      Provide a comprehensive answer that synthesizes information from the retrieved
+      documents and knowledge graph relationships.
+      
+    react: |
+      You are using the ReAct (Reasoning and Acting) approach to answer questions.
+      
+      Available tools:
+      - vector_search: Semantic document search
+      - keyword_search: Keyword-based document search
+      - graph_traversal: Navigate entity relationships
+      - entity_lookup: Find specific entities
+      
+      Format your response as:
+      Thought: [Your reasoning about what to do next]
+      Action: [Tool name or "finish"]
+      Action Input: [JSON parameters for the tool]
+      Observation: [Result from the tool]
+      ... (repeat as needed)
+      Final Answer: [Your final answer to the user]
+      
+    graphExtraction: |
+      Extract entities and relationships from the following text.
+      
+      Text: {text}
+      
+      Available entity types: Person, Organization, Technology, Project, Document
+      Available relationship types: WORKS_AT, MANAGES, USES, DEPENDS_ON, PART_OF, AUTHORED_BY, REFERENCES, IMPLEMENTS
+      
+      Return the extraction as JSON:
+      {{
+        "entities": [
+          {{"name": "...", "type": "...", "properties": {{}}}}
+        ],
+        "relationships": [
+          {{"from": "...", "to": "...", "type": "..."}}
+        ]
+      }}
+      
+  # Advanced features
+  features:
+    entityResolution:
+      enabled: true
+      strategy: embedding-similarity
+      threshold: 0.85
+      
+    temporalAwareness:
+      enabled: true
+      dateExtraction: true
+      recencyBoost: 0.1
+      
+    provenanceTracking:
+      enabled: true
+      trackSources: true
+      trackReasoning: true
+      
+  # API configuration
+  api:
+    enabled: true
+    authentication:
+      type: jwt
+      rateLimit:
+        requestsPerMinute: 200
+        burstSize: 30
+    endpoints:
+      - query
+      - chat
+      - stream
+      - graph/query
+      - graph/entities
+      - health
+      
+  # RBAC configuration
+  rbac:
+    enabled: true
+    roles:
+      - name: researcher
+        permissions:
+          - query:read
+          - chat:read
+          - graph:read
+      - name: analyst
+        permissions:
+          - query:read
+          - chat:read
+          - graph:read
+          - graph:write
+          - stream:read
+    folders:
+      - path: "/data/research-papers"
+        roles:
+          - role: researcher
+            access: read
+          - role: analyst
+            access: read
+      - path: "/data/technical-docs"
+        roles:
+          - role: researcher
+            access: read
+          - role: analyst
+            access: read
+            
+  # Monitoring and observability
+  monitoring:
+    enabled: true
+    logLevel: info
+    metrics:
+      - query_latency
+      - agent_iterations
+      - tool_usage
+      - graph_traversal_depth
+      - entity_extraction_rate
+      - token_usage
+      - error_rate
+    tracing:
+      enabled: true
+      sampleRate: 0.2
+      includeGraphTraversal: true
