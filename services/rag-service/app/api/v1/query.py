@@ -4,18 +4,16 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from app.agents.base import AgentResponse
-from app.agents.factory import get_agent
-from app.core.settings import settings
+from app.core.auth import get_authenticated_user_id, require_config_access
 from app.db.mongodb import mongodb
+from app.llm.base import LLMContextLengthError, LLMError
 from app.llm.factory import LLMProvider, get_llm
 from app.prompts.manager import PromptManager
 from app.retrieval.factory import get_retriever_from_config
-from app.retrieval.base import RetrievedChunk
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,7 @@ router = APIRouter(prefix="/query", tags=["query"])
 class QueryRequest(BaseModel):
     """Request model for query endpoint."""
 
-    query: str = Field(..., description="User query text")
+    query: str = Field(..., description="User query text", max_length=10000)
     config_id: str = Field(..., description="RAG pipeline configuration ID")
     user_role: Optional[str] = Field(None, description="User role for RBAC")
     include_sources: bool = Field(True, description="Include source chunks in response")
@@ -63,7 +61,7 @@ class DebugInfo(BaseModel):
 
 
 @router.post("/", response_model=QueryResponse)
-async def query(request: QueryRequest):
+async def query(request: QueryRequest, http_request: Request):
     """
     Execute a single RAG query.
 
@@ -78,17 +76,8 @@ async def query(request: QueryRequest):
         # Get database connection
         db = mongodb.get_database()
 
-        # Load configuration from database (convert string ID to ObjectId)
-        try:
-            oid = ObjectId(request.config_id)
-        except Exception:
-            oid = request.config_id
-        config_doc = await db["configs"].find_one({"_id": oid})
-        if not config_doc:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{request.config_id}' not found",
-            )
+        user_id = get_authenticated_user_id(http_request)
+        config_doc = await require_config_access(db, request.config_id, user_id)
 
         # Build pipeline config from actual config structure
         from app.api.v1.stream import build_pipeline_config
@@ -170,6 +159,17 @@ async def query(request: QueryRequest):
 
     except HTTPException:
         raise
+    except LLMContextLengthError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"LLM context limit exceeded: {str(e)}",
+        )
+    except LLMError as e:
+        logger.warning("Query execution failed due to LLM provider error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"LLM provider failure: {str(e)}",
+        )
     except Exception as e:
         logger.exception(f"Query execution failed: {e}")
         raise HTTPException(
@@ -180,7 +180,8 @@ async def query(request: QueryRequest):
 
 @router.get("/")
 async def query_get(
-    query: str = Query(..., description="User query text"),
+    http_request: Request,
+    query: str = Query(..., description="User query text", max_length=10000),
     config_id: str = Query(..., description="RAG pipeline configuration ID"),
     user_role: Optional[str] = Query(None, description="User role for RBAC"),
 ):
@@ -194,7 +195,7 @@ async def query_get(
         config_id=config_id,
         user_role=user_role,
     )
-    return await query(request)
+    return await query(request, http_request)
 
 
 # Helper function for creating LLM from config
@@ -230,7 +231,7 @@ def get_agent(
     config: Dict[str, Any],
 ):
     """Create agent instance based on type."""
-    from app.agents.naive import NaiveRAGAgent, NaiveRAGAgentFactory
+    from app.agents.naive import NaiveRAGAgent
     from app.agents.react import ReActAgent, ReActConfig
     from app.agents.crag import CRAGAgent, CRAGConfig
     from app.agents.self_rag import SelfRAGAgent, SelfRAGConfig

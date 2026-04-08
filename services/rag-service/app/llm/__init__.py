@@ -11,6 +11,7 @@ from app.llm.base import (
     LLMAuthenticationError,
     LLMContextLengthError,
 )
+from app.llm.exceptions import LLMAuthError, LLMConnectionError
 from app.llm.openai import OpenAILLM
 from app.llm.anthropic import AnthropicLLM
 from app.llm.ollama import OllamaLLM
@@ -33,6 +34,8 @@ __all__ = [
     "LLMError",
     "LLMRateLimitError",
     "LLMAuthenticationError",
+    "LLMAuthError",
+    "LLMConnectionError",
     "LLMContextLengthError",
     # Providers
     "OpenAILLM",

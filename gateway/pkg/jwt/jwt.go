@@ -46,8 +46,8 @@ func NewValidator(secretKey string, algorithm string) *Validator {
 	}
 }
 
-// ValidateAccessToken validates a JWT access token and returns the user ID
-func (v *Validator) ValidateAccessToken(tokenString string) (string, error) {
+// ValidateAccessTokenClaims validates a JWT access token and returns the parsed claims.
+func (v *Validator) ValidateAccessTokenClaims(tokenString string) (*Claims, error) {
 	// Parse token with claims
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		// Verify signing method
@@ -60,28 +60,39 @@ func (v *Validator) ValidateAccessToken(tokenString string) (string, error) {
 	if err != nil {
 		// Check for specific errors
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			return "", ErrExpiredToken
+			return nil, ErrExpiredToken
 		}
-		return "", fmt.Errorf("%w: %v", ErrInvalidToken, err)
+		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
 	}
 
 	// Extract claims
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
-		return "", ErrInvalidToken
+		return nil, ErrInvalidToken
 	}
 
 	// Validate token type - must be "access" (not "refresh")
 	if claims.Type != "access" {
-		return "", ErrInvalidTokenType
+		return nil, ErrInvalidTokenType
 	}
 
 	// Get user ID from subject claim
 	userID := claims.Subject
 	if userID == "" {
-		return "", ErrMissingClaims
+		return nil, ErrMissingClaims
 	}
 
+	return claims, nil
+}
+
+// ValidateAccessToken validates a JWT access token and returns the user ID
+func (v *Validator) ValidateAccessToken(tokenString string) (string, error) {
+	claims, err := v.ValidateAccessTokenClaims(tokenString)
+	if err != nil {
+		return "", err
+	}
+
+	userID := claims.Subject
 	return userID, nil
 }
 

@@ -1,11 +1,11 @@
 """API endpoints for streaming responses."""
 
-import logging
+import asyncio
 import json
+import logging
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -18,8 +18,10 @@ except ImportError:
 
 from app.agents.base import AgentResponse
 from app.api.v1.query import get_agent, get_llm_from_config
+from app.core.auth import get_authenticated_user_id, require_config_access
 from app.core.settings import settings
 from app.db.mongodb import mongodb
+from app.llm.base import LLMContextLengthError, LLMError
 from app.retrieval.factory import get_retriever_from_config
 from app.prompts.manager import PromptManager
 
@@ -77,7 +79,7 @@ def build_pipeline_config(config_doc: Dict[str, Any]) -> Dict[str, Any]:
 class StreamRequest(BaseModel):
     """Request model for streaming endpoint."""
 
-    query: str = Field(..., description="User query text")
+    query: str = Field(..., description="User query text", max_length=10000)
     config_id: str = Field(..., description="RAG pipeline configuration ID")
     user_role: Optional[str] = Field(None, description="User role for RBAC")
     conversation_history: Optional[List[Dict[str, str]]] = Field(
@@ -85,115 +87,107 @@ class StreamRequest(BaseModel):
     )
 
 
-async def stream_response_generator(
+async def build_stream_events(
     query: str,
     config_id: str,
+    user_id: str,
     conversation_history: Optional[List[Dict[str, str]]] = None,
-) -> AsyncIterator[Dict[str, Any]]:
+) -> List[str]:
     """
-    Generate streaming response events.
-
-    Yields:
-        Events with type: "start", "token", "source", "end"
+    Build SSE payloads for a streaming response.
     """
-    try:
-        # Get database connection
-        db = mongodb.get_database()
+    db = mongodb.get_database()
+    config_doc = await require_config_access(db, config_id, user_id)
+    pipeline_config = build_pipeline_config(config_doc)
 
-        # Load configuration (convert string ID to ObjectId)
-        try:
-            oid = ObjectId(config_id)
-        except Exception:
-            oid = config_id
-        config_doc = await db["configs"].find_one({"_id": oid})
-        if not config_doc:
-            yield json.dumps({
-                "type": "error",
-                "content": f"Configuration '{config_id}' not found",
-            })
-            return
+    retriever = get_retriever_from_config(
+        db=db,
+        pipeline_config=pipeline_config,
+    )
+    llm = get_llm_from_config(pipeline_config)
+    prompt_manager = PromptManager()
 
-        pipeline_config = build_pipeline_config(config_doc)
+    agent_config = pipeline_config.get("agent", {})
+    agent_type = agent_config.get("type", "naive")
 
-        # Create components
-        retriever = get_retriever_from_config(
-            db=db,
-            pipeline_config=pipeline_config,
+    agent = get_agent(
+        agent_type=agent_type,
+        retriever=retriever,
+        llm=llm,
+        prompt_manager=prompt_manager,
+        config=agent_config,
+    )
+
+    response: AgentResponse = await agent.run(
+        query=query,
+        config_id=config_id,
+        conversation_history=conversation_history,
+    )
+
+    events = [
+        json.dumps(
+            {
+                "type": "start",
+                "content": "Starting generation...",
+            }
+        )
+    ]
+
+    for i, chunk in enumerate(response.sources):
+        events.append(
+            json.dumps(
+                {
+                    "type": "source",
+                    "content": {
+                        "index": i + 1,
+                        "content": chunk.content,
+                        "score": chunk.score,
+                        "metadata": chunk.metadata,
+                        "source_type": chunk.source_type.value,
+                    },
+                }
+            )
         )
 
-        llm = get_llm_from_config(pipeline_config)
-        prompt_manager = PromptManager()
-
-        # Get agent
-        agent_config = pipeline_config.get("agent", {})
-        agent_type = agent_config.get("type", "naive")
-
-        agent = get_agent(
-            agent_type=agent_type,
-            retriever=retriever,
-            llm=llm,
-            prompt_manager=prompt_manager,
-            config=agent_config,
+    words = response.answer.split()
+    for i, word in enumerate(words):
+        text = word + (" " if i < len(words) - 1 else "")
+        events.append(
+            json.dumps(
+                {
+                    "type": "token",
+                    "content": text,
+                }
+            )
         )
 
-        # Send start event
-        yield json.dumps({
-            "type": "start",
-            "content": "Starting generation...",
-        })
-
-        # Execute agent run first to get sources
-        response: AgentResponse = await agent.run(
-            query=query,
-            config_id=config_id,
-            conversation_history=conversation_history,
-        )
-
-        # Send source events
-        for i, chunk in enumerate(response.sources):
-            yield json.dumps({
-                "type": "source",
-                "content": {
-                    "index": i + 1,
-                    "content": chunk.content,
-                    "score": chunk.score,
-                    "metadata": chunk.metadata,
-                    "source_type": chunk.source_type.value,
+    events.append(
+        json.dumps(
+            {
+                "type": "done",
+                "content": "Generation complete",
+                "metadata": {
+                    "total_duration_ms": response.total_duration_ms,
+                    "source_count": len(response.sources),
+                    **response.metadata,
                 },
-            })
+            }
+        )
+    )
 
-        # Stream the answer word by word
-        words = response.answer.split()
-        for i, word in enumerate(words):
-            # Add space after word except for last word
-            text = word + (" " if i < len(words) - 1 else "")
-            yield json.dumps({
-                "type": "token",
-                "content": text,
-            })
+    return events
 
-        # Send end event (mapped to 'done' for frontend compatibility)
-        yield json.dumps({
-            "type": "done",
-            "content": "Generation complete",
-            "metadata": {
-                "total_duration_ms": response.total_duration_ms,
-                "source_count": len(response.sources),
-                **response.metadata,
-            },
-        })
 
-    except Exception as e:
-        logger.exception(f"Streaming failed: {e}")
-        yield json.dumps({
-            "type": "error",
-            "content": f"Streaming failed: {str(e)}",
-        })
+async def stream_response_generator(events: List[str]) -> AsyncIterator[str]:
+    """Yield prebuilt SSE events."""
+    for event in events:
+        yield event
 
 
 @router.get("/")
 async def stream_get(
-    query: str = Query(..., description="User query text"),
+    http_request: Request,
+    query: str = Query(..., description="User query text", max_length=10000),
     config_id: str = Query(..., description="RAG pipeline configuration ID"),
     user_role: Optional[str] = Query(None, description="User role for RBAC"),
 ):
@@ -210,35 +204,93 @@ async def stream_get(
     - `end`: Generation complete
     - `error`: Error occurred
     """
-    async def event_generator():
-        async for event in stream_response_generator(
-            query=query,
-            config_id=config_id,
-        ):
-            yield event
+    user_id = get_authenticated_user_id(http_request)
 
-    return EventSourceResponse(
-        event_generator(),
-        media_type="text/event-stream",
-    )
+    try:
+        events = await asyncio.wait_for(
+            build_stream_events(
+                query=query,
+                config_id=config_id,
+                user_id=user_id,
+            ),
+            timeout=120,
+        )
+    except LLMContextLengthError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"LLM context limit exceeded: {str(e)}",
+        )
+    except LLMError as e:
+        logger.warning("Streaming failed due to LLM provider error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"LLM provider failure: {str(e)}",
+        )
+    except asyncio.TimeoutError as e:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Streaming request timed out after 120 seconds",
+        ) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Streaming failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Streaming failed: {str(e)}",
+        )
+
+    generator = stream_response_generator(events)
+    if SSE_AVAILABLE:
+        return EventSourceResponse(generator, media_type="text/event-stream")
+    return StreamingResponse(generator, media_type="text/event-stream")
 
 
 @router.post("/")
-async def stream_post(request: StreamRequest):
+async def stream_post(request: StreamRequest, http_request: Request):
     """
     Stream a RAG response via Server-Sent Events (POST).
 
     Same as GET but accepts parameters in request body for larger queries.
     """
-    async def event_generator():
-        async for event in stream_response_generator(
-            query=request.query,
-            config_id=request.config_id,
-            conversation_history=request.conversation_history,
-        ):
-            yield event
+    user_id = get_authenticated_user_id(http_request)
 
-    return EventSourceResponse(
-        event_generator(),
-        media_type="text/event-stream",
-    )
+    try:
+        events = await asyncio.wait_for(
+            build_stream_events(
+                query=request.query,
+                config_id=request.config_id,
+                user_id=user_id,
+                conversation_history=request.conversation_history,
+            ),
+            timeout=120,
+        )
+    except LLMContextLengthError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"LLM context limit exceeded: {str(e)}",
+        )
+    except LLMError as e:
+        logger.warning("Streaming failed due to LLM provider error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"LLM provider failure: {str(e)}",
+        )
+    except asyncio.TimeoutError as e:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Streaming request timed out after 120 seconds",
+        ) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Streaming failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Streaming failed: {str(e)}",
+        )
+
+    generator = stream_response_generator(events)
+    if SSE_AVAILABLE:
+        return EventSourceResponse(generator, media_type="text/event-stream")
+    return StreamingResponse(generator, media_type="text/event-stream")

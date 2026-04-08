@@ -7,6 +7,30 @@ const apiClient: AxiosInstance = axios.create({
   },
 })
 
+let refreshPromise: Promise<string> | null = null
+
+async function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post('/api/v1/auth/refresh', {
+        refresh_token: localStorage.getItem('refresh_token'),
+      })
+      .then((response) => {
+        const { access_token, refresh_token } = response.data
+        localStorage.setItem('access_token', access_token)
+        if (refresh_token) {
+          localStorage.setItem('refresh_token', refresh_token)
+        }
+        return access_token as string
+      })
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+
+  return refreshPromise
+}
+
 // Request interceptor - add auth token
 apiClient.interceptors.request.use(
   (config) => {
@@ -27,16 +51,12 @@ apiClient.interceptors.response.use(
 
     if (error.response?.status === 401 && originalRequest) {
       const refreshToken = localStorage.getItem('refresh_token')
-      
-      if (refreshToken) {
+
+      if (refreshToken && !(originalRequest as any)._retry) {
+        ;(originalRequest as any)._retry = true
         try {
-          const response = await axios.post('/api/v1/auth/refresh', {
-            refresh_token: refreshToken,
-          })
-          
-          const { access_token } = response.data
-          localStorage.setItem('access_token', access_token)
-          
+          const access_token = await refreshAccessToken()
+          originalRequest.headers = originalRequest.headers || {}
           originalRequest.headers.Authorization = `Bearer ${access_token}`
           return apiClient(originalRequest)
         } catch (refreshError) {

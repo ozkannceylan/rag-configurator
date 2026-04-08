@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -11,19 +12,31 @@ import (
 
 // ipRateLimiter manages rate limiters per client IP
 type ipRateLimiter struct {
-	limiters map[string]*rate.Limiter
-	mu       sync.RWMutex
-	rps      rate.Limit
-	burst    int
+	limiters        map[string]*rate.Limiter
+	lastSeen        map[string]time.Time
+	mu              sync.RWMutex
+	rps             rate.Limit
+	burst           int
+	cleanupInterval time.Duration
+	entryTTL        time.Duration
+	now             func() time.Time
 }
 
 // newIPRateLimiter creates a new IP-based rate limiter
 func newIPRateLimiter(rps int, burst int) *ipRateLimiter {
-	return &ipRateLimiter{
-		limiters: make(map[string]*rate.Limiter),
-		rps:      rate.Limit(rps),
-		burst:    burst,
+	rl := &ipRateLimiter{
+		limiters:        make(map[string]*rate.Limiter),
+		lastSeen:        make(map[string]time.Time),
+		rps:             rate.Limit(rps),
+		burst:           burst,
+		cleanupInterval: 5 * time.Minute,
+		entryTTL:        10 * time.Minute,
+		now:             time.Now,
 	}
+
+	go rl.startCleanup()
+
+	return rl
 }
 
 // getLimiter returns the rate limiter for the given IP address
@@ -35,6 +48,7 @@ func (rl *ipRateLimiter) getLimiter(ip string) *rate.Limiter {
 	rl.mu.RUnlock()
 
 	if exists {
+		rl.markSeen(ip)
 		return limiter
 	}
 
@@ -49,8 +63,46 @@ func (rl *ipRateLimiter) getLimiter(ip string) *rate.Limiter {
 
 	limiter = rate.NewLimiter(rl.rps, rl.burst)
 	rl.limiters[ip] = limiter
+	rl.lastSeen[ip] = rl.now()
 
 	return limiter
+}
+
+func (rl *ipRateLimiter) markSeen(ip string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	rl.lastSeen[ip] = rl.now()
+}
+
+func (rl *ipRateLimiter) cleanupStaleEntries() int {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	cutoff := rl.now().Add(-rl.entryTTL)
+	removed := 0
+	for ip, lastSeen := range rl.lastSeen {
+		if lastSeen.Before(cutoff) {
+			delete(rl.lastSeen, ip)
+			delete(rl.limiters, ip)
+			removed++
+		}
+	}
+
+	return removed
+}
+
+func (rl *ipRateLimiter) startCleanup() {
+	ticker := time.NewTicker(rl.cleanupInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		removed := rl.cleanupStaleEntries()
+		if removed > 0 {
+			log.Debug().
+				Int("removed_entries", removed).
+				Msg("Cleaned up stale rate limit entries")
+		}
+	}
 }
 
 // RateLimit returns a middleware that limits request rate per IP

@@ -7,9 +7,75 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 from bson import ObjectId
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
+from app.main import app
 from app.storage.models import IngestionRecord, IngestionStatus
+
+
+def build_authorized_mock_db(
+    config_id: str,
+    *,
+    owner_id: str = "test-user-id",
+    config_doc: Dict[str, Any] | None = None,
+    latest_ingestion: Dict[str, Any] | None = None,
+    running_ingestion: Dict[str, Any] | None = None,
+    history_items: list[Dict[str, Any]] | None = None,
+    document_stats: list[Dict[str, Any]] | None = None,
+    graph_nodes_count: int = 0,
+    graph_edges_count: int = 0,
+):
+    """Build a database mock that authorizes the default test user."""
+    mock_db = MagicMock()
+    mock_db.command = AsyncMock(return_value={"ok": 1})
+
+    effective_config = config_doc or {
+        "_id": config_id,
+        "created_by": owner_id,
+        "user_id": owner_id,
+    }
+    mock_configs = AsyncMock()
+    mock_configs.find_one = AsyncMock(return_value=effective_config)
+
+    mock_ingestions = AsyncMock()
+    mock_ingestions.find_one = AsyncMock(
+        return_value=running_ingestion if running_ingestion is not None else latest_ingestion
+    )
+    mock_ingestions.update_one = AsyncMock()
+    mock_ingestions.insert_one = AsyncMock(
+        return_value=MagicMock(inserted_id="new-ing-id")
+    )
+    mock_ingestions.count_documents = AsyncMock(
+        return_value=len(history_items or [])
+    )
+    mock_ingestions.find = MagicMock(return_value=AsyncIterator(history_items or []))
+
+    mock_documents = MagicMock()
+    mock_documents.aggregate = MagicMock(
+        return_value=AsyncIterator(document_stats or [])
+    )
+
+    mock_graph_nodes = AsyncMock()
+    mock_graph_nodes.count_documents = AsyncMock(return_value=graph_nodes_count)
+
+    mock_graph_edges = AsyncMock()
+    mock_graph_edges.count_documents = AsyncMock(return_value=graph_edges_count)
+
+    def get_collection(name):
+        if name == "configs":
+            return mock_configs
+        if name == "ingestions":
+            return mock_ingestions
+        if name == "documents":
+            return mock_documents
+        if name == "graph_nodes":
+            return mock_graph_nodes
+        if name == "graph_edges":
+            return mock_graph_edges
+        return AsyncMock()
+
+    mock_db.__getitem__ = MagicMock(side_effect=get_collection)
+    return mock_db
 
 
 class TestHealthEndpoints:
@@ -49,6 +115,48 @@ class TestRootEndpoints:
 
 class TestStartIngestion:
     """Tests for starting ingestion."""
+
+    @pytest.mark.asyncio
+    async def test_start_ingestion_requires_user_header(self, sample_config: Dict[str, Any]):
+        """Test starting ingestion without X-User-ID is rejected."""
+        mock_db = MagicMock()
+        mock_configs = AsyncMock()
+        mock_configs.find_one = AsyncMock(return_value=sample_config)
+        mock_db.__getitem__ = MagicMock(return_value=mock_configs)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client_without_auth:
+            with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
+                response = await client_without_auth.post(
+                    f"/api/v1/ingest/{sample_config['_id']}/start"
+                )
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_start_ingestion_forbidden_for_non_owner(
+        self,
+        async_client: AsyncClient,
+        sample_config: Dict[str, Any],
+    ):
+        """Test starting ingestion for someone else's config is rejected."""
+        other_user_config = {
+            **sample_config,
+            "created_by": "different-user",
+            "user_id": "different-user",
+        }
+
+        mock_db = MagicMock()
+        mock_configs = AsyncMock()
+        mock_configs.find_one = AsyncMock(return_value=other_user_config)
+        mock_db.__getitem__ = MagicMock(return_value=mock_configs)
+
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
+            response = await async_client.post(f"/api/v1/ingest/{sample_config['_id']}/start")
+
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_start_ingestion_config_not_found(self, async_client: AsyncClient):
@@ -155,10 +263,7 @@ class TestGetIngestionStatus:
         """Test getting status when no ingestion exists."""
         fake_config_id = str(ObjectId())
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=None)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(fake_config_id)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{fake_config_id}/status")
@@ -184,10 +289,7 @@ class TestGetIngestionStatus:
             "completed_at": None,
         }
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id, latest_ingestion=ingestion)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/status")
@@ -214,10 +316,7 @@ class TestGetIngestionStatus:
             "completed_at": None,
         }
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id, latest_ingestion=ingestion)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/status")
@@ -245,10 +344,7 @@ class TestGetIngestionStatus:
             "completed_at": datetime.utcnow(),
         }
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id, latest_ingestion=ingestion)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/status")
@@ -267,10 +363,7 @@ class TestCancelIngestion:
         """Test cancelling when no ingestion is running."""
         config_id = str(ObjectId())
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=None)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/cancel")
@@ -288,11 +381,10 @@ class TestCancelIngestion:
             "celery_task_id": "task-to-cancel",
         }
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=running_ingestion)
-        mock_ingestions.update_one = AsyncMock()
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(
+            config_id,
+            running_ingestion=running_ingestion,
+        )
 
         # The endpoint handles ImportError gracefully, so we don't need to mock celery
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
@@ -311,10 +403,7 @@ class TestRetryIngestion:
         """Test retrying when no ingestion exists."""
         config_id = str(ObjectId())
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=None)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/retry")
@@ -330,10 +419,7 @@ class TestRetryIngestion:
             "status": "completed",
         }
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id, latest_ingestion=ingestion)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/retry")
@@ -392,10 +478,7 @@ class TestGetIngestionLogs:
         """Test getting logs when no ingestion exists."""
         config_id = str(ObjectId())
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=None)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/logs")
@@ -425,10 +508,7 @@ class TestGetIngestionLogs:
             "completed_at": None,
         }
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id, latest_ingestion=ingestion)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/logs")
@@ -446,14 +526,11 @@ class TestGetIngestionStats:
         """Test getting stats when no ingestion exists."""
         config_id = str(ObjectId())
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=None)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/stats")
-            assert response.status_code in (200, 404)
+            assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_stats_with_ingestion(self, async_client: AsyncClient):
@@ -471,31 +548,14 @@ class TestGetIngestionStats:
             "completed_at": datetime.utcnow(),
         }
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_documents = MagicMock()
-        mock_chunks = AsyncMock()
-        
-        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
-        
-        # Mock documents.aggregate to return async iterator
-        mock_documents.aggregate = MagicMock(return_value=AsyncIterator([
-            {"_id": ".txt", "count": 5, "total_size": 5000},
-            {"_id": ".pdf", "count": 5, "total_size": 10000},
-        ]))
-        
-        mock_chunks.count_documents = AsyncMock(return_value=200)
-        
-        def get_collection(name):
-            if name == "ingestions":
-                return mock_ingestions
-            elif name == "documents":
-                return mock_documents
-            elif name == "chunks":
-                return mock_chunks
-            return AsyncMock()
-        
-        mock_db.__getitem__ = MagicMock(side_effect=get_collection)
+        mock_db = build_authorized_mock_db(
+            config_id,
+            latest_ingestion=ingestion,
+            document_stats=[
+                {"_id": ".txt", "count": 5, "total_size": 5000},
+                {"_id": ".pdf", "count": 5, "total_size": 10000},
+            ],
+        )
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/stats")
@@ -514,18 +574,11 @@ class TestGetIngestionHistory:
         """Test that history endpoint exists."""
         config_id = str(ObjectId())
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        
-        # Mock cursor with async iteration
-        mock_cursor = AsyncIterator([])
-        mock_ingestions.find = MagicMock(return_value=mock_cursor)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id, history_items=[])
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/history")
-            # May return 200 or 500 depending on async iteration handling
-            assert response.status_code in (200, 500)
+            assert response.status_code == 200
 
 
 class TestAPIResponseFormats:
@@ -548,10 +601,7 @@ class TestAPIResponseFormats:
             "completed_at": datetime.utcnow(),
         }
 
-        mock_db = MagicMock()
-        mock_ingestions = AsyncMock()
-        mock_ingestions.find_one = AsyncMock(return_value=ingestion)
-        mock_db.__getitem__ = MagicMock(return_value=mock_ingestions)
+        mock_db = build_authorized_mock_db(config_id, latest_ingestion=ingestion)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/status")

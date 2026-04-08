@@ -67,9 +67,11 @@ nul
 
 # Environment
 .env
+.env.*
 .env.local
 .env.*.local
 *.local
+!.env.example
 
 # Docker
 .docker/
@@ -89,3 +91,9 @@ coverage/
 
 # LangGraph
 .langgraph_api/
+
+# Local verification artifacts
+gateway/.gocache/
+gateway/.gotmp/
+gateway/.gotelemetry/
+services/ingestion-service/.tmp-tests/

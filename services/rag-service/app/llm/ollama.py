@@ -5,14 +5,8 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
 
-from app.llm.base import (
-    BaseLLM,
-    LLMConfig,
-    LLMResponse,
-    LLMUsage,
-    LLMError,
-    Message,
-)
+from app.llm.base import BaseLLM, LLMConfig, LLMResponse, LLMUsage, Message
+from app.llm.exceptions import LLMAuthError, LLMConnectionError, LLMError
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +139,7 @@ class OllamaLLM(BaseLLM):
         except httpx.HTTPStatusError as e:
             self._handle_http_error(e)
         except httpx.RequestError as e:
-            raise LLMError(
+            raise LLMConnectionError(
                 message=f"Connection error: {str(e)}",
                 provider=self.provider,
             )
@@ -215,7 +209,7 @@ class OllamaLLM(BaseLLM):
         except httpx.HTTPStatusError as e:
             self._handle_http_error(e)
         except httpx.RequestError as e:
-            raise LLMError(
+            raise LLMConnectionError(
                 message=f"Connection error: {str(e)}",
                 provider=self.provider,
             )
@@ -286,7 +280,12 @@ class OllamaLLM(BaseLLM):
         """Handle HTTP errors from Ollama."""
         status_code = error.response.status_code
 
-        if status_code == 404:
+        if status_code == 401:
+            raise LLMAuthError(
+                message="Invalid Ollama authentication configuration",
+                provider=self.provider,
+            )
+        elif status_code == 404:
             raise LLMError(
                 message=f"Model '{self.config.model}' not found. Pull it with: ollama pull {self.config.model}",
                 provider=self.provider,

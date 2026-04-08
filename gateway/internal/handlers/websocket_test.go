@@ -143,6 +143,13 @@ func TestGetScheme_FromForwardedProto(t *testing.T) {
 	assert.Equal(t, "https", scheme)
 }
 
+func TestIsOriginAllowed(t *testing.T) {
+	assert.True(t, isOriginAllowed("", []string{"http://localhost:3000"}))
+	assert.True(t, isOriginAllowed("http://localhost:3000", []string{"http://localhost:3000"}))
+	assert.True(t, isOriginAllowed("http://localhost:3000", []string{"*"}))
+	assert.False(t, isOriginAllowed("http://evil.example", []string{"http://localhost:3000"}))
+}
+
 func TestWebSocketProxy_FullBidirectionalProxy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

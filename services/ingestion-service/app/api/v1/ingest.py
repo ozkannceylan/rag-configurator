@@ -5,10 +5,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
 
+from app.core.auth import get_authenticated_user_id, require_config_access
 from app.db.mongodb import get_database
 from app.storage.models import IngestionRecord, IngestionStatus
 from app.storage.vector_store import VectorStore
@@ -200,6 +201,7 @@ def format_datetime(dt: Optional[datetime]) -> Optional[str]:
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def start_ingestion(
+    request: Request,
     config_id: str,
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> StartIngestionResponse:
@@ -208,13 +210,8 @@ async def start_ingestion(
 
     Triggers a Celery task to process all documents in the data source.
     """
-    # Validate config exists
-    config = await get_config(db, config_id)
-    if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Configuration not found: {config_id}",
-        )
+    user_id = get_authenticated_user_id(request)
+    config = await require_config_access(db, config_id, user_id)
 
     # Check if ingestion already running
     running = await get_running_ingestion(db, config_id)
@@ -223,9 +220,6 @@ async def start_ingestion(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Ingestion already in progress: {running['_id']}",
         )
-
-    # Get user_id from config or use default
-    user_id = config.get("user_id", "system")
 
     # Create ingestion record
     vector_store = VectorStore(db)
@@ -275,6 +269,7 @@ async def start_ingestion(
     response_model=IngestionStatusResponse,
 )
 async def get_ingestion_status(
+    request: Request,
     config_id: str,
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> IngestionStatusResponse:
@@ -283,6 +278,9 @@ async def get_ingestion_status(
 
     Returns the latest ingestion job status and progress.
     """
+    user_id = get_authenticated_user_id(request)
+    await require_config_access(db, config_id, user_id)
+
     # Get latest ingestion
     ingestion = await get_latest_ingestion(db, config_id)
 
@@ -320,6 +318,7 @@ async def get_ingestion_status(
     response_model=CancelIngestionResponse,
 )
 async def cancel_ingestion(
+    request: Request,
     config_id: str,
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> CancelIngestionResponse:
@@ -328,6 +327,9 @@ async def cancel_ingestion(
 
     Revokes the Celery task and updates status to cancelled.
     """
+    user_id = get_authenticated_user_id(request)
+    await require_config_access(db, config_id, user_id)
+
     # Get running ingestion
     ingestion = await get_running_ingestion(db, config_id)
 
@@ -380,6 +382,7 @@ async def cancel_ingestion(
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def retry_ingestion(
+    request: Request,
     config_id: str,
     clear_data: bool = Query(
         default=False,
@@ -393,6 +396,9 @@ async def retry_ingestion(
     Only allowed if the last ingestion status is 'failed'.
     Optionally clears previous data before retrying.
     """
+    user_id = get_authenticated_user_id(request)
+    config = await require_config_access(db, config_id, user_id)
+
     # Get latest ingestion
     ingestion = await get_latest_ingestion(db, config_id)
 
@@ -413,16 +419,6 @@ async def retry_ingestion(
         vector_store = VectorStore(db)
         await vector_store.delete_documents_by_config(config_id)
         logger.info(f"Cleared previous data for config {config_id}")
-
-    # Get config
-    config = await get_config(db, config_id)
-    if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Configuration not found: {config_id}",
-        )
-
-    user_id = config.get("user_id", "system")
 
     # Create new ingestion record
     vector_store = VectorStore(db)
@@ -467,6 +463,7 @@ async def retry_ingestion(
     response_model=IngestionLogsResponse,
 )
 async def get_ingestion_logs(
+    request: Request,
     config_id: str,
     limit: int = Query(default=100, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -478,6 +475,9 @@ async def get_ingestion_logs(
 
     Returns logs from the latest ingestion job.
     """
+    user_id = get_authenticated_user_id(request)
+    await require_config_access(db, config_id, user_id)
+
     # Get latest ingestion
     ingestion = await get_latest_ingestion(db, config_id)
 
@@ -567,6 +567,7 @@ async def get_ingestion_logs(
     response_model=IngestionStatsResponse,
 )
 async def get_ingestion_stats(
+    request: Request,
     config_id: str,
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> IngestionStatsResponse:
@@ -575,6 +576,9 @@ async def get_ingestion_stats(
 
     Returns comprehensive stats from the latest ingestion job.
     """
+    user_id = get_authenticated_user_id(request)
+    await require_config_access(db, config_id, user_id)
+
     # Get latest ingestion
     ingestion = await get_latest_ingestion(db, config_id)
 
@@ -645,6 +649,7 @@ async def get_ingestion_stats(
     response_model=IngestionHistoryResponse,
 )
 async def get_ingestion_history(
+    request: Request,
     config_id: str,
     limit: int = Query(default=10, le=100),
     offset: int = Query(default=0, ge=0),
@@ -655,6 +660,9 @@ async def get_ingestion_history(
 
     Returns a list of past ingestion jobs.
     """
+    user_id = get_authenticated_user_id(request)
+    await require_config_access(db, config_id, user_id)
+
     ingestions = db["ingestions"]
 
     # Get total count
@@ -694,6 +702,7 @@ async def get_ingestion_history(
     status_code=status.HTTP_200_OK,
 )
 async def delete_ingestion_data(
+    request: Request,
     config_id: str,
     include_history: bool = Query(
         default=False,
@@ -706,6 +715,9 @@ async def delete_ingestion_data(
 
     Removes documents, chunks, and optionally ingestion history.
     """
+    user_id = get_authenticated_user_id(request)
+    await require_config_access(db, config_id, user_id)
+
     # Check if ingestion is running
     running = await get_running_ingestion(db, config_id)
     if running:

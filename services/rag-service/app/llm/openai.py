@@ -3,16 +3,13 @@
 import logging
 from typing import Any, AsyncIterator, List, Optional
 
-from app.llm.base import (
-    BaseLLM,
-    LLMConfig,
-    LLMResponse,
-    LLMUsage,
+from app.llm.base import BaseLLM, LLMConfig, LLMResponse, LLMUsage, Message
+from app.llm.exceptions import (
+    LLMAuthError,
+    LLMConnectionError,
+    LLMContextLengthError,
     LLMError,
     LLMRateLimitError,
-    LLMAuthenticationError,
-    LLMContextLengthError,
-    Message,
 )
 
 logger = logging.getLogger(__name__)
@@ -192,13 +189,20 @@ class OpenAILLM(BaseLLM):
         try:
             from openai import (
                 APIError,
+                APIConnectionError,
+                APITimeoutError,
                 AuthenticationError,
                 RateLimitError,
                 BadRequestError,
             )
 
             if isinstance(error, AuthenticationError):
-                raise LLMAuthenticationError(
+                raise LLMAuthError(
+                    message=str(error),
+                    provider=self.provider,
+                )
+            elif isinstance(error, (APIConnectionError, APITimeoutError)):
+                raise LLMConnectionError(
                     message=str(error),
                     provider=self.provider,
                 )

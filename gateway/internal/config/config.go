@@ -3,9 +3,13 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/caarlos0/env/v10"
+	gojwt "github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
+
+	gatewayjwt "gateway/pkg/jwt"
 )
 
 // Config holds all gateway configuration
@@ -18,6 +22,9 @@ type Config struct {
 	// JWT - must match Phase 1 Config Service
 	JWTSecretKey string `env:"JWT_SECRET_KEY,required"`
 	JWTAlgorithm string `env:"JWT_ALGORITHM" envDefault:"HS256"`
+
+	// Redis
+	RedisURL string `env:"REDIS_URL" envDefault:"redis://localhost:6379/0"`
 
 	// Backend Services
 	ConfigServiceURL    string `env:"CONFIG_SERVICE_URL" envDefault:"http://localhost:8001"`
@@ -66,7 +73,50 @@ func (c *Config) validate() error {
 	if c.JWTAlgorithm != "HS256" && c.JWTAlgorithm != "HS384" && c.JWTAlgorithm != "HS512" {
 		return fmt.Errorf("JWT_ALGORITHM must be HS256, HS384, or HS512")
 	}
+	if err := validateJWTCompatibility(c.JWTSecretKey, c.JWTAlgorithm); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateJWTCompatibility(secretKey string, algorithm string) error {
+	validator := gatewayjwt.NewValidator(secretKey, algorithm)
+	now := time.Now()
+	claims := gatewayjwt.Claims{
+		RegisteredClaims: gojwt.RegisteredClaims{
+			Subject:   "gateway-startup-check",
+			ID:        "gateway-startup-jti",
+			IssuedAt:  gojwt.NewNumericDate(now),
+			ExpiresAt: gojwt.NewNumericDate(now.Add(5 * time.Minute)),
+		},
+		Type: "access",
+	}
+
+	token := gojwt.NewWithClaims(signingMethod(algorithm), claims)
+	tokenString, err := token.SignedString([]byte(secretKey))
+	if err != nil {
+		return fmt.Errorf("failed to sign JWT compatibility token: %w", err)
+	}
+
+	if _, err := validator.ValidateAccessTokenClaims(tokenString); err != nil {
+		return fmt.Errorf(
+			"gateway JWT validation is incompatible with JWT_SECRET_KEY/JWT_ALGORITHM: %w",
+			err,
+		)
+	}
+
+	return nil
+}
+
+func signingMethod(algorithm string) gojwt.SigningMethod {
+	switch strings.ToUpper(algorithm) {
+	case "HS384":
+		return gojwt.SigningMethodHS384
+	case "HS512":
+		return gojwt.SigningMethodHS512
+	default:
+		return gojwt.SigningMethodHS256
+	}
 }
 
 func parseCSV(s string) []string {

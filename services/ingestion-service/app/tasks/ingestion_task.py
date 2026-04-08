@@ -2,11 +2,13 @@
 
 import asyncio
 import logging
+import random
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from celery import states
+from celery.exceptions import MaxRetriesExceededError
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.core.celery_app import celery_app
@@ -22,6 +24,13 @@ from app.tasks.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def compute_retry_countdown(retry_count: int) -> int:
+    """Compute exponential backoff with jitter for Celery retries."""
+    base_delay = 60 * (2**retry_count)
+    jitter = random.randint(0, 30)
+    return base_delay + jitter
 
 
 class IngestionPipeline:
@@ -740,12 +749,27 @@ def run_ingestion(
         )
 
         result = run_async(pipeline.run())
+        if result.get("status") == "failed":
+            raise RuntimeError(result.get("error", "Ingestion pipeline failed"))
 
         logger.info(f"Ingestion completed: {result}")
         return result
 
     except Exception as e:
         logger.exception(f"Ingestion task failed: {e}")
+
+        if self.request.retries < self.max_retries:
+            countdown = compute_retry_countdown(self.request.retries)
+            logger.warning(
+                "Retrying ingestion task in %s seconds (attempt %s/%s)",
+                countdown,
+                self.request.retries + 1,
+                self.max_retries,
+            )
+            try:
+                raise self.retry(exc=e, countdown=countdown)
+            except MaxRetriesExceededError:
+                logger.exception("Max ingestion retries exceeded")
 
         # Update state to failed
         self.update_state(

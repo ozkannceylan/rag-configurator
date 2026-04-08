@@ -7,7 +7,7 @@ from app.api.v1 import query, chat, stream
 router = APIRouter()
 
 # Include sub-routers
-router.include_router(query.router, prefix="/query", tags=["query"])
+router.include_router(query.router, tags=["query"])
 router.include_router(chat.router, tags=["chat"])
 router.include_router(stream.router, tags=["stream"])
 

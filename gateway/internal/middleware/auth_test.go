@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +14,18 @@ import (
 )
 
 const testSecret = "test-secret-key-for-testing"
+
+type mockBlacklistChecker struct {
+	blacklisted map[string]bool
+	err         error
+}
+
+func (m *mockBlacklistChecker) IsBlacklisted(ctx context.Context, tokenID string) (bool, error) {
+	if m.err != nil {
+		return false, m.err
+	}
+	return m.blacklisted[tokenID], nil
+}
 
 func createTestToken(userID string, tokenType string, expired bool) string {
 	var exp time.Time
@@ -26,6 +40,7 @@ func createTestToken(userID string, tokenType string, expired bool) string {
 		"type": tokenType,
 		"exp":  exp.Unix(),
 		"iat":  time.Now().Unix(),
+		"jti":  "test-jti-" + userID,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -103,6 +118,44 @@ func TestAuth_InvalidToken(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, 401, w.Code)
+}
+
+func TestAuth_RevokedToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(Auth(testSecret, "HS256", &mockBlacklistChecker{
+		blacklisted: map[string]bool{"test-jti-user123": true},
+	}))
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(200, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+createTestToken("user123", "access", false))
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, 401, w.Code)
+	assert.Contains(t, w.Body.String(), "revoked")
+}
+
+func TestAuth_BlacklistCheckFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(Auth(testSecret, "HS256", &mockBlacklistChecker{
+		err: errors.New("redis unavailable"),
+	}))
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(200, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+createTestToken("user123", "access", false))
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, 503, w.Code)
+	assert.Contains(t, w.Body.String(), "revocation")
 }
 
 func TestAuth_MalformedAuthHeader(t *testing.T) {

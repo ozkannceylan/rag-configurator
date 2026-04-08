@@ -14,9 +14,13 @@ const (
 	ContextKeyUserID = "user_id"
 )
 
-// Auth returns a middleware that validates JWT access tokens
-func Auth(secretKey string, algorithm string) gin.HandlerFunc {
+// Auth returns a middleware that validates JWT access tokens.
+func Auth(secretKey string, algorithm string, checker ...TokenBlacklistChecker) gin.HandlerFunc {
 	validator := jwt.NewValidator(secretKey, algorithm)
+	var blacklistChecker TokenBlacklistChecker
+	if len(checker) > 0 {
+		blacklistChecker = checker[0]
+	}
 
 	return func(c *gin.Context) {
 		// Get Authorization header
@@ -41,7 +45,7 @@ func Auth(secretKey string, algorithm string) gin.HandlerFunc {
 		}
 
 		// Validate token
-		userID, err := validator.ValidateAccessToken(tokenString)
+		claims, err := validator.ValidateAccessTokenClaims(tokenString)
 		if err != nil {
 			log.Debug().Err(err).Msg("Token validation failed")
 
@@ -59,6 +63,28 @@ func Auth(secretKey string, algorithm string) gin.HandlerFunc {
 			return
 		}
 
+		if blacklistChecker != nil && claims.ID != "" {
+			blacklisted, err := blacklistChecker.IsBlacklisted(c.Request.Context(), claims.ID)
+			if err != nil {
+				log.Error().
+					Err(err).
+					Str("token_jti", claims.ID).
+					Msg("Token revocation check failed")
+				abortWithServiceError(c, "Token revocation check unavailable")
+				return
+			}
+
+			if blacklisted {
+				log.Warn().
+					Str("token_jti", claims.ID).
+					Msg("Rejected revoked token")
+				abortWithAuthError(c, "Token has been revoked")
+				return
+			}
+		}
+
+		userID := claims.Subject
+
 		// Store user ID in context for downstream handlers
 		c.Set(ContextKeyUserID, userID)
 
@@ -69,6 +95,13 @@ func Auth(secretKey string, algorithm string) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func abortWithServiceError(c *gin.Context, message string) {
+	c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+		"error":   "Service Unavailable",
+		"message": message,
+	})
 }
 
 // abortWithAuthError stops the request with a 401 Unauthorized response

@@ -1,17 +1,21 @@
 """API endpoints for chat with conversation history."""
 
 import logging
-import time
-from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.agents.base import AgentResponse
 from app.api.v1.query import get_agent, get_llm_from_config
-from app.core.settings import settings
+from app.core.auth import (
+    get_authenticated_user_id,
+    require_config_access,
+    require_conversation_access,
+)
 from app.db.mongodb import mongodb
+from app.llm.base import LLMContextLengthError, LLMError
 from app.retrieval.factory import get_retriever_from_config
 from app.prompts.manager import PromptManager
 
@@ -31,7 +35,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """Request model for chat endpoint."""
 
-    message: str = Field(..., description="User message")
+    message: str = Field(..., description="User message", max_length=10000)
     config_id: str = Field(..., description="RAG pipeline configuration ID")
     conversation_id: Optional[str] = Field(None, description="Existing conversation ID")
     user_role: Optional[str] = Field(None, description="User role for RBAC")
@@ -57,26 +61,24 @@ class ConversationHistoryResponse(BaseModel):
 
 
 @router.post("/", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, http_request: Request):
     """
     Execute a chat message with conversation history.
 
     This endpoint maintains conversation context across multiple messages,
     allowing for follow-up questions and contextual responses.
     """
-    start_time = time.time()
-
     try:
         # Get database connection
         db = mongodb.get_database()
+        user_id = get_authenticated_user_id(http_request)
 
         # Get or create conversation
         conversation_id = request.conversation_id
         conversation_history = []
 
         if conversation_id:
-            # Load existing conversation
-            conv_doc = await db["conversations"].find_one({"_id": conversation_id})
+            conv_doc = await require_conversation_access(db, conversation_id, user_id)
             if conv_doc:
                 conversation_history = conv_doc.get("messages", [])
             else:
@@ -90,20 +92,17 @@ async def chat(request: ChatRequest):
             await db["conversations"].insert_one({
                 "_id": conversation_id,
                 "config_id": request.config_id,
+                "user_id": user_id,
                 "messages": [],
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             })
 
         # Load configuration
-        config_doc = await db["configs"].find_one({"_id": request.config_id})
-        if not config_doc:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{request.config_id}' not found",
-            )
+        config_doc = await require_config_access(db, request.config_id, user_id)
+        from app.api.v1.stream import build_pipeline_config
 
-        pipeline_config = config_doc.get("pipeline_config", {})
+        pipeline_config = build_pipeline_config(config_doc)
 
         # Create components
         retriever = get_retriever_from_config(
@@ -176,6 +175,17 @@ async def chat(request: ChatRequest):
 
     except HTTPException:
         raise
+    except LLMContextLengthError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"LLM context limit exceeded: {str(e)}",
+        )
+    except LLMError as e:
+        logger.warning("Chat execution failed due to LLM provider error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"LLM provider failure: {str(e)}",
+        )
     except Exception as e:
         logger.exception(f"Chat execution failed: {e}")
         raise HTTPException(
@@ -185,19 +195,14 @@ async def chat(request: ChatRequest):
 
 
 @router.get("/history/{conversation_id}", response_model=ConversationHistoryResponse)
-async def get_conversation_history(conversation_id: str):
+async def get_conversation_history(conversation_id: str, request: Request):
     """
     Get conversation history by ID.
     """
     try:
         db = mongodb.get_database()
-        conv_doc = await db["conversations"].find_one({"_id": conversation_id})
-
-        if not conv_doc:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Conversation '{conversation_id}' not found",
-            )
+        user_id = get_authenticated_user_id(request)
+        conv_doc = await require_conversation_access(db, conversation_id, user_id)
 
         messages = [
             ChatMessage(
@@ -226,12 +231,14 @@ async def get_conversation_history(conversation_id: str):
 
 
 @router.delete("/history/{conversation_id}")
-async def delete_conversation(conversation_id: str):
+async def delete_conversation(conversation_id: str, request: Request):
     """
     Delete a conversation by ID.
     """
     try:
         db = mongodb.get_database()
+        user_id = get_authenticated_user_id(request)
+        await require_conversation_access(db, conversation_id, user_id)
         result = await db["conversations"].delete_one({"_id": conversation_id})
 
         if result.deleted_count == 0:

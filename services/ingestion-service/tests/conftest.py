@@ -2,7 +2,9 @@
 
 import asyncio
 import os
+import shutil
 import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, Generator, List
@@ -15,6 +17,7 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+from app.db.mongodb import mongodb
 from app.storage.models import (
     ChunkRecord,
     DocumentRecord,
@@ -32,20 +35,70 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 
 
 @pytest.fixture
-def client() -> Generator[TestClient, None, None]:
+def client(mock_mongodb: MagicMock) -> Generator[TestClient, None, None]:
     """Create synchronous test client."""
-    with TestClient(app) as c:
-        yield c
+    original_database = mongodb.database
+    mongodb.database = mock_mongodb
+
+    with patch.object(mongodb, "connect", AsyncMock()), patch.object(
+        mongodb, "disconnect", AsyncMock()
+    ):
+        with TestClient(app) as c:
+            yield c
+
+    mongodb.database = original_database
 
 
 @pytest_asyncio.fixture
-async def async_client() -> AsyncGenerator[AsyncClient, None]:
+async def async_client(mock_mongodb: MagicMock) -> AsyncGenerator[AsyncClient, None]:
     """Create async test client."""
+    original_database = mongodb.database
+    mongodb.database = mock_mongodb
+
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
+        headers={"X-User-ID": "test-user-id"},
     ) as ac:
         yield ac
+
+    mongodb.database = original_database
+
+
+@pytest.fixture(scope="session", autouse=True)
+def sandbox_tempdir() -> Generator[Path, None, None]:
+    """Force tempfile usage into the writable workspace."""
+    temp_root = Path(__file__).resolve().parent.parent / ".tmp-tests"
+    temp_root.mkdir(exist_ok=True)
+
+    original_tempdir = tempfile.tempdir
+    original_tmp = os.environ.get("TMP")
+    original_temp = os.environ.get("TEMP")
+
+    tempfile.tempdir = str(temp_root)
+    os.environ["TMP"] = str(temp_root)
+    os.environ["TEMP"] = str(temp_root)
+
+    yield temp_root
+
+    tempfile.tempdir = original_tempdir
+    if original_tmp is None:
+        os.environ.pop("TMP", None)
+    else:
+        os.environ["TMP"] = original_tmp
+    if original_temp is None:
+        os.environ.pop("TEMP", None)
+    else:
+        os.environ["TEMP"] = original_temp
+
+
+@pytest.fixture
+def workspace_temp_directory(sandbox_tempdir: Path) -> Generator[Path, None, None]:
+    """Create a writable temporary directory within the workspace."""
+    path = sandbox_tempdir / f"case-{uuid.uuid4().hex}"
+    path.mkdir(parents=True, exist_ok=False)
+    yield path
+    shutil.rmtree(path, ignore_errors=True)
 
 
 # ==================== Sample Data Fixtures ====================
@@ -60,7 +113,7 @@ def sample_config_id() -> str:
 @pytest.fixture
 def sample_user_id() -> str:
     """Return a sample user ID."""
-    return str(ObjectId())
+    return "test-user-id"
 
 
 @pytest.fixture
@@ -69,6 +122,7 @@ def sample_config(sample_config_id: str, sample_user_id: str) -> Dict[str, Any]:
     return {
         "_id": sample_config_id,
         "name": "Test Config",
+        "created_by": sample_user_id,
         "user_id": sample_user_id,
         "data_sources": [
             {
@@ -207,29 +261,26 @@ This concludes the test document.
 
 
 @pytest.fixture
-def temp_directory() -> Generator[Path, None, None]:
+def temp_directory(workspace_temp_directory: Path) -> Generator[Path, None, None]:
     """Create a temporary directory with sample files."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
+    # Create text file
+    (workspace_temp_directory / "file1.txt").write_text(
+        "This is the first test file.", encoding="utf-8"
+    )
 
-        # Create text file
-        (tmpdir_path / "file1.txt").write_text(
-            "This is the first test file.", encoding="utf-8"
-        )
+    # Create markdown file
+    (workspace_temp_directory / "file2.md").write_text(
+        "# Markdown\n\nThis is a markdown file.", encoding="utf-8"
+    )
 
-        # Create markdown file
-        (tmpdir_path / "file2.md").write_text(
-            "# Markdown\n\nThis is a markdown file.", encoding="utf-8"
-        )
+    # Create subdirectory with file
+    subdir = workspace_temp_directory / "subdir"
+    subdir.mkdir()
+    (subdir / "file3.txt").write_text(
+        "This is a file in a subdirectory.", encoding="utf-8"
+    )
 
-        # Create subdirectory with file
-        subdir = tmpdir_path / "subdir"
-        subdir.mkdir()
-        (subdir / "file3.txt").write_text(
-            "This is a file in a subdirectory.", encoding="utf-8"
-        )
-
-        yield tmpdir_path
+    yield workspace_temp_directory
 
 
 # ==================== Mock Fixtures ====================
@@ -239,6 +290,7 @@ def temp_directory() -> Generator[Path, None, None]:
 def mock_mongodb() -> Generator[MagicMock, None, None]:
     """Create a mock MongoDB database."""
     mock_db = MagicMock()
+    mock_db.command = AsyncMock(return_value={"ok": 1})
     mock_db.__getitem__ = MagicMock(return_value=MagicMock())
     yield mock_db
 

@@ -5,15 +5,8 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
 
-from app.llm.base import (
-    BaseLLM,
-    LLMConfig,
-    LLMResponse,
-    LLMUsage,
-    LLMError,
-    LLMAuthenticationError,
-    Message,
-)
+from app.llm.base import BaseLLM, LLMConfig, LLMResponse, LLMUsage, Message
+from app.llm.exceptions import LLMAuthError, LLMConnectionError, LLMError
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +126,7 @@ class VLLMLlm(BaseLLM):
         except httpx.HTTPStatusError as e:
             self._handle_http_error(e)
         except httpx.RequestError as e:
-            raise LLMError(
+            raise LLMConnectionError(
                 message=f"Connection error: {str(e)}",
                 provider=self.provider,
             )
@@ -203,7 +196,7 @@ class VLLMLlm(BaseLLM):
         except httpx.HTTPStatusError as e:
             self._handle_http_error(e)
         except httpx.RequestError as e:
-            raise LLMError(
+            raise LLMConnectionError(
                 message=f"Connection error: {str(e)}",
                 provider=self.provider,
             )
@@ -267,7 +260,7 @@ class VLLMLlm(BaseLLM):
         status_code = error.response.status_code
 
         if status_code == 401:
-            raise LLMAuthenticationError(
+            raise LLMAuthError(
                 message="Invalid API key",
                 provider=self.provider,
             )

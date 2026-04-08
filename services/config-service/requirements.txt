@@ -6,6 +6,7 @@ python-multipart==0.0.9
 # Database
 motor==3.4.0
 pymongo==4.7.2
+redis==5.0.4
 
 # Authentication
 python-jose[cryptography]==3.3.0

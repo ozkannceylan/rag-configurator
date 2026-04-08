@@ -25,11 +25,12 @@ from app.tasks.utils import (
 
 # Import IngestionPipeline only if Celery is available
 try:
-    from app.tasks.ingestion_task import IngestionPipeline
+    from app.tasks.ingestion_task import IngestionPipeline, compute_retry_countdown
     CELERY_AVAILABLE = True
 except ImportError:
     CELERY_AVAILABLE = False
     IngestionPipeline = None
+    compute_retry_countdown = None
 
 
 class TestSupportedExtensions:
@@ -109,84 +110,78 @@ class TestFileHashing:
 class TestScanDirectory:
     """Tests for directory scanning."""
 
-    def test_scan_directory_basic(self):
+    def test_scan_directory_basic(self, workspace_temp_directory: Path):
         """Test basic directory scanning."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Create test files
-            (Path(tmpdir) / "doc1.txt").touch()
-            (Path(tmpdir) / "doc2.pdf").touch()
-            (Path(tmpdir) / "skip.xyz").touch()
+        # Create test files
+        (workspace_temp_directory / "doc1.txt").touch()
+        (workspace_temp_directory / "doc2.pdf").touch()
+        (workspace_temp_directory / "skip.xyz").touch()
 
-            files = scan_directory(tmpdir, recursive=False)
+        files = scan_directory(str(workspace_temp_directory), recursive=False)
 
-            assert len(files) == 2
-            assert any("doc1.txt" in f for f in files)
-            assert any("doc2.pdf" in f for f in files)
-            assert not any("skip.xyz" in f for f in files)
+        assert len(files) == 2
+        assert any("doc1.txt" in f for f in files)
+        assert any("doc2.pdf" in f for f in files)
+        assert not any("skip.xyz" in f for f in files)
 
-    def test_scan_directory_recursive(self):
+    def test_scan_directory_recursive(self, workspace_temp_directory: Path):
         """Test recursive directory scanning."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Create nested structure
-            subdir = Path(tmpdir) / "subdir"
-            subdir.mkdir()
-            (Path(tmpdir) / "root.txt").touch()
-            (subdir / "nested.txt").touch()
+        subdir = workspace_temp_directory / "subdir"
+        subdir.mkdir()
+        (workspace_temp_directory / "root.txt").touch()
+        (subdir / "nested.txt").touch()
 
-            files = scan_directory(tmpdir, recursive=True)
+        files = scan_directory(str(workspace_temp_directory), recursive=True)
 
-            assert len(files) == 2
-            assert any("root.txt" in f for f in files)
-            assert any("nested.txt" in f for f in files)
+        assert len(files) == 2
+        assert any("root.txt" in f for f in files)
+        assert any("nested.txt" in f for f in files)
 
-    def test_scan_directory_nonrecursive(self):
+    def test_scan_directory_nonrecursive(self, workspace_temp_directory: Path):
         """Test non-recursive directory scanning."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            subdir = Path(tmpdir) / "subdir"
-            subdir.mkdir()
-            (Path(tmpdir) / "root.txt").touch()
-            (subdir / "nested.txt").touch()
+        subdir = workspace_temp_directory / "subdir"
+        subdir.mkdir()
+        (workspace_temp_directory / "root.txt").touch()
+        (subdir / "nested.txt").touch()
 
-            files = scan_directory(tmpdir, recursive=False)
+        files = scan_directory(str(workspace_temp_directory), recursive=False)
 
-            assert len(files) == 1
-            assert any("root.txt" in f for f in files)
+        assert len(files) == 1
+        assert any("root.txt" in f for f in files)
 
-    def test_scan_directory_with_extensions(self):
+    def test_scan_directory_with_extensions(self, workspace_temp_directory: Path):
         """Test scanning with specific extensions."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            (Path(tmpdir) / "doc.txt").touch()
-            (Path(tmpdir) / "doc.pdf").touch()
-            (Path(tmpdir) / "doc.docx").touch()
+        (workspace_temp_directory / "doc.txt").touch()
+        (workspace_temp_directory / "doc.pdf").touch()
+        (workspace_temp_directory / "doc.docx").touch()
 
-            files = scan_directory(
-                tmpdir,
-                recursive=False,
-                include_extensions=[".txt", ".pdf"],
-            )
+        files = scan_directory(
+            str(workspace_temp_directory),
+            recursive=False,
+            include_extensions=[".txt", ".pdf"],
+        )
 
-            assert len(files) == 2
-            assert not any("docx" in f for f in files)
+        assert len(files) == 2
+        assert not any("docx" in f for f in files)
 
     def test_scan_directory_nonexistent(self):
         """Test scanning nonexistent directory."""
         files = scan_directory("/nonexistent/directory")
         assert files == []
 
-    def test_scan_directory_exclude_patterns(self):
+    def test_scan_directory_exclude_patterns(self, workspace_temp_directory: Path):
         """Test scanning with exclude patterns."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            (Path(tmpdir) / "include.txt").touch()
-            (Path(tmpdir) / "exclude_this.txt").touch()
+        (workspace_temp_directory / "include.txt").touch()
+        (workspace_temp_directory / "exclude_this.txt").touch()
 
-            files = scan_directory(
-                tmpdir,
-                recursive=False,
-                exclude_patterns=["exclude"],
-            )
+        files = scan_directory(
+            str(workspace_temp_directory),
+            recursive=False,
+            exclude_patterns=["exclude"],
+        )
 
-            assert len(files) == 1
-            assert any("include.txt" in f for f in files)
+        assert len(files) == 1
+        assert any("include.txt" in f for f in files)
 
 
 class TestPathHelpers:
@@ -339,6 +334,18 @@ class TestProgressTracker:
         tracker.file_processed("file1.txt")
 
         mock_task.update_state.assert_called()
+
+
+@pytest.mark.skipif(not CELERY_AVAILABLE, reason="Celery not installed")
+class TestRetryBackoff:
+    """Tests for Celery retry backoff logic."""
+
+    def test_compute_retry_countdown_uses_exponential_backoff(self):
+        """Test retry countdown grows exponentially with jitter."""
+        with patch("app.tasks.ingestion_task.random.randint", return_value=7):
+            assert compute_retry_countdown(0) == 67
+            assert compute_retry_countdown(1) == 127
+            assert compute_retry_countdown(2) == 247
 
 
 @pytest.mark.skipif(not CELERY_AVAILABLE, reason="Celery not installed")

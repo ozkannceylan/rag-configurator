@@ -8,7 +8,9 @@ export const authApi = {
   },
 
   async logout(): Promise<void> {
-    await apiClient.post('/v1/auth/logout')
+    await apiClient.post('/v1/auth/logout', {
+      refresh_token: localStorage.getItem('refresh_token'),
+    })
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
   },

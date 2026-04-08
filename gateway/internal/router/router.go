@@ -2,6 +2,7 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 
 	"gateway/internal/config"
 	"gateway/internal/handlers"
@@ -25,6 +26,14 @@ func New(cfg *config.Config) *gin.Engine {
 
 	// Create reverse proxy
 	proxyHandler := proxy.New(cfg)
+	var blacklistChecker middleware.TokenBlacklistChecker
+	if cfg.RedisURL != "" {
+		checker, err := middleware.NewRedisTokenBlacklistChecker(cfg.RedisURL)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to initialize token blacklist checker")
+		}
+		blacklistChecker = checker
+	}
 
 	// API v1 routes
 	v1 := r.Group("/api/v1")
@@ -44,7 +53,7 @@ func New(cfg *config.Config) *gin.Engine {
 
 		// Auth /me endpoint - requires auth, proxy to users/me on Config Service
 		authMe := v1.Group("/auth")
-		authMe.Use(middleware.Auth(cfg.JWTSecretKey, cfg.JWTAlgorithm))
+		authMe.Use(middleware.Auth(cfg.JWTSecretKey, cfg.JWTAlgorithm, blacklistChecker))
 		{
 			authMe.GET("/me", proxyHandler.ToConfigServiceRewrite("/api/v1/users/me"))
 		}
@@ -54,7 +63,7 @@ func New(cfg *config.Config) *gin.Engine {
 		// ============================================================
 
 		// Auth middleware for protected routes
-		authMiddleware := middleware.Auth(cfg.JWTSecretKey, cfg.JWTAlgorithm)
+		authMiddleware := middleware.Auth(cfg.JWTSecretKey, cfg.JWTAlgorithm, blacklistChecker)
 
 		// User endpoints - proxy to Config Service
 		users := v1.Group("/users")
@@ -97,12 +106,15 @@ func New(cfg *config.Config) *gin.Engine {
 			ingest.POST("/:config_id/retry", proxyHandler.ToIngestionService())
 			ingest.GET("/:config_id/logs", proxyHandler.ToIngestionService())
 			ingest.GET("/:config_id/stats", proxyHandler.ToIngestionService())
+			ingest.GET("/:config_id/history", proxyHandler.ToIngestionService())
+			ingest.DELETE("/:config_id/data", proxyHandler.ToIngestionService())
 		}
 
 		// Query endpoints - proxy to RAG Service
 		query := v1.Group("/query")
 		query.Use(authMiddleware)
 		{
+			query.GET("", proxyHandler.ToRAGService())
 			query.POST("", proxyHandler.ToRAGService())
 		}
 
@@ -111,6 +123,8 @@ func New(cfg *config.Config) *gin.Engine {
 		chat.Use(authMiddleware)
 		{
 			chat.POST("", proxyHandler.ToRAGService())
+			chat.GET("/history/:conversation_id", proxyHandler.ToRAGService())
+			chat.DELETE("/history/:conversation_id", proxyHandler.ToRAGService())
 		}
 
 		// Stream endpoints - SSE proxy to RAG Service
@@ -125,6 +139,11 @@ func New(cfg *config.Config) *gin.Engine {
 				ragStreamProxy(c)
 			})
 			stream.GET("/", proxyHandler.ToRAGService())
+			stream.POST("", func(c *gin.Context) {
+				c.Request.URL.Path = c.Request.URL.Path + "/"
+				ragStreamProxy(c)
+			})
+			stream.POST("/", proxyHandler.ToRAGService())
 		}
 	}
 

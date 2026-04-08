@@ -16,21 +16,22 @@ import (
 
 // WebSocket upgrader configuration
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	// Allow all origins - actual CORS is handled by middleware
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+	ReadBufferSize:   1024,
+	WriteBufferSize:  1024,
 	HandshakeTimeout: 10 * time.Second,
 }
 
 // WebSocketProxy returns a handler for WebSocket connections
 // It proxies WebSocket connections between the client and the RAG service
-func WebSocketProxy(targetURL string) gin.HandlerFunc {
+func WebSocketProxy(targetURL string, allowedOrigins ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		currentUpgrader := upgrader
+		currentUpgrader.CheckOrigin = func(r *http.Request) bool {
+			return isOriginAllowed(r.Header.Get("Origin"), allowedOrigins)
+		}
+
 		// Upgrade client connection to WebSocket
-		clientConn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		clientConn, err := currentUpgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			log.Error().
 				Err(err).
@@ -110,6 +111,21 @@ func WebSocketProxy(targetURL string) gin.HandlerFunc {
 			Str("client_ip", c.ClientIP()).
 			Msg("WebSocket connection closed")
 	}
+}
+
+func isOriginAllowed(origin string, allowedOrigins []string) bool {
+	if origin == "" {
+		return true
+	}
+
+	for _, allowedOrigin := range allowedOrigins {
+		trimmed := strings.TrimSpace(allowedOrigin)
+		if trimmed == "*" || strings.EqualFold(trimmed, origin) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // buildWebSocketURL constructs the backend WebSocket URL from the target URL and request

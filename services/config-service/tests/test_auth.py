@@ -77,3 +77,42 @@ async def test_refresh_token(client, test_user_data):
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_cannot_be_reused(client, test_user_data):
+    """Test a refresh token is revoked once it is exchanged."""
+    response = await client.post("/api/v1/auth/register", json=test_user_data)
+    refresh_token = response.json()["refresh_token"]
+
+    first_refresh = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    assert first_refresh.status_code == 200
+
+    second_refresh = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    assert second_refresh.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_logout_revokes_refresh_token(client, test_user_data):
+    """Test logout blacklists the submitted refresh token."""
+    response = await client.post("/api/v1/auth/register", json=test_user_data)
+    tokens = response.json()
+
+    logout_response = await client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+        json={"refresh_token": tokens["refresh_token"]},
+    )
+    assert logout_response.status_code == 200
+
+    refresh_response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": tokens["refresh_token"]},
+    )
+    assert refresh_response.status_code == 401

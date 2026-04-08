@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -260,4 +261,24 @@ func TestGetLimiter_ThreadSafe(t *testing.T) {
 	for i, l := range limiters {
 		assert.NotNil(t, l, "Limiter %d should not be nil", i)
 	}
+}
+
+func TestCleanupStaleEntries_RemovesExpiredLimiters(t *testing.T) {
+	rl := newIPRateLimiter(10, 20)
+	now := time.Now()
+	rl.now = func() time.Time { return now }
+	rl.entryTTL = 10 * time.Minute
+
+	rl.limiters["192.168.1.1"] = rl.getLimiter("192.168.1.1")
+	rl.limiters["192.168.1.2"] = rl.getLimiter("192.168.1.2")
+	rl.lastSeen["192.168.1.1"] = now.Add(-11 * time.Minute)
+	rl.lastSeen["192.168.1.2"] = now
+
+	removed := rl.cleanupStaleEntries()
+
+	assert.Equal(t, 1, removed)
+	_, staleExists := rl.limiters["192.168.1.1"]
+	_, freshExists := rl.limiters["192.168.1.2"]
+	assert.False(t, staleExists)
+	assert.True(t, freshExists)
 }

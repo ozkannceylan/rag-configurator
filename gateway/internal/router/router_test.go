@@ -55,6 +55,7 @@ func setupMockBackend() *httptest.Server {
 			"path":        r.URL.Path,
 			"query":       r.URL.RawQuery,
 			"auth_header": r.Header.Get("Authorization"),
+			"x_user_id":   r.Header.Get("X-User-ID"),
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
@@ -185,7 +186,7 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 		path   string
 	}{
 		{"GET", "/api/v1/users/me"},
-		{"GET", "/api/v1/configs"},
+		{"GET", "/api/v1/configs/"},
 		{"POST", "/api/v1/ingest/123/start"},
 		{"POST", "/api/v1/query"},
 	}
@@ -279,7 +280,11 @@ func TestRAGServiceRoutesExist(t *testing.T) {
 }
 
 func TestWebSocketRouteExists(t *testing.T) {
+	backend := setupMockBackend()
+	defer backend.Close()
+
 	cfg := newTestConfig()
+	cfg.RAGServiceURL = backend.URL
 	token := createTestToken(cfg)
 
 	gateway := setupGatewayServer(cfg)
@@ -295,10 +300,9 @@ func TestWebSocketRouteExists(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	// WebSocket handler returns 400 for non-WebSocket requests (missing upgrade headers)
-	// This confirms the route exists and the WebSocket handler is active
-	if resp.StatusCode != 400 {
-		t.Errorf("Expected status code 400 (WebSocket upgrade required), got %d", resp.StatusCode)
+	// Stream route proxies to the RAG service over HTTP/SSE in Phase 0.
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status code 200, got %d", resp.StatusCode)
 	}
 }
 
@@ -391,6 +395,9 @@ func TestProxyForwardsAuthorizationHeader(t *testing.T) {
 	// Verify authorization header was forwarded to backend
 	if response["auth_header"] != "Bearer "+token {
 		t.Errorf("Expected authorization header to be forwarded, got %v", response["auth_header"])
+	}
+	if response["x_user_id"] != "test-user-123" {
+		t.Errorf("Expected X-User-ID to be forwarded, got %v", response["x_user_id"])
 	}
 }
 

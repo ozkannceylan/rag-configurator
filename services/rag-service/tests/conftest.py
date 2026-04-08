@@ -28,6 +28,7 @@ async def client(mock_mongodb):
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
+        headers={"X-User-ID": "user-456"},
     ) as ac:
         yield ac
 
@@ -38,6 +39,7 @@ def sample_config():
     return {
         "_id": "config-123",
         "name": "Test Config",
+        "created_by": "user-456",
         "user_id": "user-456",
         "data_source": {
             "type": "local",

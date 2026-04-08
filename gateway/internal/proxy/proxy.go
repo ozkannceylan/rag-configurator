@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"gateway/internal/config"
+	"gateway/internal/middleware"
 )
 
 // Proxy handles reverse proxy to backend services
@@ -140,6 +141,7 @@ func (p *Proxy) ToConfigServiceRewrite(newPath string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Rewrite the request path before proxying
 		c.Request.URL.Path = newPath
+		p.injectProxyHeaders(c)
 
 		log.Info().
 			Str("method", c.Request.Method).
@@ -155,6 +157,8 @@ func (p *Proxy) ToConfigServiceRewrite(newPath string) gin.HandlerFunc {
 // createProxyHandler creates a Gin handler that uses the reverse proxy
 func (p *Proxy) createProxyHandler(proxy *httputil.ReverseProxy, targetURL string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		p.injectProxyHeaders(c)
+
 		// Reconstruct the full path including any path parameters
 		// Gin's c.Request.URL.Path already has the resolved path
 
@@ -175,6 +179,12 @@ func (p *Proxy) createProxyHandler(proxy *httputil.ReverseProxy, targetURL strin
 
 		// Use the reverse proxy
 		proxy.ServeHTTP(c.Writer, c.Request)
+	}
+}
+
+func (p *Proxy) injectProxyHeaders(c *gin.Context) {
+	if userID := middleware.GetUserID(c); userID != "" {
+		c.Request.Header.Set("X-User-ID", userID)
 	}
 }
 

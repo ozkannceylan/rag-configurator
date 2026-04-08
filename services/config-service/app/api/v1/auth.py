@@ -1,13 +1,17 @@
 """Authentication endpoints."""
 
-from fastapi import APIRouter, Depends, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Header, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.core.security import extract_bearer_token
 from app.db.mongodb import get_db
 from app.schemas.auth import (
     RegisterRequest,
     LoginRequest,
     RefreshRequest,
+    LogoutRequest,
     TokenResponse,
     MessageResponse,
 )
@@ -74,12 +78,17 @@ async def refresh(
     response_model=MessageResponse,
     summary="User logout",
 )
-async def logout() -> MessageResponse:
+async def logout(
+    data: LogoutRequest | None = None,
+    authorization: Annotated[str | None, Header()] = None,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
     """
-    Logout user.
-
-    Note: With JWT, actual token invalidation requires a token blacklist
-    which is not implemented in this basic version. The client should
-    discard the tokens.
+    Logout user and revoke the current tokens.
     """
+    service = AuthService(db)
+    await service.logout(
+        access_token=extract_bearer_token(authorization),
+        refresh_token=data.refresh_token if data else None,
+    )
     return MessageResponse(message="Successfully logged out")

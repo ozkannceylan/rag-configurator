@@ -145,6 +145,7 @@ class TestTokenPayloadContents:
         assert "sub" in payload
         assert "exp" in payload
         assert "iat" in payload
+        assert "jti" in payload
         assert "type" in payload
         assert payload["type"] == "access"
 
@@ -156,6 +157,7 @@ class TestTokenPayloadContents:
         assert "sub" in payload
         assert "exp" in payload
         assert "iat" in payload
+        assert "jti" in payload
         assert "type" in payload
         assert payload["type"] == "refresh"
 

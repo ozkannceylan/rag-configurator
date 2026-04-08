@@ -3,12 +3,15 @@
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.security import (
-    verify_password,
-    get_password_hash,
     create_access_token,
     create_refresh_token,
     decode_token,
+    get_password_hash,
+    get_token_jti,
+    get_token_ttl_seconds,
+    verify_password,
 )
+from app.core.token_blacklist import token_blacklist
 from app.core.settings import settings
 from app.core.exceptions import (
     UnauthorizedException,
@@ -67,6 +70,13 @@ class AuthService:
         if payload.get("type") != "refresh":
             raise UnauthorizedException("Invalid token type")
 
+        token_jti = get_token_jti(payload)
+        if not token_jti:
+            raise UnauthorizedException("Invalid token payload")
+
+        if await token_blacklist.is_blacklisted(token_jti):
+            raise UnauthorizedException("Refresh token has been revoked")
+
         user_id = payload.get("sub")
         if not user_id:
             raise UnauthorizedException("Invalid token payload")
@@ -76,7 +86,21 @@ class AuthService:
         if not user or not user.get("is_active", False):
             raise UnauthorizedException("User not found or deactivated")
 
+        await token_blacklist.blacklist_token(
+            token_jti,
+            get_token_ttl_seconds(payload),
+        )
+
         return self._create_tokens(user_id)
+
+    async def logout(
+        self,
+        access_token: str | None = None,
+        refresh_token: str | None = None,
+    ) -> None:
+        """Blacklist access and refresh tokens until they expire."""
+        await self._revoke_token(access_token, expected_type="access")
+        await self._revoke_token(refresh_token, expected_type="refresh")
 
     def _create_tokens(self, user_id: str) -> TokenResponse:
         """Create access and refresh tokens."""
@@ -88,4 +112,26 @@ class AuthService:
             refresh_token=refresh_token,
             token_type="bearer",
             expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
+
+    async def _revoke_token(
+        self,
+        token: str | None,
+        expected_type: str,
+    ) -> None:
+        """Blacklist a token when it is valid and matches the expected type."""
+        if not token:
+            return
+
+        payload = decode_token(token)
+        if not payload or payload.get("type") != expected_type:
+            return
+
+        token_jti = get_token_jti(payload)
+        if not token_jti:
+            return
+
+        await token_blacklist.blacklist_token(
+            token_jti,
+            get_token_ttl_seconds(payload),
         )

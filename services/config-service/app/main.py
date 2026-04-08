@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.settings import settings
+from app.core.token_blacklist import token_blacklist
 from app.db.mongodb import mongodb
 
 
@@ -14,8 +15,10 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     # Startup
     await mongodb.connect()
+    await token_blacklist.connect()
     yield
     # Shutdown
+    await token_blacklist.disconnect()
     await mongodb.disconnect()
 
 

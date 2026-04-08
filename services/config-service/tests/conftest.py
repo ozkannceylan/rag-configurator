@@ -10,6 +10,7 @@ from pymongo.errors import ServerSelectionTimeoutError, OperationFailure
 from app.main import app
 from app.db.mongodb import mongodb
 from app.core.settings import settings
+from app.core.token_blacklist import token_blacklist
 
 # Check if MongoDB is available for testing
 MONGODB_AVAILABLE = False
@@ -83,12 +84,14 @@ async def client(test_db):
     mongodb.client = test_db.client
     original_db_name = settings.MONGODB_DATABASE
     settings.MONGODB_DATABASE = f"{original_db_name}_test"
+    token_blacklist._memory_blacklist.clear()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
     # Restore original settings
+    token_blacklist._memory_blacklist.clear()
     settings.MONGODB_DATABASE = original_db_name
 
 

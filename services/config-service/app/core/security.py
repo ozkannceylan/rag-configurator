@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from uuid import uuid4
 
 import bcrypt
 from jose import JWTError, jwt
@@ -38,6 +39,7 @@ def create_access_token(
         "sub": subject,
         "type": "access",
         "iat": now,
+        "jti": str(uuid4()),
     }
     return jwt.encode(
         to_encode,
@@ -60,6 +62,7 @@ def create_refresh_token(
         "sub": subject,
         "type": "refresh",
         "iat": now,
+        "jti": str(uuid4()),
     }
     return jwt.encode(
         to_encode,
@@ -79,3 +82,37 @@ def decode_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
+    """Extract a bearer token from an Authorization header."""
+    if not authorization:
+        return None
+
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+
+    return parts[1]
+
+
+def get_token_jti(payload: Optional[dict]) -> Optional[str]:
+    """Return the JWT ID from a token payload."""
+    if not payload:
+        return None
+    return payload.get("jti")
+
+
+def get_token_ttl_seconds(payload: Optional[dict]) -> int:
+    """Compute the remaining lifetime for a decoded token."""
+    if not payload or "exp" not in payload:
+        return 0
+
+    expires_at = payload["exp"]
+    if isinstance(expires_at, datetime):
+        expiry = expires_at.astimezone(timezone.utc)
+    else:
+        expiry = datetime.fromtimestamp(expires_at, tz=timezone.utc)
+
+    remaining = int((expiry - datetime.now(timezone.utc)).total_seconds())
+    return max(0, remaining)
