@@ -56,8 +56,8 @@ test-go:
 
 test-ui:
 	@echo "Running UI tests..."
-	cd ui/configurator && npm run test
-	cd ui/sandbox && npm run test
+	cd apps/configurator-ui && npm run test
+	cd apps/sandbox-ui && npm run test
 
 # Linting
 lint: lint-python lint-go lint-ui
@@ -74,8 +74,8 @@ lint-go:
 
 lint-ui:
 	@echo "Linting UI..."
-	cd ui/configurator && npm run lint
-	cd ui/sandbox && npm run lint
+	cd apps/configurator-ui && npm run lint
+	cd apps/sandbox-ui && npm run lint
 
 # Install dependencies
 install: install-python install-go install-ui install-shared
@@ -93,8 +93,8 @@ install-go:
 
 install-ui:
 	@echo "Installing UI dependencies..."
-	cd ui/configurator && npm install
-	cd ui/sandbox && npm install
+	cd apps/configurator-ui && npm install
+	cd apps/sandbox-ui && npm install
 
 install-shared:
 	@echo "Installing shared TypeScript package..."

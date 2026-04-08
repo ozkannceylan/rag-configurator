@@ -48,7 +48,7 @@ dist/
 
 # Claude Code
 .claude/
-CLAUDE.md
+# CLAUDE.md
 CLAUDE_CODE_GUIDE.md
 
 # Internal planning docs
@@ -89,4 +89,3 @@ coverage/
 
 # LangGraph
 .langgraph_api/
-docs/

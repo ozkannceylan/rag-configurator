@@ -1,0 +1,28 @@
+#!/bin/bash
+# Pre-commit hook: blocks .env files and runs ruff on staged Python files
+# Install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+set -e
+
+# 1. Block .env files from being committed
+ENV_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(^|/)\.env($|\.)' || true)
+if [ -n "$ENV_FILES" ]; then
+    echo "ERROR: Attempted to commit .env file(s):"
+    echo "$ENV_FILES"
+    echo ""
+    echo "Remove them from staging with: git reset HEAD <file>"
+    exit 1
+fi
+
+# 2. Run ruff on staged Python files
+PYTHON_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.py$' || true)
+if [ -n "$PYTHON_FILES" ]; then
+    if command -v ruff &> /dev/null; then
+        echo "Running ruff check on staged Python files..."
+        echo "$PYTHON_FILES" | xargs ruff check --no-fix
+    else
+        echo "WARNING: ruff not found, skipping Python lint check"
+    fi
+fi
+
+exit 0
