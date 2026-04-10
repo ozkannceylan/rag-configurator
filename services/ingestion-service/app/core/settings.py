@@ -1,7 +1,7 @@
 """Application settings using Pydantic Settings."""
 
 from functools import lru_cache
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,6 +15,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
     # Service Configuration
@@ -38,6 +39,22 @@ class Settings(BaseSettings):
     redis_url: str = Field(
         default="redis://localhost:6379/0",
         alias="REDIS_URL",
+    )
+
+    # Inter-service auth
+    inter_service_secret: str = Field(
+        default="change-this-inter-service-secret",
+        alias="INTER_SERVICE_SECRET",
+    )
+
+    # OpenTelemetry
+    otel_exporter_otlp_endpoint: Optional[str] = Field(
+        default=None,
+        alias="OTEL_EXPORTER_OTLP_ENDPOINT",
+    )
+    otel_service_name: str = Field(
+        default="ingestion-service",
+        alias="OTEL_SERVICE_NAME",
     )
 
     # Celery Configuration
@@ -79,8 +96,8 @@ class Settings(BaseSettings):
         alias="CONFIG_SERVICE_URL",
     )
 
-    # CORS Configuration
-    cors_origins: List[str] = Field(
+    # CORS Configuration - use Union to prevent pydantic-settings from JSON parsing
+    cors_origins: Union[str, List[str]] = Field(
         default=["http://localhost:3000", "http://localhost:5173"],
         alias="CORS_ORIGINS",
     )

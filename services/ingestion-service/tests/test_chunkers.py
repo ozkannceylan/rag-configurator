@@ -100,8 +100,8 @@ class TestRecursiveChunker:
 
     @pytest.fixture
     def chunker(self):
-        """Create recursive chunker instance."""
-        return RecursiveChunker()
+        """Create recursive chunker instance with small min_chunk_size for testing."""
+        return RecursiveChunker(ChunkingConfig(min_chunk_size=1))
 
     @pytest.fixture
     def sample_text(self):
@@ -161,8 +161,8 @@ class TestSemanticChunker:
 
     @pytest.fixture
     def chunker(self):
-        """Create semantic chunker instance."""
-        return SemanticChunker()
+        """Create semantic chunker instance with small min_chunk_size for testing."""
+        return SemanticChunker(ChunkingConfig(min_chunk_size=1))
 
     @pytest.fixture
     def multi_sentence_text(self):

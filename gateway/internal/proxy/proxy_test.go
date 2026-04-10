@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -29,6 +30,8 @@ func setupMockBackend(t *testing.T) *httptest.Server {
 			"auth_header":  r.Header.Get("Authorization"),
 			"content_type": r.Header.Get("Content-Type"),
 			"x_forwarded":  r.Header.Get("X-Forwarded-For"),
+			"signature":    r.Header.Get("X-Service-Signature"),
+			"timestamp":    r.Header.Get("X-Service-Timestamp"),
 		}
 
 		// Read body if present
@@ -445,4 +448,67 @@ func TestProxy_DELETE_Method(t *testing.T) {
 
 	assert.Equal(t, "DELETE", response["method"])
 	assert.Equal(t, "/api/v1/configs/abc123", response["path"])
+}
+
+func TestProxy_SignsRequests(t *testing.T) {
+	backend := setupMockBackend(t)
+	defer backend.Close()
+
+	cfg := &config.Config{
+		ConfigServiceURL:    backend.URL,
+		IngestionServiceURL: backend.URL,
+		RAGServiceURL:       backend.URL,
+		InterServiceSecret:  "test-inter-service-secret",
+	}
+
+	gateway := setupGateway(t, cfg)
+	defer gateway.Close()
+
+	resp, err := http.Get(gateway.URL + "/test")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var response map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, response["signature"])
+	timestamp, err := strconv.ParseInt(response["timestamp"].(string), 10, 64)
+	require.NoError(t, err)
+	assert.NotZero(t, timestamp)
+}
+
+func TestProxy_CircuitBreakerOpensAfterRepeatedFailures(t *testing.T) {
+	failingBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte(`{"error":"backend unavailable"}`))
+	}))
+	defer failingBackend.Close()
+
+	cfg := &config.Config{
+		ConfigServiceURL:    failingBackend.URL,
+		IngestionServiceURL: failingBackend.URL,
+		RAGServiceURL:       failingBackend.URL,
+		InterServiceSecret:  "test-inter-service-secret",
+	}
+
+	gateway := setupGateway(t, cfg)
+	defer gateway.Close()
+
+	client := &http.Client{}
+	for i := 0; i < 5; i++ {
+		resp, err := client.Get(gateway.URL + "/test")
+		require.NoError(t, err)
+		resp.Body.Close()
+		assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	}
+
+	resp, err := client.Get(gateway.URL + "/test")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Contains(t, string(body), "Circuit breaker is open")
 }

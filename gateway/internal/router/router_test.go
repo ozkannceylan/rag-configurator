@@ -38,6 +38,7 @@ func newTestConfig() *config.Config {
 		LogLevel:            "info",
 		JWTSecretKey:        "test-secret-key",
 		JWTAlgorithm:        "HS256",
+		InterServiceSecret:  "test-inter-service-secret",
 		ConfigServiceURL:    "http://localhost:8001",
 		IngestionServiceURL: "http://localhost:8002",
 		RAGServiceURL:       "http://localhost:8003",

@@ -46,13 +46,13 @@
         <div class="flex flex-wrap gap-2">
           <div
             v-for="role in config.rbac.roles"
-            :key="role"
+            :key="role.name"
             class="flex items-center gap-1 px-3 py-1 bg-white border border-gray-300 rounded-full text-sm"
           >
-            <span>{{ role }}</span>
+            <span>{{ role.name }}</span>
             <button
-              v-if="role !== 'admin' && role !== 'user'"
-              @click="removeRole(role)"
+              v-if="role.name !== 'admin' && role.name !== 'user'"
+              @click="removeRole(role.name)"
               class="text-gray-400 hover:text-red-500"
             >
               ×
@@ -69,8 +69,8 @@
             v-model="config.rbac.default_role"
             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           >
-            <option v-for="role in config.rbac.roles" :key="role" :value="role">
-              {{ role }}
+            <option v-for="role in config.rbac.roles" :key="role.name" :value="role.name">
+              {{ role.name }}
             </option>
           </select>
         </div>
@@ -97,16 +97,16 @@
             <div class="flex flex-wrap gap-2">
               <label
                 v-for="role in config.rbac.roles"
-                :key="role"
+                :key="role.name"
                 class="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-sm cursor-pointer hover:bg-gray-200"
               >
                 <input
                   type="checkbox"
-                  :checked="hasRoleAccess(folder, role)"
-                  @change="toggleRoleAccess(folder, role)"
+                  :checked="hasRoleAccess(folder, role.name)"
+                  @change="toggleRoleAccess(folder, role.name)"
                   class="w-3 h-3 text-primary-600 rounded focus:ring-primary-500"
                 />
-                <span>{{ role }}</span>
+                <span>{{ role.name }}</span>
               </label>
             </div>
           </div>
@@ -125,6 +125,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useWizardStore } from '@/stores/wizard'
+import type { RoleConfig } from '@/types'
 
 const wizardStore = useWizardStore()
 const config = wizardStore.config
@@ -136,28 +137,35 @@ const folderList = computed(() => {
 })
 
 function addRole() {
-  const role = newRole.value.trim().toLowerCase()
-  if (role && !config.rbac.roles.includes(role)) {
-    config.rbac.roles.push(role)
+  const roleName = newRole.value.trim().toLowerCase()
+  if (roleName && !config.rbac.roles.some((r: RoleConfig) => r.name === roleName)) {
+    config.rbac.roles.push({
+      name: roleName,
+      description: '',
+      allowed_folders: ['*'],
+      can_query: true,
+      can_view_sources: true,
+    })
     newRole.value = ''
   }
 }
 
-function removeRole(role: string) {
-  const index = config.rbac.roles.indexOf(role)
+function removeRole(roleName: string) {
+  const index = config.rbac.roles.findIndex((r: RoleConfig) => r.name === roleName)
   if (index > -1) {
     config.rbac.roles.splice(index, 1)
-    // Remove this role from all folder permissions
-    Object.keys(config.rbac.folder_permissions).forEach(folder => {
-      const roles = config.rbac.folder_permissions[folder]
-      const roleIndex = roles.indexOf(role)
-      if (roleIndex > -1) {
-        roles.splice(roleIndex, 1)
+    // Remove this role from all folder allowed_roles
+    config.data_source?.folders?.forEach(folder => {
+      if (folder.allowed_roles) {
+        const roleIdx = folder.allowed_roles.indexOf(roleName)
+        if (roleIdx > -1) {
+          folder.allowed_roles.splice(roleIdx, 1)
+        }
       }
     })
     // Update default role if needed
-    if (config.rbac.default_role === role && config.rbac.roles.length > 0) {
-      config.rbac.default_role = config.rbac.roles[0]
+    if (config.rbac.default_role === roleName && config.rbac.roles.length > 0) {
+      config.rbac.default_role = config.rbac.roles[0].name
     }
   }
 }
@@ -166,23 +174,34 @@ function getFolderName(path: string) {
   return path.split('/').pop() || path.split('\\').pop() || path
 }
 
-function hasRoleAccess(folder: string, role: string): boolean {
-  const permissions = config.rbac.folder_permissions[folder] || []
-  return permissions.includes(role)
+function hasRoleAccess(folderPath: string, roleName: string): boolean {
+  const folder = config.data_source?.folders?.find(f => f.path === folderPath)
+  if (!folder?.allowed_roles) return false
+  return folder.allowed_roles.includes('*') || folder.allowed_roles.includes(roleName)
 }
 
-function toggleRoleAccess(folder: string, role: string) {
-  if (!config.rbac.folder_permissions[folder]) {
-    config.rbac.folder_permissions[folder] = []
+function toggleRoleAccess(folderPath: string, roleName: string) {
+  const folder = config.data_source?.folders?.find(f => f.path === folderPath)
+  if (!folder) return
+  if (!folder.allowed_roles) {
+    folder.allowed_roles = []
   }
-  
-  const permissions = config.rbac.folder_permissions[folder]
-  const index = permissions.indexOf(role)
-  
+  // If wildcard is set, expand to all roles except the toggled one
+  const wildcardIdx = folder.allowed_roles.indexOf('*')
+  if (wildcardIdx > -1) {
+    folder.allowed_roles.splice(wildcardIdx, 1)
+    config.rbac.roles.forEach((r: RoleConfig) => {
+      if (r.name !== roleName && !folder.allowed_roles!.includes(r.name)) {
+        folder.allowed_roles!.push(r.name)
+      }
+    })
+    return
+  }
+  const index = folder.allowed_roles.indexOf(roleName)
   if (index === -1) {
-    permissions.push(role)
+    folder.allowed_roles.push(roleName)
   } else {
-    permissions.splice(index, 1)
+    folder.allowed_roles.splice(index, 1)
   }
 }
 </script>

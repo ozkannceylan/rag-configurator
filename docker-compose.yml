@@ -61,6 +61,8 @@ services:
       - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
       - JWT_ALGORITHM=HS256
       - CORS_ORIGINS=http://localhost:5173,http://localhost:3001
+      - INTER_SERVICE_SECRET=dev-inter-service-secret
+      - REDIS_URL=redis://redis:6379/0
       - RATE_LIMIT_RPS=100
       - LOG_LEVEL=info
     depends_on:
@@ -90,6 +92,7 @@ services:
       - JWT_ALGORITHM=HS256
       - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
       - JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+      - INTER_SERVICE_SECRET=dev-inter-service-secret
     depends_on:
       mongodb:
         condition: service_healthy
@@ -122,6 +125,7 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - INTER_SERVICE_SECRET=dev-inter-service-secret
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -154,6 +158,9 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_SERVICE_NAME=celery-worker
+      - INTER_SERVICE_SECRET=dev-inter-service-secret
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -187,6 +194,7 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - VLLM_BASE_URL=${VLLM_BASE_URL:-http://localhost:8080}
+      - INTER_SERVICE_SECRET=dev-inter-service-secret
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -266,10 +274,48 @@ services:
     networks:
       - rag-network
 
+  # ==========================================
+  # Observability (optional, enable with --profile observability)
+  # ==========================================
+
+  # Langfuse - LLM observability and tracing
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: rag-langfuse
+    ports:
+      - "3003:3000"
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      - NEXTAUTH_URL=http://localhost:3003
+      - NEXTAUTH_SECRET=langfuse-secret-change-in-production
+      - SALT=langfuse-salt-change-in-production
+    depends_on:
+      - langfuse-db
+    networks:
+      - rag-network
+    profiles:
+      - observability
+
+  # PostgreSQL for Langfuse
+  langfuse-db:
+    image: postgres:15
+    container_name: rag-langfuse-db
+    environment:
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=langfuse
+      - POSTGRES_DB=langfuse
+    volumes:
+      - langfuse-db-data:/var/lib/postgresql/data
+    networks:
+      - rag-network
+    profiles:
+      - observability
+
 volumes:
   mongodb_data:
   redis_data:
   data:
+  langfuse-db-data:
 
 networks:
   rag-network:

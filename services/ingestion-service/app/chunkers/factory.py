@@ -8,6 +8,8 @@ from app.chunkers.base import BaseChunker, ChunkingConfig
 from app.chunkers.document import DocumentChunker, FixedSizeChunker, ParagraphChunker
 from app.chunkers.recursive import RecursiveChunker
 from app.chunkers.semantic import SemanticChunker
+from app.chunkers.raptor import RAPTORChunker
+from app.chunkers.late_chunking import LateChunker
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,8 @@ class ChunkingStrategy(str, Enum):
     DOCUMENT = "document"
     PARAGRAPH = "paragraph"
     FIXED_SIZE = "fixed_size"
+    RAPTOR = "raptor"
+    LATE = "late"
 
 
 # Registry of chunkers by strategy
@@ -29,6 +33,8 @@ CHUNKER_REGISTRY: dict[ChunkingStrategy, Type[BaseChunker]] = {
     ChunkingStrategy.DOCUMENT: DocumentChunker,
     ChunkingStrategy.PARAGRAPH: ParagraphChunker,
     ChunkingStrategy.FIXED_SIZE: FixedSizeChunker,
+    ChunkingStrategy.RAPTOR: RAPTORChunker,
+    ChunkingStrategy.LATE: LateChunker,
 }
 
 

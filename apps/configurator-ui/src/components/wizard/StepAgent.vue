@@ -126,6 +126,19 @@ import { useWizardStore } from '@/stores/wizard'
 const wizardStore = useWizardStore()
 const config = wizardStore.config
 
+// Ensure agent.config object exists (may be undefined when loading saved configs)
+if (!config.agent.config) {
+  config.agent.config = {}
+}
+
+interface ConfigField {
+  key: string
+  label: string
+  description: string
+  type: string
+  default?: any
+}
+
 interface AgentTemplate {
   id: string
   name: string
@@ -133,7 +146,7 @@ interface AgentTemplate {
   description: string
   longDescription: string
   bestFor: string[]
-  configFields?: { key: string; label: string; description: string; type: string }[]
+  configFields?: ConfigField[]
 }
 
 const agentTemplates: AgentTemplate[] = [
@@ -153,7 +166,7 @@ const agentTemplates: AgentTemplate[] = [
     longDescription: 'Combines reasoning (Chain-of-Thought) with action-taking. The agent thinks about what it needs, takes actions (like retrieval), and repeats until it has enough information.',
     bestFor: ['Complex queries', 'Multi-hop questions', 'When reasoning matters'],
     configFields: [
-      { key: 'tool_names', label: 'Available Tools', description: 'Comma-separated tool names', type: 'text' }
+      { key: 'tool_names', label: 'Available Tools', description: 'Comma-separated tool names', type: 'text', default: '' }
     ]
   },
   {
@@ -164,7 +177,7 @@ const agentTemplates: AgentTemplate[] = [
     longDescription: 'Corrective RAG evaluates retrieved documents and decides whether to use them, supplement them with web search, or regenerate the query.',
     bestFor: ['When document quality varies', 'Self-correcting systems', 'High accuracy needs'],
     configFields: [
-      { key: 'confidence_threshold', label: 'Confidence Threshold', description: 'Minimum confidence to accept retrieval (0-1)', type: 'number' }
+      { key: 'confidence_threshold', label: 'Confidence Threshold', description: 'Minimum confidence to accept retrieval (0-1)', type: 'number', default: 0.7 }
     ]
   },
   {
@@ -175,8 +188,8 @@ const agentTemplates: AgentTemplate[] = [
     longDescription: 'Self-RAG generates multiple candidate answers and critiques them, selecting the best one or regenerating if needed.',
     bestFor: ['High-stakes answers', 'When hallucination is costly', 'Quality-first scenarios'],
     configFields: [
-      { key: 'num_candidates', label: 'Number of Candidates', description: 'How many answers to generate', type: 'number' },
-      { key: 'use_citation', label: 'Enable Citations', description: 'Add citations to sources', type: 'boolean' }
+      { key: 'num_candidates', label: 'Number of Candidates', description: 'How many answers to generate', type: 'number', default: 3 },
+      { key: 'use_citation', label: 'Enable Citations', description: 'Add citations to sources', type: 'boolean', default: true }
     ]
   },
   {
@@ -187,8 +200,8 @@ const agentTemplates: AgentTemplate[] = [
     longDescription: 'Generates multiple variations of the user query, retrieves for each, and uses Reciprocal Rank Fusion to combine results.',
     bestFor: ['Ambiguous queries', 'Broad information needs', 'Comprehensive retrieval'],
     configFields: [
-      { key: 'num_queries', label: 'Number of Queries', description: 'How many query variations to generate', type: 'number' },
-      { key: 'use_rrf', label: 'Use RRF', description: 'Use Reciprocal Rank Fusion', type: 'boolean' }
+      { key: 'num_queries', label: 'Number of Queries', description: 'How many query variations to generate', type: 'number', default: 3 },
+      { key: 'use_rrf', label: 'Use RRF', description: 'Use Reciprocal Rank Fusion', type: 'boolean', default: true }
     ]
   },
   {
@@ -199,7 +212,42 @@ const agentTemplates: AgentTemplate[] = [
     longDescription: 'Breaks complex queries into a plan of sub-queries, executes each step, and synthesizes the final answer.',
     bestFor: ['Complex multi-part questions', 'Research tasks', 'Analytical queries'],
     configFields: [
-      { key: 'plan_depth', label: 'Plan Depth', description: 'Maximum planning depth', type: 'number' }
+      { key: 'plan_depth', label: 'Plan Depth', description: 'Maximum planning depth', type: 'number', default: 3 }
+    ]
+  },
+  {
+    id: 'adaptive_rag',
+    name: 'Adaptive RAG',
+    icon: '🎯',
+    description: 'Adapts strategy based on query complexity',
+    longDescription: 'Analyzes each query to determine the best retrieval and generation strategy. Routes simple questions to fast paths and complex questions to multi-step reasoning.',
+    bestFor: ['Mixed query complexity', 'Production systems', 'Balanced latency/quality'],
+    configFields: [
+      { key: 'complexity_threshold', label: 'Complexity Threshold', description: 'Score above which to use advanced retrieval (0-1)', type: 'number', default: 0.5 }
+    ]
+  },
+  {
+    id: 'agentic_rag',
+    name: 'Agentic RAG',
+    icon: '🤖',
+    description: 'Autonomous agent with tool use',
+    longDescription: 'A fully autonomous agent that can use multiple tools including search, calculation, and code execution to answer queries. Supports multi-turn tool interactions.',
+    bestFor: ['Complex research tasks', 'Multi-tool workflows', 'Autonomous operation'],
+    configFields: [
+      { key: 'available_tools', label: 'Available Tools', description: 'Comma-separated list of tools to enable', type: 'text', default: '' },
+      { key: 'allow_code_execution', label: 'Allow Code Execution', description: 'Enable code execution tool', type: 'boolean', default: false }
+    ]
+  },
+  {
+    id: 'graph_rag',
+    name: 'Graph RAG',
+    icon: '🕸️',
+    description: 'Knowledge graph-based retrieval',
+    longDescription: 'Uses a knowledge graph to find relevant entities and relationships, then combines graph context with vector retrieval for rich, structured answers.',
+    bestFor: ['Entity-rich domains', 'Relationship queries', 'Structured knowledge bases'],
+    configFields: [
+      { key: 'graph_traversal_depth', label: 'Traversal Depth', description: 'Max hops in the knowledge graph', type: 'number', default: 2 },
+      { key: 'community_detection', label: 'Use Community Detection', description: 'Group related entities', type: 'boolean', default: false }
     ]
   }
 ]
@@ -217,13 +265,15 @@ function selectTemplate(templateId: string) {
   
   // Initialize config object if it has fields
   const template = agentTemplates.find(t => t.id === templateId)
-  if (template?.configFields && !config.agent.config) {
-    config.agent.config = {}
+  if (template?.configFields) {
+    if (!config.agent.config) config.agent.config = {}
     template.configFields.forEach(field => {
-      if (field.type === 'number') {
-        config.agent.config![field.key] = 3
+      if (field.default !== undefined) {
+        config.agent.config![field.key] = field.default
+      } else if (field.type === 'number') {
+        config.agent.config![field.key] = 0
       } else if (field.type === 'boolean') {
-        config.agent.config![field.key] = true
+        config.agent.config![field.key] = false
       } else {
         config.agent.config![field.key] = ''
       }

@@ -13,9 +13,10 @@ export default defineConfig({
   server: {
     port: 5173,
     host: '0.0.0.0',
+    allowedHosts: ['host.docker.internal', 'localhost', 'rag-configurator-ui'],
     proxy: {
       '/api': {
-        target: 'http://gateway:8000',
+        target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       },

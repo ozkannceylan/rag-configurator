@@ -159,6 +159,37 @@ async def test_delete_config(client, auth_headers, sample_config):
 
 
 @pytest.mark.asyncio
+async def test_config_crud_writes_audit_logs(client, auth_headers, sample_config, test_db):
+    """Test config create/update/delete flows create audit log entries."""
+    create_response = await client.post(
+        "/api/v1/configs/",
+        json=sample_config,
+        headers=auth_headers,
+    )
+    assert create_response.status_code == 201
+    config_id = create_response.json()["id"]
+
+    update_response = await client.put(
+        f"/api/v1/configs/{config_id}",
+        json={"name": "Audited Config"},
+        headers=auth_headers,
+    )
+    assert update_response.status_code == 200
+
+    delete_response = await client.delete(
+        f"/api/v1/configs/{config_id}",
+        headers=auth_headers,
+    )
+    assert delete_response.status_code == 200
+
+    actions = []
+    async for entry in test_db["audit_logs"].find({"resource_type": "config"}).sort("created_at", 1):
+        actions.append(entry["action"])
+
+    assert actions == ["config.create", "config.update", "config.delete"]
+
+
+@pytest.mark.asyncio
 async def test_unauthorized_access(client, sample_config):
     """Test that endpoints require authentication."""
     response = await client.get("/api/v1/configs/")

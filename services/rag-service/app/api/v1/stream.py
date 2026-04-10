@@ -30,6 +30,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/stream", tags=["stream"])
 
 
+def _resolve_base_url(provider: str, config_url: Optional[str]) -> Optional[str]:
+    """Resolve base URL, preferring OLLAMA_BASE_URL env var for ollama providers.
+
+    When running in Docker, configs may store localhost URLs that don't work
+    inside containers. The OLLAMA_BASE_URL env var (set in docker-compose)
+    provides the correct host-reachable URL.
+    """
+    if provider == "ollama":
+        env_url = getattr(settings, "ollama_base_url", None)
+        if env_url:
+            return env_url
+    return config_url
+
+
 def build_pipeline_config(config_doc: Dict[str, Any]) -> Dict[str, Any]:
     """
     Build a pipeline_config dict from the actual MongoDB config structure.
@@ -43,19 +57,26 @@ def build_pipeline_config(config_doc: Dict[str, Any]) -> Dict[str, Any]:
     embedding_data = models.get("embedding", {})
     retrieval_data = config_doc.get("retrieval", {})
 
+    llm_provider = llm_data.get("provider", "openai")
+    emb_provider = embedding_data.get("provider", "openai")
+
+    # Local models (Ollama/vLLM) need longer timeouts for model loading + CPU inference
+    default_timeout = 300.0 if llm_provider in ("ollama", "vllm") else 60.0
+
     return {
         "llm": {
-            "provider": llm_data.get("provider", "openai"),
+            "provider": llm_provider,
             "model": llm_data.get("model_name") or llm_data.get("model", "gpt-4o-mini"),
-            "base_url": llm_data.get("base_url") or getattr(settings, "ollama_base_url", None),
+            "base_url": _resolve_base_url(llm_provider, llm_data.get("base_url")),
             "api_key": llm_data.get("api_key"),
             "temperature": llm_data.get("temperature", 0.7),
             "max_tokens": llm_data.get("max_tokens", 2048),
+            "timeout_seconds": llm_data.get("timeout_seconds", default_timeout),
         },
         "embedding": {
-            "provider": embedding_data.get("provider", "openai"),
+            "provider": emb_provider,
             "model": embedding_data.get("model_name") or embedding_data.get("model"),
-            "base_url": embedding_data.get("base_url") or getattr(settings, "ollama_base_url", None),
+            "base_url": _resolve_base_url(emb_provider, embedding_data.get("base_url")),
             "api_key": embedding_data.get("api_key"),
             "dimensions": embedding_data.get("dimensions"),
         },

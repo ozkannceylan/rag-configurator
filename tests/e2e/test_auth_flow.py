@@ -6,10 +6,11 @@ from datetime import datetime
 import httpx
 import pytest
 
+from helpers import get_data
+
 BASE_URL = "http://localhost:8000"
 
 
-@pytest.mark.asyncio
 async def test_register_user(client: httpx.AsyncClient):
     """Test user registration."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -21,7 +22,7 @@ async def test_register_user(client: httpx.AsyncClient):
 
     response = await client.post("/api/v1/auth/register", json=test_user)
     assert response.status_code == 201
-    data = response.json()["data"]
+    data = get_data(response)
 
     assert "access_token" in data
     assert "refresh_token" in data
@@ -32,7 +33,6 @@ async def test_register_user(client: httpx.AsyncClient):
     await client.post("/api/v1/auth/logout", headers=headers)
 
 
-@pytest.mark.asyncio
 async def test_login_user(client: httpx.AsyncClient):
     """Test user login with registered user."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -52,7 +52,7 @@ async def test_login_user(client: httpx.AsyncClient):
         "password": test_user["password"],
     })
     assert response.status_code == 200
-    data = response.json()["data"]
+    data = get_data(response)
 
     assert "access_token" in data
     assert "refresh_token" in data
@@ -63,7 +63,6 @@ async def test_login_user(client: httpx.AsyncClient):
     await client.post("/api/v1/auth/logout", headers=headers)
 
 
-@pytest.mark.asyncio
 async def test_login_invalid_credentials(client: httpx.AsyncClient):
     """Test login with invalid credentials fails."""
     response = await client.post("/api/v1/auth/login", json={
@@ -73,7 +72,6 @@ async def test_login_invalid_credentials(client: httpx.AsyncClient):
     assert response.status_code in [401, 404]
 
 
-@pytest.mark.asyncio
 async def test_access_protected_endpoint(client: httpx.AsyncClient):
     """Test accessing protected endpoint with valid token."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -86,13 +84,13 @@ async def test_access_protected_endpoint(client: httpx.AsyncClient):
     # Register and get token
     reg_response = await client.post("/api/v1/auth/register", json=test_user)
     assert reg_response.status_code == 201
-    access_token = reg_response.json()["data"]["access_token"]
+    access_token = get_data(reg_response)["access_token"]
 
     # Access protected endpoint (user profile)
     headers = {"Authorization": f"Bearer {access_token}"}
     response = await client.get("/api/v1/users/me", headers=headers)
     assert response.status_code == 200
-    data = response.json()["data"]
+    data = get_data(response)
     assert data["email"] == test_user["email"]
     assert data["name"] == test_user["name"]
 
@@ -100,14 +98,12 @@ async def test_access_protected_endpoint(client: httpx.AsyncClient):
     await client.post("/api/v1/auth/logout", headers=headers)
 
 
-@pytest.mark.asyncio
 async def test_access_protected_without_token(client: httpx.AsyncClient):
     """Test accessing protected endpoint without token fails."""
     response = await client.get("/api/v1/users/me")
     assert response.status_code == 401
 
 
-@pytest.mark.asyncio
 async def test_refresh_token(client: httpx.AsyncClient):
     """Test token refresh flow."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -120,7 +116,7 @@ async def test_refresh_token(client: httpx.AsyncClient):
     # Register and get tokens
     reg_response = await client.post("/api/v1/auth/register", json=test_user)
     assert reg_response.status_code == 201
-    data = reg_response.json()["data"]
+    data = get_data(reg_response)
     refresh_token = data["refresh_token"]
     old_access_token = data["access_token"]
 
@@ -132,7 +128,7 @@ async def test_refresh_token(client: httpx.AsyncClient):
         "refresh_token": refresh_token,
     })
     assert response.status_code == 200
-    new_data = response.json()["data"]
+    new_data = get_data(response)
 
     assert "access_token" in new_data
     assert "refresh_token" in new_data
@@ -144,7 +140,6 @@ async def test_refresh_token(client: httpx.AsyncClient):
     await client.post("/api/v1/auth/logout", headers=headers)
 
 
-@pytest.mark.asyncio
 async def test_logout(client: httpx.AsyncClient):
     """Test logout endpoint."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -157,17 +152,16 @@ async def test_logout(client: httpx.AsyncClient):
     # Register and get token
     reg_response = await client.post("/api/v1/auth/register", json=test_user)
     assert reg_response.status_code == 201
-    access_token = reg_response.json()["data"]["access_token"]
+    access_token = get_data(reg_response)["access_token"]
 
     # Logout
     headers = {"Authorization": f"Bearer {access_token}"}
     response = await client.post("/api/v1/auth/logout", headers=headers)
     assert response.status_code == 200
-    data = response.json()["data"]
+    data = get_data(response)
     assert "message" in data
 
 
-@pytest.mark.asyncio
 async def test_full_auth_flow(client: httpx.AsyncClient):
     """Test complete authentication flow."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -180,7 +174,7 @@ async def test_full_auth_flow(client: httpx.AsyncClient):
     # 1. Register
     reg_response = await client.post("/api/v1/auth/register", json=test_user)
     assert reg_response.status_code == 201
-    data = reg_response.json()["data"]
+    data = get_data(reg_response)
     access_token = data["access_token"]
     refresh_token = data["refresh_token"]
 
@@ -194,7 +188,7 @@ async def test_full_auth_flow(client: httpx.AsyncClient):
         "refresh_token": refresh_token,
     })
     assert refresh_response.status_code == 200
-    new_access_token = refresh_response.json()["data"]["access_token"]
+    new_access_token = get_data(refresh_response)["access_token"]
 
     # 4. Access with new token
     new_headers = {"Authorization": f"Bearer {new_access_token}"}

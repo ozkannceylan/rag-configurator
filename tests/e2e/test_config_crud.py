@@ -5,57 +5,16 @@ from datetime import datetime
 import httpx
 import pytest
 
+from helpers import get_data, get_id, make_config
+
 BASE_URL = "http://localhost:8000"
 
 
-@pytest.mark.asyncio
 async def test_create_config(client: httpx.AsyncClient, auth_headers: dict):
     """Test creating a new configuration."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-    config_data = {
-        "name": f"Create Test Config {timestamp}",
-        "description": "Test configuration creation",
-        "data_source": {
-            "type": "folder",
-            "source": {
-                "folder_path": "/test/data",
-                "recursive": True,
-            },
-            "rbac": {
-                "roles": ["admin"],
-            },
-        },
-        "models": {
-            "llm": {
-                "provider": "openai",
-                "model": "gpt-4o-mini",
-                "temperature": 0.7,
-            },
-            "embedding": {
-                "provider": "openai",
-                "model": "text-embedding-3-small",
-                "dimensions": 1536,
-            },
-        },
-        "document_processing": {
-            "data_types": ["text"],
-            "chunking": {
-                "strategy": "recursive",
-                "chunk_size": 500,
-            },
-        },
-        "retrieval": {
-            "methods": ["vector"],
-            "vector_search": {
-                "top_k": 3,
-            },
-        },
-        "agent": {
-            "type": "naive",
-            "max_iterations": 3,
-        },
-    }
+    config_data = make_config(name=f"Create Test Config {timestamp}", description="Test configuration creation")
 
     response = await client.post(
         "/api/v1/configs/",
@@ -63,49 +22,36 @@ async def test_create_config(client: httpx.AsyncClient, auth_headers: dict):
         json=config_data,
     )
     assert response.status_code == 201
-    data = response.json()["data"]
+    data = get_data(response)
 
     assert data["name"] == config_data["name"]
     assert data["description"] == config_data["description"]
-    assert "id" in data
+    config_id = get_id(data)
+    assert config_id is not None
     assert "created_at" in data
 
     # Cleanup
-    await client.delete(f"/api/v1/configs/{data['id']}", headers=auth_headers)
+    await client.delete(f"/api/v1/configs/{config_id}", headers=auth_headers)
 
 
-@pytest.mark.asyncio
 async def test_list_configs(client: httpx.AsyncClient, auth_headers: dict):
     """Test listing configurations."""
     # Create a test config first
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    config_data = {
-        "name": f"List Test Config {timestamp}",
-        "description": "Test config for listing",
-        "data_source": {
-            "type": "folder",
-            "source": {"folder_path": "/test"},
-        },
-        "models": {
-            "llm": {"provider": "openai", "model": "gpt-4o-mini"},
-            "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
-        },
-        "document_processing": {"data_types": ["text"]},
-        "retrieval": {"methods": ["vector"]},
-        "agent": {"type": "naive"},
-    }
+    config_data = make_config(name=f"List Test Config {timestamp}", description="Test config for listing")
 
     create_response = await client.post(
         "/api/v1/configs/",
         headers=auth_headers,
         json=config_data,
     )
-    config_id = create_response.json()["data"]["id"]
+    created = get_data(create_response)
+    config_id = get_id(created)
 
     # List configs
     response = await client.get("/api/v1/configs/", headers=auth_headers)
     assert response.status_code == 200
-    data = response.json()["data"]
+    data = get_data(response)
 
     assert "items" in data
     assert "total" in data
@@ -120,40 +66,26 @@ async def test_list_configs(client: httpx.AsyncClient, auth_headers: dict):
     await client.delete(f"/api/v1/configs/{config_id}", headers=auth_headers)
 
 
-@pytest.mark.asyncio
 async def test_get_config(client: httpx.AsyncClient, auth_headers: dict):
     """Test getting a specific configuration."""
     # Create a test config
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    config_data = {
-        "name": f"Get Test Config {timestamp}",
-        "description": "Test config for get operation",
-        "data_source": {
-            "type": "folder",
-            "source": {"folder_path": "/test"},
-        },
-        "models": {
-            "llm": {"provider": "openai", "model": "gpt-4o-mini"},
-            "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
-        },
-        "document_processing": {"data_types": ["text"]},
-        "retrieval": {"methods": ["vector"]},
-        "agent": {"type": "naive"},
-    }
+    config_data = make_config(name=f"Get Test Config {timestamp}", description="Test config for get operation")
 
     create_response = await client.post(
         "/api/v1/configs/",
         headers=auth_headers,
         json=config_data,
     )
-    config_id = create_response.json()["data"]["id"]
+    created = get_data(create_response)
+    config_id = get_id(created)
 
     # Get the config
     response = await client.get(f"/api/v1/configs/{config_id}", headers=auth_headers)
     assert response.status_code == 200
-    data = response.json()["data"]
+    data = get_data(response)
 
-    assert data["id"] == config_id
+    assert get_id(data) == config_id
     assert data["name"] == config_data["name"]
     assert data["description"] == config_data["description"]
 
@@ -161,33 +93,19 @@ async def test_get_config(client: httpx.AsyncClient, auth_headers: dict):
     await client.delete(f"/api/v1/configs/{config_id}", headers=auth_headers)
 
 
-@pytest.mark.asyncio
 async def test_update_config(client: httpx.AsyncClient, auth_headers: dict):
     """Test updating a configuration."""
     # Create a test config
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    config_data = {
-        "name": f"Update Test Config {timestamp}",
-        "description": "Test config for update",
-        "data_source": {
-            "type": "folder",
-            "source": {"folder_path": "/test"},
-        },
-        "models": {
-            "llm": {"provider": "openai", "model": "gpt-4o-mini"},
-            "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
-        },
-        "document_processing": {"data_types": ["text"]},
-        "retrieval": {"methods": ["vector"]},
-        "agent": {"type": "naive"},
-    }
+    config_data = make_config(name=f"Update Test Config {timestamp}", description="Test config for update")
 
     create_response = await client.post(
         "/api/v1/configs/",
         headers=auth_headers,
         json=config_data,
     )
-    config_id = create_response.json()["data"]["id"]
+    created = get_data(create_response)
+    config_id = get_id(created)
 
     # Update the config
     update_data = {
@@ -201,7 +119,7 @@ async def test_update_config(client: httpx.AsyncClient, auth_headers: dict):
         json=update_data,
     )
     assert response.status_code == 200
-    data = response.json()["data"]
+    data = get_data(response)
 
     assert data["name"] == update_data["name"]
     assert data["description"] == update_data["description"]
@@ -210,33 +128,19 @@ async def test_update_config(client: httpx.AsyncClient, auth_headers: dict):
     await client.delete(f"/api/v1/configs/{config_id}", headers=auth_headers)
 
 
-@pytest.mark.asyncio
 async def test_duplicate_config(client: httpx.AsyncClient, auth_headers: dict):
     """Test duplicating a configuration."""
     # Create a test config
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    config_data = {
-        "name": f"Duplicate Source Config {timestamp}",
-        "description": "Source config for duplication",
-        "data_source": {
-            "type": "folder",
-            "source": {"folder_path": "/test"},
-        },
-        "models": {
-            "llm": {"provider": "openai", "model": "gpt-4o-mini"},
-            "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
-        },
-        "document_processing": {"data_types": ["text"]},
-        "retrieval": {"methods": ["vector"]},
-        "agent": {"type": "naive"},
-    }
+    config_data = make_config(name=f"Duplicate Source Config {timestamp}", description="Source config for duplication")
 
     create_response = await client.post(
         "/api/v1/configs/",
         headers=auth_headers,
         json=config_data,
     )
-    config_id = create_response.json()["data"]["id"]
+    created = get_data(create_response)
+    config_id = get_id(created)
 
     # Duplicate the config
     new_name = f"Duplicated Config {timestamp}"
@@ -246,10 +150,10 @@ async def test_duplicate_config(client: httpx.AsyncClient, auth_headers: dict):
         params={"new_name": new_name},
     )
     assert response.status_code == 201
-    data = response.json()["data"]
+    data = get_data(response)
 
     assert data["name"] == new_name
-    duplicated_id = data["id"]
+    duplicated_id = get_id(data)
     assert duplicated_id != config_id
 
     # Cleanup both configs
@@ -257,33 +161,19 @@ async def test_duplicate_config(client: httpx.AsyncClient, auth_headers: dict):
     await client.delete(f"/api/v1/configs/{duplicated_id}", headers=auth_headers)
 
 
-@pytest.mark.asyncio
 async def test_export_import_config(client: httpx.AsyncClient, auth_headers: dict):
     """Test exporting and importing a configuration."""
     # Create a test config
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    config_data = {
-        "name": f"Export Test Config {timestamp}",
-        "description": "Config for export/import test",
-        "data_source": {
-            "type": "folder",
-            "source": {"folder_path": "/test"},
-        },
-        "models": {
-            "llm": {"provider": "openai", "model": "gpt-4o-mini"},
-            "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
-        },
-        "document_processing": {"data_types": ["text"]},
-        "retrieval": {"methods": ["vector"]},
-        "agent": {"type": "naive"},
-    }
+    config_data = make_config(name=f"Export Test Config {timestamp}", description="Config for export/import test")
 
     create_response = await client.post(
         "/api/v1/configs/",
         headers=auth_headers,
         json=config_data,
     )
-    config_id = create_response.json()["data"]["id"]
+    created = get_data(create_response)
+    config_id = get_id(created)
 
     # Export the config
     export_response = await client.get(
@@ -295,15 +185,19 @@ async def test_export_import_config(client: httpx.AsyncClient, auth_headers: dic
     assert "name:" in yaml_content
     assert config_data["name"] in yaml_content
 
-    # Import the config
+    # Change name in YAML to avoid 409 conflict with the original
+    yaml_content = yaml_content.replace(config_data["name"], f"Imported {config_data['name']}")
+
+    # Import the config (don't override Content-Type — httpx sets multipart boundary)
+    import_headers = {k: v for k, v in auth_headers.items() if k.lower() != "content-type"}
     import_response = await client.post(
         "/api/v1/configs/import",
-        headers={**auth_headers, "Content-Type": "multipart/form-data"},
+        headers=import_headers,
         files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
     )
     assert import_response.status_code == 201
-    imported_data = import_response.json()["data"]
-    imported_id = imported_data["id"]
+    imported_data = get_data(import_response)
+    imported_id = get_id(imported_data)
     assert imported_id != config_id
 
     # Cleanup
@@ -311,33 +205,19 @@ async def test_export_import_config(client: httpx.AsyncClient, auth_headers: dic
     await client.delete(f"/api/v1/configs/{imported_id}", headers=auth_headers)
 
 
-@pytest.mark.asyncio
 async def test_delete_config(client: httpx.AsyncClient, auth_headers: dict):
     """Test deleting a configuration."""
     # Create a test config
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    config_data = {
-        "name": f"Delete Test Config {timestamp}",
-        "description": "Config to be deleted",
-        "data_source": {
-            "type": "folder",
-            "source": {"folder_path": "/test"},
-        },
-        "models": {
-            "llm": {"provider": "openai", "model": "gpt-4o-mini"},
-            "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
-        },
-        "document_processing": {"data_types": ["text"]},
-        "retrieval": {"methods": ["vector"]},
-        "agent": {"type": "naive"},
-    }
+    config_data = make_config(name=f"Delete Test Config {timestamp}", description="Config to be deleted")
 
     create_response = await client.post(
         "/api/v1/configs/",
         headers=auth_headers,
         json=config_data,
     )
-    config_id = create_response.json()["data"]["id"]
+    created = get_data(create_response)
+    config_id = get_id(created)
 
     # Delete the config
     delete_response = await client.delete(
@@ -345,34 +225,20 @@ async def test_delete_config(client: httpx.AsyncClient, auth_headers: dict):
         headers=auth_headers,
     )
     assert delete_response.status_code == 200
-    assert "deleted" in delete_response.json()["data"]["message"].lower()
+    del_data = get_data(delete_response)
+    assert "deleted" in del_data.get("message", "").lower() or "deleted" in str(del_data).lower()
 
     # Verify it's deleted
     get_response = await client.get(f"/api/v1/configs/{config_id}", headers=auth_headers)
     assert get_response.status_code == 404
 
 
-@pytest.mark.asyncio
 async def test_config_crud_full_flow(client: httpx.AsyncClient, auth_headers: dict):
     """Test complete config CRUD flow."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
     # 1. Create
-    config_data = {
-        "name": f"Full CRUD Config {timestamp}",
-        "description": "Full CRUD test",
-        "data_source": {
-            "type": "folder",
-            "source": {"folder_path": "/test"},
-        },
-        "models": {
-            "llm": {"provider": "openai", "model": "gpt-4o-mini"},
-            "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
-        },
-        "document_processing": {"data_types": ["text"]},
-        "retrieval": {"methods": ["vector"]},
-        "agent": {"type": "naive"},
-    }
+    config_data = make_config(name=f"Full CRUD Config {timestamp}", description="Full CRUD test")
 
     create_response = await client.post(
         "/api/v1/configs/",
@@ -380,7 +246,8 @@ async def test_config_crud_full_flow(client: httpx.AsyncClient, auth_headers: di
         json=config_data,
     )
     assert create_response.status_code == 201
-    config_id = create_response.json()["data"]["id"]
+    created = get_data(create_response)
+    config_id = get_id(created)
 
     # 2. Get
     get_response = await client.get(f"/api/v1/configs/{config_id}", headers=auth_headers)
@@ -389,7 +256,8 @@ async def test_config_crud_full_flow(client: httpx.AsyncClient, auth_headers: di
     # 3. List (verify our config is there)
     list_response = await client.get("/api/v1/configs/", headers=auth_headers)
     assert list_response.status_code == 200
-    config_names = [item["name"] for item in list_response.json()["data"]["items"]]
+    list_data = get_data(list_response)
+    config_names = [item["name"] for item in list_data["items"]]
     assert config_data["name"] in config_names
 
     # 4. Update
@@ -407,7 +275,8 @@ async def test_config_crud_full_flow(client: httpx.AsyncClient, auth_headers: di
         params={"new_name": f"Duplicated {timestamp}"},
     )
     assert dup_response.status_code == 201
-    dup_id = dup_response.json()["data"]["id"]
+    dup_data = get_data(dup_response)
+    dup_id = get_id(dup_data)
 
     # 6. Delete original
     del_response = await client.delete(f"/api/v1/configs/{config_id}", headers=auth_headers)

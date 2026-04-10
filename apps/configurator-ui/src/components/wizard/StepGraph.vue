@@ -229,34 +229,34 @@ const wizardStore = useWizardStore()
 const config = wizardStore.config
 
 const autoExtract = computed({
-  get: () => config.retrieval.graph.schema?.auto_extract ?? true,
+  get: () => config.retrieval.graph_schema?.auto_extract ?? true,
   set: (val) => {
-    if (!config.retrieval.graph.schema) {
-      config.retrieval.graph.schema = { auto_extract: val, nodes: [], relations: [] }
+    if (!config.retrieval.graph_schema) {
+      config.retrieval.graph_schema = { auto_extract: val, nodes: [], relations: [] }
     } else {
-      config.retrieval.graph.schema.auto_extract = val
+      config.retrieval.graph_schema.auto_extract = val
     }
   }
 })
 
 const nodeTypes = computed({
-  get: () => config.retrieval.graph.schema?.nodes || [],
+  get: () => config.retrieval.graph_schema?.nodes || [],
   set: (val) => {
-    if (!config.retrieval.graph.schema) {
-      config.retrieval.graph.schema = { auto_extract: true, nodes: val, relations: [] }
+    if (!config.retrieval.graph_schema) {
+      config.retrieval.graph_schema = { auto_extract: true, nodes: val, relations: [] }
     } else {
-      config.retrieval.graph.schema.nodes = val
+      config.retrieval.graph_schema.nodes = val
     }
   }
 })
 
 const relationTypes = computed({
-  get: () => config.retrieval.graph.schema?.relations || [],
+  get: () => config.retrieval.graph_schema?.relations || [],
   set: (val) => {
-    if (!config.retrieval.graph.schema) {
-      config.retrieval.graph.schema = { auto_extract: true, nodes: [], relations: val }
+    if (!config.retrieval.graph_schema) {
+      config.retrieval.graph_schema = { auto_extract: true, nodes: [], relations: val }
     } else {
-      config.retrieval.graph.schema.relations = val
+      config.retrieval.graph_schema.relations = val
     }
   }
 })

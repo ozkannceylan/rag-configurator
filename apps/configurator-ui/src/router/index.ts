@@ -34,6 +34,12 @@ const router = createRouter({
       component: () => import('@/views/ConfigDetailView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/templates',
+      name: 'templates',
+      component: () => import('@/views/TemplatesView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

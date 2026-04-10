@@ -20,6 +20,9 @@ from rag_config_common.models.config import (
     ChunkingConfig,
     AgentConfig,
     PromptConfig,
+    GuardrailsConfig,
+    EvaluationConfig,
+    CacheConfig,
 )
 from rag_config_common.models.user import User
 from rag_config_common.models.enums import (
@@ -54,6 +57,9 @@ __all__ = [
     "ChunkingConfig",
     "AgentConfig",
     "PromptConfig",
+    "GuardrailsConfig",
+    "EvaluationConfig",
+    "CacheConfig",
     # User
     "User",
     # Enums

@@ -105,6 +105,12 @@ class EmbeddingConfig(BaseModel):
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     dimensions: int = Field(default=1536)
+    batch_size: int = Field(
+        default=100,
+        ge=1,
+        le=2048,
+        description="Batch size for embedding API calls",
+    )
 
 
 class DocumentProcessingConfig(BaseModel):
@@ -231,6 +237,35 @@ class PromptConfig(BaseModel):
     )
 
 
+# ==================== GUARDRAILS ====================
+
+class GuardrailsConfig(BaseModel):
+    """Guardrails configuration for safety checks."""
+    enabled: bool = Field(default=False)
+    prompt_injection: bool = Field(default=True, description="Detect prompt injection attempts")
+    pii: bool = Field(default=True, description="Detect PII in queries/responses")
+    toxicity: bool = Field(default=True, description="Detect toxic content")
+    fail_closed: bool = Field(default=True, description="Block on detection vs. warn")
+
+
+# ==================== EVALUATION ====================
+
+class EvaluationConfig(BaseModel):
+    """Evaluation configuration for RAGAS metrics."""
+    enabled: bool = Field(default=False)
+    async_mode: bool = Field(default=True, description="Run evaluation asynchronously")
+    sample_rate: float = Field(default=1.0, ge=0.0, le=1.0, description="Fraction of queries to evaluate")
+
+
+# ==================== CACHE ====================
+
+class CacheConfig(BaseModel):
+    """Cache configuration for embeddings and queries."""
+    enabled: bool = Field(default=False)
+    embedding_cache_ttl: int = Field(default=3600, ge=0, description="Embedding cache TTL in seconds")
+    query_cache_ttl: int = Field(default=300, ge=0, description="Query cache TTL in seconds")
+
+
 # ==================== MAIN CONFIG ====================
 
 class RAGPipelineConfig(BaseModel):
@@ -262,7 +297,12 @@ class RAGPipelineConfig(BaseModel):
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     agent: AgentConfig
     prompts: PromptConfig
-    
+
+    # V2 Configuration
+    guardrails: Optional[GuardrailsConfig] = Field(default=None)
+    evaluation: Optional[EvaluationConfig] = Field(default=None)
+    cache: Optional[CacheConfig] = Field(default=None)
+
     # Ingestion Stats
     stats: Optional[Dict[str, Any]] = Field(
         default=None,

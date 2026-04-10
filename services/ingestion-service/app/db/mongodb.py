@@ -21,8 +21,8 @@ class MongoDB:
         logger.info(f"Connecting to MongoDB at {settings.mongodb_uri}")
         self.client = AsyncIOMotorClient(
             settings.mongodb_uri,
-            maxPoolSize=10,
-            minPoolSize=1,
+            maxPoolSize=50,
+            minPoolSize=5,
         )
         self.database = self.client[settings.mongodb_database]
 

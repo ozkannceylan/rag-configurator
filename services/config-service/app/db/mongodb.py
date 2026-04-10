@@ -11,7 +11,11 @@ class MongoDB:
 
     async def connect(self) -> None:
         """Connect to MongoDB."""
-        self.client = AsyncIOMotorClient(settings.MONGODB_URI)
+        self.client = AsyncIOMotorClient(
+            settings.MONGODB_URI,
+            maxPoolSize=50,
+            minPoolSize=5,
+        )
         # Verify connection
         await self.client.admin.command("ping")
         print(f"Connected to MongoDB: {settings.MONGODB_DATABASE}")

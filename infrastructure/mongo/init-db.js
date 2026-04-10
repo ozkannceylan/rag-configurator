@@ -44,4 +44,26 @@ db.graph_edges.createIndex({ config_id: 1, relation_type: 1 });
 db.conversations.createIndex({ config_id: 1, user_id: 1 });
 db.ingestion_jobs.createIndex({ config_id: 1 });
 
+// Compound index for embedding cache lookups and deduplication
+db.chunks.createIndex({ config_id: 1, "metadata.content_hash": 1 });
+
+// Vector search indexes (Atlas only - silently skip on Community Edition)
+try {
+    db.chunks.createSearchIndex({
+        name: "vector_index",
+        type: "vectorSearch",
+        definition: {
+            fields: [{
+                type: "vector",
+                path: "embedding",
+                numDimensions: 1536,
+                similarity: "cosine"
+            }]
+        }
+    });
+    print("  Created vector search index on chunks.embedding");
+} catch (e) {
+    print("  Skipped vector search index (requires Atlas): " + e.message);
+}
+
 print('RAG Configurator database initialized successfully');

@@ -114,7 +114,7 @@
               Duplicate
             </button>
             <button
-              @click="deleteConfig(config.id!)"
+              @click="showDeleteConfirm(config)"
               class="text-sm text-red-600 hover:text-red-800"
             >
               Delete
@@ -123,18 +123,48 @@
         </div>
       </div>
     </main>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="deleteTarget" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/50" @click="cancelDelete"></div>
+      <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Configuration</h3>
+        <p class="text-sm text-gray-600 mb-6">
+          Are you sure you want to delete "<strong>{{ deleteTarget.name }}</strong>"? This action cannot be undone.
+        </p>
+        <div class="flex gap-3 justify-end">
+          <button
+            @click="cancelDelete"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            @click="confirmDelete"
+            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
+import { useToast } from '@/composables/useToast'
+import type { RAGConfig } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const configStore = useConfigStore()
+const { addToast } = useToast()
+
+const deleteTarget = ref<{ id: string; name: string } | null>(null)
 
 onMounted(() => {
   configStore.fetchConfigs()
@@ -153,13 +183,32 @@ function viewConfig(id: string) {
 }
 
 async function duplicateConfig(id: string) {
-  await configStore.duplicateConfig(id)
+  try {
+    await configStore.duplicateConfig(id)
+    addToast('Configuration duplicated', 'success')
+  } catch {
+    addToast('Failed to duplicate configuration', 'error')
+  }
 }
 
-async function deleteConfig(id: string) {
-  if (confirm('Are you sure you want to delete this configuration?')) {
-    await configStore.deleteConfig(id)
+function showDeleteConfirm(config: RAGConfig) {
+  deleteTarget.value = { id: config.id!, name: config.name }
+}
+
+async function confirmDelete() {
+  if (deleteTarget.value) {
+    try {
+      await configStore.deleteConfig(deleteTarget.value.id)
+      addToast('Configuration deleted', 'success')
+    } catch {
+      addToast('Failed to delete configuration', 'error')
+    }
+    deleteTarget.value = null
   }
+}
+
+function cancelDelete() {
+  deleteTarget.value = null
 }
 
 async function handleLogout() {

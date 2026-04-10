@@ -29,7 +29,10 @@ async def integration_db():
     """Get integration test database."""
     from motor.motor_asyncio import AsyncIOMotorClient
 
-    mongodb_uri = os.environ.get("TEST_MONGODB_URI", "mongodb://localhost:27017")
+    mongodb_uri = os.environ.get(
+        "TEST_MONGODB_URI",
+        os.environ.get("MONGODB_URI", "mongodb://localhost:27017"),
+    )
     db_name = os.environ.get("TEST_MONGODB_DATABASE", "rag_configurator_integration")
 
     client = AsyncIOMotorClient(mongodb_uri)
@@ -426,18 +429,14 @@ class TestGraphStoreIntegration:
     @pytest.mark.asyncio
     async def test_store_and_retrieve_nodes(self, graph_store, integration_db):
         """Test storing and retrieving graph nodes."""
-        from app.storage.graph_store import GraphNode
-
         config_id = str(ObjectId())
 
-        node = GraphNode(
+        node_id = await graph_store.upsert_node(
             config_id=config_id,
             name="Test Entity",
-            entity_type="person",
+            node_type="person",
             properties={"age": 30},
         )
-
-        node_id = await graph_store.store_node(node)
         assert node_id is not None
 
         retrieved = await graph_store.get_node(node_id)
@@ -447,40 +446,33 @@ class TestGraphStoreIntegration:
     @pytest.mark.asyncio
     async def test_store_and_retrieve_edges(self, graph_store, integration_db):
         """Test storing and retrieving graph edges."""
-        from app.storage.graph_store import GraphNode, GraphEdge
-
         config_id = str(ObjectId())
 
         # Create nodes
-        node1 = GraphNode(
+        node1_id = await graph_store.upsert_node(
             config_id=config_id,
             name="Person A",
-            entity_type="person",
+            node_type="person",
         )
-        node2 = GraphNode(
+        node2_id = await graph_store.upsert_node(
             config_id=config_id,
             name="Company B",
-            entity_type="organization",
+            node_type="organization",
         )
-
-        node1_id = await graph_store.store_node(node1)
-        node2_id = await graph_store.store_node(node2)
 
         # Create edge
-        edge = GraphEdge(
+        edge_id = await graph_store.upsert_edge(
             config_id=config_id,
-            source_id=node1_id,
-            target_id=node2_id,
+            source_node_id=node1_id,
+            target_node_id=node2_id,
             relation_type="works_for",
         )
-
-        edge_id = await graph_store.store_edge(edge)
         assert edge_id is not None
 
         # Get stats
         stats = await graph_store.get_stats(config_id)
-        assert stats["nodes"] >= 2
-        assert stats["edges"] >= 1
+        assert stats["node_count"] >= 2
+        assert stats["edge_count"] >= 1
 
 
 class TestReIngestion:
@@ -581,11 +573,31 @@ class TestAPIIntegration:
     ):
         """Test starting ingestion and checking status."""
         from httpx import AsyncClient, ASGITransport
+        from rag_config_common.auth.hmac_verify import build_signed_headers
         from app.main import app
+        from app.core.settings import settings
+        from app.db.mongodb import mongodb
+
+        # Connect the app's mongodb singleton to the integration DB's client
+        mongodb.client = integration_db.client
+        mongodb.database = integration_db
+
+        async def sign_request(request):
+            request.headers.setdefault("X-User-ID", test_config_in_db["user_id"])
+            request.headers.update(
+                build_signed_headers(
+                    settings.inter_service_secret,
+                    request.method,
+                    request.url.path,
+                    request.content,
+                    user_id=request.headers.get("X-User-ID"),
+                )
+            )
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
+            event_hooks={"request": [sign_request]},
         ) as client:
             config_id = test_config_in_db["_id"]
 

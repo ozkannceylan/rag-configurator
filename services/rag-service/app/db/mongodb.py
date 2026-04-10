@@ -23,7 +23,7 @@ class MongoDB:
         self.client = AsyncIOMotorClient(
             settings.mongodb_uri,
             maxPoolSize=50,
-            minPoolSize=10,
+            minPoolSize=5,
         )
         self.database = self.client[settings.mongodb_database]
 

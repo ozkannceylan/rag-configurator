@@ -1,4 +1,4 @@
-"""Tests for graph extraction and storage."""
+"""Tests for graph extraction, storage, community detection, and summarization."""
 
 import pytest
 from datetime import datetime
@@ -12,6 +12,9 @@ from app.graph.extractor import (
     ExtractionResult,
 )
 from app.graph.builder import GraphBuilder, GraphBuildConfig, GraphBuildResult
+from app.graph.community import CommunityDetector
+from app.graph.models import Community, CommunitySummary, Entity, Relation
+from app.graph.summarizer import CommunitySummarizer
 from app.storage.graph_store import GraphStore, GraphNode, GraphEdge
 
 
@@ -456,3 +459,234 @@ class TestExtractionResult:
         assert len(result.entities) == 1
         assert len(result.relations) == 1
         assert result.tokens_used == 100
+
+
+# ==================== Community Detection Tests ====================
+
+
+class TestCommunityModels:
+    """Tests for GraphRAG community data models."""
+
+    def test_entity_to_dict(self):
+        """Test Entity serialization."""
+        e = Entity(
+            name="Python", type="Technology",
+            description="A programming language",
+            chunk_ids=["c-1", "c-2"],
+            properties={"version": "3.12"},
+        )
+        d = e.to_dict()
+        assert d["name"] == "Python"
+        assert d["type"] == "Technology"
+        assert len(d["chunk_ids"]) == 2
+
+    def test_entity_from_dict(self):
+        """Test Entity deserialization."""
+        data = {"name": "Paris", "type": "Location", "description": "Capital"}
+        e = Entity.from_dict(data)
+        assert e.name == "Paris"
+        assert e.chunk_ids == []
+
+    def test_relation_to_dict(self):
+        """Test Relation serialization."""
+        r = Relation(source="A", target="B", type="REL", description="test")
+        d = r.to_dict()
+        assert d["source"] == "A"
+        assert d["target"] == "B"
+
+    def test_community_roundtrip(self):
+        """Test Community to_dict / from_dict roundtrip."""
+        c = Community(
+            id="comm-0",
+            entities=[Entity(name="X", type="T")],
+            relations=[Relation(source="X", target="Y", type="R")],
+            level=1,
+        )
+        d = c.to_dict()
+        c2 = Community.from_dict(d)
+        assert c2.id == "comm-0"
+        assert len(c2.entities) == 1
+        assert c2.level == 1
+
+    def test_community_summary_to_dict(self):
+        """Test CommunitySummary serialization."""
+        cs = CommunitySummary(
+            community_id="comm-0",
+            config_id="cfg-1",
+            summary="A summary.",
+            entities=["X", "Y"],
+        )
+        d = cs.to_dict()
+        assert d["community_id"] == "comm-0"
+        assert d["created_at"] is not None
+
+
+class TestCommunityDetector:
+    """Tests for CommunityDetector."""
+
+    @pytest.fixture
+    def sample_entities(self):
+        return [
+            Entity(name="Python", type="Language", chunk_ids=["c1"]),
+            Entity(name="Guido", type="Person", chunk_ids=["c1"]),
+            Entity(name="JavaScript", type="Language", chunk_ids=["c2"]),
+            Entity(name="Brendan", type="Person", chunk_ids=["c2"]),
+            Entity(name="Rust", type="Language", chunk_ids=["c3"]),
+        ]
+
+    @pytest.fixture
+    def sample_relations(self):
+        return [
+            Relation(source="Python", target="Guido", type="CREATED_BY"),
+            Relation(source="JavaScript", target="Brendan", type="CREATED_BY"),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_connected_components(self, sample_entities, sample_relations):
+        """Test fallback connected-components community detection."""
+        detector = CommunityDetector()
+        detector._has_leiden = False
+
+        communities = await detector.detect_communities(
+            sample_entities, sample_relations
+        )
+        assert len(communities) > 0
+
+        # Python + Guido in one community
+        for c in communities:
+            names = {e.name for e in c.entities}
+            if "Python" in names:
+                assert "Guido" in names
+            if "JavaScript" in names:
+                assert "Brendan" in names
+
+    @pytest.mark.asyncio
+    async def test_empty_entities(self):
+        """Test detection with no entities."""
+        detector = CommunityDetector()
+        assert await detector.detect_communities([], []) == []
+
+    @pytest.mark.asyncio
+    async def test_no_relations(self, sample_entities):
+        """Test that entities without relations become singleton communities."""
+        detector = CommunityDetector()
+        detector._has_leiden = False
+        communities = await detector.detect_communities(sample_entities, [])
+        assert len(communities) == len(sample_entities)
+
+    @pytest.mark.asyncio
+    async def test_extract_entities_relations(self):
+        """Test entity extraction from chunks using mock LLM."""
+        detector = CommunityDetector()
+
+        async def mock_llm(prompt):
+            return '''{
+                "entities": [
+                    {"name": "Python", "type": "Language", "description": "A language"}
+                ],
+                "relations": [
+                    {"source": "Python", "target": "Guido", "type": "CREATED_BY"}
+                ]
+            }'''
+
+        chunks = [{"content": "Python was created by Guido.", "chunk_id": "c-1"}]
+        entities, relations = await detector.extract_entities_relations(chunks, mock_llm)
+        assert len(entities) >= 1
+        assert any(e.name == "Python" for e in entities)
+
+    @pytest.mark.asyncio
+    async def test_extract_handles_llm_error(self):
+        """Test graceful handling of LLM errors."""
+        detector = CommunityDetector()
+
+        async def fail_llm(prompt):
+            raise RuntimeError("unavailable")
+
+        entities, relations = await detector.extract_entities_relations(
+            [{"content": "text", "chunk_id": "c1"}], fail_llm
+        )
+        assert entities == []
+        assert relations == []
+
+    def test_parse_extraction_from_markdown(self):
+        """Test JSON parsing from markdown code fences."""
+        raw = '```json\n{"entities": [{"name": "A", "type": "X"}], "relations": []}\n```'
+        result = CommunityDetector._parse_extraction(raw)
+        assert len(result["entities"]) == 1
+
+
+class TestCommunitySummarizer:
+    """Tests for CommunitySummarizer."""
+
+    @pytest.mark.asyncio
+    async def test_summarize_communities(self):
+        """Test community summarization with mock LLM."""
+        summarizer = CommunitySummarizer()
+
+        async def mock_llm(prompt):
+            return "This community is about programming languages."
+
+        communities = [
+            Community(
+                id="comm-0",
+                entities=[Entity(name="Python", type="Language")],
+                relations=[],
+            )
+        ]
+        summaries = await summarizer.summarize_communities(
+            communities, mock_llm, "cfg-1"
+        )
+        assert len(summaries) == 1
+        assert summaries[0].config_id == "cfg-1"
+        assert "Python" in summaries[0].entities
+
+    @pytest.mark.asyncio
+    async def test_skip_empty_communities(self):
+        """Test that empty communities are skipped."""
+        summarizer = CommunitySummarizer()
+
+        async def mock_llm(prompt):
+            return "Summary."
+
+        communities = [Community(id="empty", entities=[], relations=[])]
+        summaries = await summarizer.summarize_communities(
+            communities, mock_llm, "cfg-1"
+        )
+        assert len(summaries) == 0
+
+    @pytest.mark.asyncio
+    async def test_store_summaries_to_db(self):
+        """Test MongoDB persistence."""
+        summarizer = CommunitySummarizer()
+
+        async def mock_llm(prompt):
+            return "A summary."
+
+        mock_col = MagicMock()
+        mock_col.insert_many = AsyncMock()
+        mock_db = MagicMock()
+        mock_db.__getitem__ = MagicMock(return_value=mock_col)
+
+        communities = [
+            Community(id="c0", entities=[Entity(name="X", type="T")], relations=[])
+        ]
+        await summarizer.summarize_communities(
+            communities, mock_llm, "cfg-1", db=mock_db
+        )
+        mock_col.insert_many.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handles_llm_failure(self):
+        """Test graceful LLM failure handling."""
+        summarizer = CommunitySummarizer()
+
+        async def fail_llm(prompt):
+            raise Exception("LLM down")
+
+        communities = [
+            Community(id="c0", entities=[Entity(name="X", type="T")], relations=[])
+        ]
+        summaries = await summarizer.summarize_communities(
+            communities, fail_llm, "cfg-1"
+        )
+        assert len(summaries) == 0

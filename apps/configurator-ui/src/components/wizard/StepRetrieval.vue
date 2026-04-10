@@ -5,7 +5,7 @@
       <h3 class="text-lg font-medium text-gray-900">Chunking Strategy</h3>
       <p class="text-sm text-gray-600">How to split documents into chunks for embedding</p>
 
-      <div class="grid grid-cols-3 gap-3">
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <button
           v-for="strategy in chunkingStrategies"
           :key="strategy.id"
@@ -217,20 +217,30 @@ const wizardStore = useWizardStore()
 const config = wizardStore.config
 
 const chunkingStrategies = [
-  { 
-    id: 'recursive', 
-    name: 'Recursive', 
-    description: 'Split by separators recursively' 
+  {
+    id: 'recursive',
+    name: 'Recursive',
+    description: 'Split by separators recursively'
   },
-  { 
-    id: 'semantic', 
-    name: 'Semantic', 
-    description: 'Preserve semantic boundaries' 
+  {
+    id: 'semantic',
+    name: 'Semantic',
+    description: 'Preserve semantic boundaries'
   },
-  { 
-    id: 'document', 
-    name: 'Document', 
-    description: 'One chunk per document' 
+  {
+    id: 'document',
+    name: 'Document',
+    description: 'One chunk per document'
+  },
+  {
+    id: 'late',
+    name: 'Late Chunking',
+    description: 'Chunk after embedding for better context',
+  },
+  {
+    id: 'raptor',
+    name: 'RAPTOR',
+    description: 'Recursive abstractive processing for tree-organized retrieval',
   },
 ]
 

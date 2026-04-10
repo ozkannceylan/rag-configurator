@@ -9,7 +9,7 @@
     "id": { "type": "string" },
     "name": { "type": "string", "minLength": 1, "maxLength": 100 },
     "description": { "type": "string", "default": "" },
-    "version": { "type": "string", "default": "1.0.0" },
+    "version": { "type": "string", "default": "2.0.0" },
     "created_by": { "type": "string" },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" },
@@ -19,9 +19,12 @@
     "rbac": { "$ref": "#/$defs/RBACConfig" },
     "models": { "$ref": "#/$defs/ModelConfig" },
     "retrieval": { "$ref": "#/$defs/RetrievalConfig" },
+    "guardrails": { "$ref": "#/$defs/GuardrailsConfig" },
     "chunking": { "$ref": "#/$defs/ChunkingConfig" },
     "agent": { "$ref": "#/$defs/AgentConfig" },
     "prompts": { "$ref": "#/$defs/PromptConfig" },
+    "evaluation": { "$ref": "#/$defs/EvaluationConfig" },
+    "cache": { "$ref": "#/$defs/CacheConfig" },
     "stats": { "type": ["object", "null"] }
   },
   "$defs": {
@@ -39,7 +42,7 @@
     },
     "EmbeddingProvider": {
       "type": "string",
-      "enum": ["openai", "ollama", "huggingface"]
+      "enum": ["openai", "ollama", "huggingface", "cohere", "voyage", "jina"]
     },
     "RetrievalMethod": {
       "type": "string",
@@ -47,11 +50,11 @@
     },
     "AgentTemplate": {
       "type": "string",
-      "enum": ["naive_rag", "react", "crag", "self_rag", "multi_query", "plan_solve"]
+      "enum": ["naive_rag", "react", "crag", "self_rag", "multi_query", "plan_solve", "adaptive_rag", "agentic_rag", "graph_rag"]
     },
     "ChunkingStrategy": {
       "type": "string",
-      "enum": ["recursive", "semantic", "document"]
+      "enum": ["recursive", "semantic", "document", "late", "raptor"]
     },
     "IngestionStatus": {
       "type": "string",
@@ -147,7 +150,8 @@
         "model_name": { "type": "string" },
         "base_url": { "type": ["string", "null"] },
         "api_key": { "type": ["string", "null"] },
-        "dimensions": { "type": "integer", "default": 1536 }
+        "dimensions": { "type": "integer", "default": 1536 },
+        "truncate_dimensions": { "type": ["integer", "null"] }
       }
     },
     "DocumentProcessingConfig": {
@@ -245,6 +249,16 @@
         "reranker_model": { "type": ["string", "null"] }
       }
     },
+    "GuardrailsConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "check_prompt_injection": { "type": "boolean", "default": false },
+        "check_pii": { "type": "boolean", "default": false },
+        "check_toxicity": { "type": "boolean", "default": false },
+        "fail_closed": { "type": "boolean", "default": true }
+      }
+    },
     "ChunkingConfig": {
       "type": "object",
       "properties": {
@@ -275,6 +289,23 @@
         "system_prompt": { "type": "string" },
         "rag_prompt_template": { "type": "string" },
         "judge_prompts": { "type": ["object", "null"] }
+      }
+    },
+    "EvaluationConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "async_mode": { "type": "boolean", "default": true },
+        "llm_as_judge_enabled": { "type": "boolean", "default": false },
+        "sample_rate": { "type": "number", "default": 1.0, "minimum": 0, "maximum": 1 }
+      }
+    },
+    "CacheConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "embedding_ttl_seconds": { "type": "integer", "default": 86400, "minimum": 0 },
+        "query_ttl_seconds": { "type": "integer", "default": 3600, "minimum": 0 }
       }
     }
   }

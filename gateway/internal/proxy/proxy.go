@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"gateway/internal/config"
 	"gateway/internal/middleware"
@@ -22,42 +23,50 @@ type Proxy struct {
 	ingestionProxy *httputil.ReverseProxy
 	ragProxy       *httputil.ReverseProxy
 	httpClient     *http.Client
+	configBreaker  *middleware.CircuitBreaker
+	ingestBreaker  *middleware.CircuitBreaker
+	ragBreaker     *middleware.CircuitBreaker
 }
 
 // New creates a new Proxy instance with configured reverse proxies
 func New(cfg *config.Config) *Proxy {
+	baseTransport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	}
+
 	// Shared HTTP client with reasonable timeouts
 	httpClient := &http.Client{
-		Timeout: 60 * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     90 * time.Second,
-		},
+		Timeout:   60 * time.Second,
+		Transport: otelhttp.NewTransport(baseTransport),
 	}
 
 	p := &Proxy{
-		cfg:        cfg,
-		httpClient: httpClient,
+		cfg:           cfg,
+		httpClient:    httpClient,
+		configBreaker: middleware.NewCircuitBreaker(5, 30*time.Second, 60*time.Second),
+		ingestBreaker: middleware.NewCircuitBreaker(5, 30*time.Second, 60*time.Second),
+		ragBreaker:    middleware.NewCircuitBreaker(5, 30*time.Second, 60*time.Second),
 	}
 
 	// Create reverse proxies for each backend
-	p.configProxy = p.createReverseProxy(cfg.ConfigServiceURL)
-	p.ingestionProxy = p.createReverseProxy(cfg.IngestionServiceURL)
-	p.ragProxy = p.createReverseProxy(cfg.RAGServiceURL)
+	p.configProxy = p.createReverseProxy(cfg.ConfigServiceURL, p.configBreaker)
+	p.ingestionProxy = p.createReverseProxy(cfg.IngestionServiceURL, p.ingestBreaker)
+	p.ragProxy = p.createReverseProxy(cfg.RAGServiceURL, p.ragBreaker)
 
 	return p
 }
 
 // createReverseProxy creates a configured reverse proxy for a target URL
-func (p *Proxy) createReverseProxy(targetURL string) *httputil.ReverseProxy {
+func (p *Proxy) createReverseProxy(targetURL string, breaker *middleware.CircuitBreaker) *httputil.ReverseProxy {
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		log.Fatal().Err(err).Str("url", targetURL).Msg("Invalid backend URL")
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Transport = p.httpClient.Transport
+	proxy.Transport = middleware.NewCircuitBreakerTransport(p.httpClient.Transport, breaker)
 	proxy.FlushInterval = -1 // Flush immediately for SSE streaming
 
 	// Custom director to modify the request
@@ -98,6 +107,13 @@ func (p *Proxy) createReverseProxy(targetURL string) *httputil.ReverseProxy {
 
 	// Custom error handler
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		if err == middleware.ErrCircuitOpen {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"error":"Service unavailable","message":"Circuit breaker is open for the target service"}`))
+			return
+		}
+
 		log.Error().
 			Err(err).
 			Str("target", targetURL).
@@ -141,7 +157,14 @@ func (p *Proxy) ToConfigServiceRewrite(newPath string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Rewrite the request path before proxying
 		c.Request.URL.Path = newPath
-		p.injectProxyHeaders(c)
+		if err := p.injectProxyHeaders(c); err != nil {
+			log.Error().Err(err).Str("path", newPath).Msg("Failed to prepare proxy headers")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error":   "Internal server error",
+				"message": "Failed to sign backend request",
+			})
+			return
+		}
 
 		log.Info().
 			Str("method", c.Request.Method).
@@ -157,7 +180,14 @@ func (p *Proxy) ToConfigServiceRewrite(newPath string) gin.HandlerFunc {
 // createProxyHandler creates a Gin handler that uses the reverse proxy
 func (p *Proxy) createProxyHandler(proxy *httputil.ReverseProxy, targetURL string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		p.injectProxyHeaders(c)
+		if err := p.injectProxyHeaders(c); err != nil {
+			log.Error().Err(err).Str("path", c.Request.URL.Path).Msg("Failed to prepare proxy headers")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+				"error":   "Internal server error",
+				"message": "Failed to sign backend request",
+			})
+			return
+		}
 
 		// Reconstruct the full path including any path parameters
 		// Gin's c.Request.URL.Path already has the resolved path
@@ -182,10 +212,14 @@ func (p *Proxy) createProxyHandler(proxy *httputil.ReverseProxy, targetURL strin
 	}
 }
 
-func (p *Proxy) injectProxyHeaders(c *gin.Context) {
+func (p *Proxy) injectProxyHeaders(c *gin.Context) error {
 	if userID := middleware.GetUserID(c); userID != "" {
 		c.Request.Header.Set("X-User-ID", userID)
 	}
+	if p.cfg.InterServiceSecret == "" {
+		return nil
+	}
+	return middleware.SignRequest(c.Request, p.cfg.InterServiceSecret)
 }
 
 // ProxyRequest is an alternative method for more control over the proxy
@@ -233,6 +267,19 @@ func (p *Proxy) ProxyRequest(c *gin.Context, targetBaseURL string) {
 	proxyReq.Header.Set("X-Forwarded-For", c.ClientIP())
 	proxyReq.Header.Set("X-Real-IP", c.ClientIP())
 	proxyReq.Header.Set("X-Forwarded-Host", c.Request.Host)
+	if userID := middleware.GetUserID(c); userID != "" {
+		proxyReq.Header.Set("X-User-ID", userID)
+	}
+	if p.cfg.InterServiceSecret != "" {
+		if err := middleware.SignRequest(proxyReq, p.cfg.InterServiceSecret); err != nil {
+			log.Error().Err(err).Msg("Failed to sign proxy request")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Internal server error",
+				"message": "Failed to sign backend request",
+			})
+			return
+		}
+	}
 
 	// Make the request
 	resp, err := p.httpClient.Do(proxyReq)

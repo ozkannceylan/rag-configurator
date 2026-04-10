@@ -16,9 +16,16 @@
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div v-if="configStore.loading" class="text-center py-12">
+      <div v-if="loading" class="text-center py-12">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
         <p class="mt-4 text-gray-600">Loading...</p>
+      </div>
+
+      <div v-else-if="loadError" class="text-center py-12">
+        <p class="text-red-600">{{ loadError }}</p>
+        <button @click="loadConfig" class="mt-4 text-primary-600 hover:text-primary-800">
+          Retry
+        </button>
       </div>
 
       <div v-else-if="config" class="space-y-6">
@@ -50,31 +57,31 @@
         <!-- Ingestion Progress -->
         <div v-if="ingestionStatus" class="bg-white rounded-lg shadow p-6">
           <h2 class="text-lg font-semibold mb-4">Ingestion Progress</h2>
-          
+
           <div class="mb-4">
             <div class="flex justify-between text-sm mb-1">
-              <span>{{ ingestionStatus.current_step }}</span>
+              <span>{{ ingestionStatus.current_step || ingestionStatus.status }}</span>
               <span>{{ ingestionStatus.progress }}%</span>
             </div>
             <div class="w-full bg-gray-200 rounded-full h-2">
               <div
                 class="bg-primary-600 h-2 rounded-full transition-all"
-                :style="{ width: ingestionStatus.progress + '%' }"
+                :style="{ width: (ingestionStatus.progress || 0) + '%' }"
               ></div>
             </div>
           </div>
 
           <div class="grid grid-cols-4 gap-4 text-center">
             <div class="bg-gray-50 rounded p-3">
-              <div class="text-2xl font-bold">{{ ingestionStatus.processed_files || 0 }}</div>
+              <div class="text-2xl font-bold">{{ ingestionStatus.processed_files ?? ingestionStatus.stats?.files_processed ?? 0 }}</div>
               <div class="text-sm text-gray-600">Processed</div>
             </div>
             <div class="bg-gray-50 rounded p-3">
-              <div class="text-2xl font-bold">{{ ingestionStatus.failed_files || 0 }}</div>
+              <div class="text-2xl font-bold">{{ ingestionStatus.failed_files ?? ingestionStatus.stats?.failed_files ?? 0 }}</div>
               <div class="text-sm text-gray-600">Failed</div>
             </div>
             <div class="bg-gray-50 rounded p-3">
-              <div class="text-2xl font-bold">{{ ingestionStatus.total_chunks || 0 }}</div>
+              <div class="text-2xl font-bold">{{ ingestionStatus.total_chunks ?? ingestionStatus.stats?.chunks_created ?? 0 }}</div>
               <div class="text-sm text-gray-600">Chunks</div>
             </div>
             <div class="bg-gray-50 rounded p-3">
@@ -87,7 +94,7 @@
         <!-- Config Summary -->
         <div class="bg-white rounded-lg shadow p-6">
           <h2 class="text-lg font-semibold mb-4">Configuration Summary</h2>
-          
+
           <div class="grid md:grid-cols-2 gap-6">
             <div>
               <h3 class="font-medium text-gray-900 mb-2">Data Source</h3>
@@ -132,16 +139,16 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useConfigStore } from '@/stores/config'
 import { configApi, ingestApi } from '@/api/configs'
-import type { RAGConfig, IngestionStatus } from '@/types'
+import type { RAGConfig } from '@/types'
 
 const router = useRouter()
 const route = useRoute()
-const configStore = useConfigStore()
 
 const config = ref<RAGConfig | null>(null)
-const ingestionStatus = ref<IngestionStatus | null>(null)
+const ingestionStatus = ref<any>(null)
+const loading = ref(true)
+const loadError = ref<string | null>(null)
 const pollInterval = ref<number | null>(null)
 
 const configId = route.params.id as string
@@ -157,18 +164,23 @@ onUnmounted(() => {
 })
 
 async function loadConfig() {
+  loading.value = true
+  loadError.value = null
   try {
     config.value = await configApi.get(configId)
     await checkIngestionStatus()
-  } catch (err) {
+  } catch (err: any) {
     console.error('Failed to load config:', err)
+    loadError.value = err.response?.data?.message || 'Failed to load configuration'
+  } finally {
+    loading.value = false
   }
 }
 
 async function checkIngestionStatus() {
   try {
     ingestionStatus.value = await ingestApi.status(configId)
-    
+
     // Poll if processing or running
     const activeStatuses = ['processing', 'running', 'pending']
     if (activeStatuses.includes(ingestionStatus.value?.status ?? '')) {

@@ -13,6 +13,9 @@ from rag_config_common.models.config import (
     ChunkingConfig,
     AgentConfig,
     PromptConfig,
+    GuardrailsConfig,
+    EvaluationConfig,
+    CacheConfig,
 )
 
 
@@ -28,6 +31,9 @@ class ConfigCreate(BaseModel):
     chunking: Optional[ChunkingConfig] = None
     agent: AgentConfig
     prompts: PromptConfig
+    guardrails: Optional[GuardrailsConfig] = None
+    evaluation: Optional[EvaluationConfig] = None
+    cache: Optional[CacheConfig] = None
 
 
 class ConfigUpdate(BaseModel):
@@ -42,6 +48,9 @@ class ConfigUpdate(BaseModel):
     chunking: Optional[ChunkingConfig] = None
     agent: Optional[AgentConfig] = None
     prompts: Optional[PromptConfig] = None
+    guardrails: Optional[GuardrailsConfig] = None
+    evaluation: Optional[EvaluationConfig] = None
+    cache: Optional[CacheConfig] = None
 
 
 class ConfigSummary(BaseModel):
@@ -74,6 +83,9 @@ class ConfigResponse(BaseModel):
     chunking: ChunkingConfig
     agent: AgentConfig
     prompts: PromptConfig
+    guardrails: Optional[GuardrailsConfig] = None
+    evaluation: Optional[EvaluationConfig] = None
+    cache: Optional[CacheConfig] = None
     stats: Optional[dict] = None
 
 

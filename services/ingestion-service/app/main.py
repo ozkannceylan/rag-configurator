@@ -6,6 +6,8 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from rag_config_common.auth.middleware import ServiceAuthMiddleware
+from rag_config_common.observability import setup_tracing
 
 from app.api.v1.router import router as api_v1_router
 from app.core.settings import settings
@@ -48,6 +50,18 @@ app = FastAPI(
     docs_url="/docs" if settings.is_development else None,
     redoc_url="/redoc" if settings.is_development else None,
     openapi_url="/openapi.json" if settings.is_development else None,
+)
+
+setup_tracing(
+    app,
+    service_name=settings.otel_service_name,
+    environment=settings.environment,
+    endpoint=settings.otel_exporter_otlp_endpoint,
+)
+
+app.add_middleware(
+    ServiceAuthMiddleware,
+    secret=settings.inter_service_secret,
 )
 
 # Add CORS middleware

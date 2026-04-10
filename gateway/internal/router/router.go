@@ -16,6 +16,7 @@ func New(cfg *config.Config) *gin.Engine {
 
 	// Global middleware (applied to ALL routes)
 	r.Use(middleware.Recovery())
+	r.Use(middleware.Tracing(cfg.OTELServiceName))
 	r.Use(middleware.Logging())
 	r.Use(middleware.CORS(cfg.CORSOrigins))
 	r.Use(middleware.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst))

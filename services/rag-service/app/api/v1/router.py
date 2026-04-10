@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import query, chat, stream
+from app.api.v1 import query, chat, stream, evaluation, lineage
 
 router = APIRouter()
 
@@ -10,6 +10,8 @@ router = APIRouter()
 router.include_router(query.router, tags=["query"])
 router.include_router(chat.router, tags=["chat"])
 router.include_router(stream.router, tags=["stream"])
+router.include_router(evaluation.router, tags=["evaluation"])
+router.include_router(lineage.router, tags=["lineage"])
 
 
 @router.get("/", tags=["root"])

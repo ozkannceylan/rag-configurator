@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"gateway/internal/config"
+	"gateway/internal/observability"
 	"gateway/internal/router"
 )
 
@@ -32,6 +33,17 @@ func main() {
 		Str("environment", cfg.Environment).
 		Int("port", cfg.Port).
 		Msg("Starting RAG Configurator Gateway")
+
+	shutdownTracing, err := observability.SetupTracing(
+		context.Background(),
+		cfg.OTELServiceName,
+		cfg.Environment,
+		cfg.OTELExporterOTLPEndpoint,
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize tracing: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Set Gin mode
 	if cfg.IsDevelopment() {
@@ -73,6 +85,9 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Error().Err(err).Msg("Server forced to shutdown")
+	}
+	if err := shutdownTracing(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to shut down tracing cleanly")
 	}
 
 	log.Info().Msg("Gateway stopped")

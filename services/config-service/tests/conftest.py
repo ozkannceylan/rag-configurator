@@ -6,6 +6,7 @@ import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ServerSelectionTimeoutError, OperationFailure
+from rag_config_common.auth.hmac_verify import build_signed_headers
 
 from app.main import app
 from app.db.mongodb import mongodb
@@ -86,11 +87,41 @@ async def client(test_db):
     settings.MONGODB_DATABASE = f"{original_db_name}_test"
     token_blacklist._memory_blacklist.clear()
 
+    async def sign_request(request):
+        request.headers.update(
+            build_signed_headers(
+                settings.INTER_SERVICE_SECRET,
+                request.method,
+                request.url.path,
+                request.content,
+            )
+        )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        event_hooks={"request": [sign_request]},
+    ) as ac:
+        yield ac
+
+    # Restore original settings
+    token_blacklist._memory_blacklist.clear()
+    settings.MONGODB_DATABASE = original_db_name
+
+
+@pytest_asyncio.fixture
+async def unsigned_client(test_db):
+    """Create a client that does not auto-sign service requests."""
+    mongodb.client = test_db.client
+    original_db_name = settings.MONGODB_DATABASE
+    settings.MONGODB_DATABASE = f"{original_db_name}_test"
+    token_blacklist._memory_blacklist.clear()
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
-    # Restore original settings
     token_blacklist._memory_blacklist.clear()
     settings.MONGODB_DATABASE = original_db_name
 

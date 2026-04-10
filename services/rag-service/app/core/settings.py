@@ -40,6 +40,22 @@ class Settings(BaseSettings):
         alias="REDIS_URL",
     )
 
+    # Inter-service auth
+    inter_service_secret: str = Field(
+        default="change-this-inter-service-secret",
+        alias="INTER_SERVICE_SECRET",
+    )
+
+    # OpenTelemetry
+    otel_exporter_otlp_endpoint: Optional[str] = Field(
+        default=None,
+        alias="OTEL_EXPORTER_OTLP_ENDPOINT",
+    )
+    otel_service_name: str = Field(
+        default="rag-service",
+        alias="OTEL_SERVICE_NAME",
+    )
+
     # LLM Provider Configuration
     default_llm_provider: str = Field(default="openai", alias="DEFAULT_LLM_PROVIDER")
     default_llm_model: str = Field(default="gpt-4o-mini", alias="DEFAULT_LLM_MODEL")

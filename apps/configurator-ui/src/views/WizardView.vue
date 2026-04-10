@@ -19,20 +19,23 @@
       <div class="bg-white rounded-lg shadow p-6">
         <!-- Stepper -->
         <div class="mb-8">
-          <div class="flex items-center justify-between">
+          <div class="flex items-start">
             <div
               v-for="(step, index) in steps"
               :key="index"
-              :class="[
-                'flex-1 flex items-center',
-                index < steps.length - 1 ? `after:content-[''] after:w-full after:h-1 after:mx-2 after:bg-gray-200` : ''
-              ]"
+              class="flex-1 flex flex-col items-center relative"
             >
+              <!-- Connector line -->
+              <div
+                v-if="index < steps.length - 1"
+                class="absolute top-5 left-[calc(50%+20px)] right-[calc(-50%+20px)] h-0.5 bg-gray-200"
+              ></div>
+              <!-- Circle -->
               <button
                 @click="wizardStore.goToStep(index)"
                 :disabled="!wizardStore.stepValidation[index]"
                 :class="[
-                  'w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm',
+                  'relative z-10 w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm shrink-0',
                   index === wizardStore.currentStep ? 'bg-primary-600 text-white' :
                   index < wizardStore.currentStep ? 'bg-green-500 text-white' :
                   wizardStore.stepValidation[index] ? 'bg-gray-200 text-gray-700' :
@@ -41,24 +44,36 @@
               >
                 {{ index < wizardStore.currentStep ? '✓' : index + 1 }}
               </button>
+              <!-- Label -->
+              <span
+                :class="[
+                  'mt-2 text-xs text-center leading-tight',
+                  index === wizardStore.currentStep ? 'text-primary-600 font-medium' : 'text-gray-500'
+                ]"
+              >
+                {{ step }}
+              </span>
             </div>
-          </div>
-          <div class="flex justify-between mt-2 text-sm">
-            <span
-              v-for="(step, index) in steps"
-              :key="index"
-              :class="[
-                index === wizardStore.currentStep ? 'text-primary-600 font-medium' : 'text-gray-500'
-              ]"
-            >
-              {{ step }}
-            </span>
           </div>
         </div>
 
         <!-- Step Content -->
-        <div class="min-h-[400px]">
+        <div v-if="wizardLoading" class="min-h-[400px] flex items-center justify-center">
+          <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <p class="mt-4 text-gray-600">Loading configuration...</p>
+          </div>
+        </div>
+        <div v-else class="min-h-[400px]">
           <component :is="currentStepComponent" />
+        </div>
+
+        <!-- Save Error Banner -->
+        <div v-if="saveError" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+          <span class="text-sm text-red-800">{{ saveError }}</span>
+          <button @click="saveError = null" class="text-red-600 hover:text-red-800 text-sm font-medium">
+            Dismiss
+          </button>
         </div>
 
         <!-- Navigation -->
@@ -104,9 +119,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router'
 import { useWizardStore } from '@/stores/wizard'
+import { useToast } from '@/composables/useToast'
 import StepDataSource from '@/components/wizard/StepDataSource.vue'
 import StepRBAC from '@/components/wizard/StepRBAC.vue'
 import StepModels from '@/components/wizard/StepModels.vue'
@@ -114,11 +130,18 @@ import StepRetrieval from '@/components/wizard/StepRetrieval.vue'
 import StepGraph from '@/components/wizard/StepGraph.vue'
 import StepAgent from '@/components/wizard/StepAgent.vue'
 import StepPrompts from '@/components/wizard/StepPrompts.vue'
+import StepAdvanced from '@/components/wizard/StepAdvanced.vue'
 import StepReview from '@/components/wizard/StepReview.vue'
 
 const router = useRouter()
 const route = useRoute()
 const wizardStore = useWizardStore()
+const { addToast } = useToast()
+
+const saveError = ref<string | null>(null)
+const initialSnapshot = ref('')
+const saved = ref(false)
+const wizardLoading = ref(false)
 
 const steps = [
   'Data Source',
@@ -128,6 +151,7 @@ const steps = [
   'Graph',
   'Agent',
   'Prompts',
+  'Advanced',
   'Review',
 ]
 
@@ -139,6 +163,7 @@ const stepComponents = [
   StepGraph,
   StepAgent,
   StepPrompts,
+  StepAdvanced,
   StepReview,
 ]
 
@@ -150,14 +175,55 @@ const canSave = computed(() => {
   return wizardStore.config.name && wizardStore.config.name.trim()
 })
 
-onMounted(() => {
-  const id = route.params.id as string
-  
-  if (id) {
-    wizardStore.loadConfigForEdit(id)
-  } else {
-    wizardStore.resetWizard()
+function hasUnsavedChanges(): boolean {
+  if (saved.value) return false
+  return JSON.stringify(wizardStore.config) !== initialSnapshot.value
+}
+
+// Reset/load config BEFORE child components render to avoid stale references.
+// Child step components capture `wizardStore.config` during their setup phase,
+// which runs during the parent's render (before onMounted). If resetWizard()
+// ran in onMounted, children would hold a reference to the OLD config object.
+const routeId = route.params.id as string
+if (routeId) {
+  wizardLoading.value = true
+} else {
+  wizardStore.resetWizard()
+}
+
+onMounted(async () => {
+  if (routeId) {
+    await wizardStore.loadConfigForEdit(routeId)
+    wizardLoading.value = false
   }
+
+  await nextTick()
+  initialSnapshot.value = JSON.stringify(wizardStore.config)
+})
+
+// Unsaved changes warning on route leave
+onBeforeRouteLeave((_to, _from, next) => {
+  if (hasUnsavedChanges()) {
+    const answer = window.confirm('You have unsaved changes. Are you sure you want to leave?')
+    if (!answer) return next(false)
+  }
+  next()
+})
+
+// Unsaved changes warning on browser close/refresh
+function handleBeforeUnload(e: BeforeUnloadEvent) {
+  if (hasUnsavedChanges()) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 
 function goBack() {
@@ -165,21 +231,32 @@ function goBack() {
 }
 
 async function saveDraft() {
-  const saved = await wizardStore.saveConfig(false)
-  if (saved) {
-    router.push('/')
+  saveError.value = null
+  try {
+    const result = await wizardStore.saveConfig(false)
+    if (result) {
+      saved.value = true
+      addToast('Configuration saved successfully', 'success')
+      router.push('/')
+    }
+  } catch (error) {
+    saveError.value = 'Failed to save configuration. Please try again.'
+    addToast('Failed to save configuration', 'error')
   }
 }
 
 async function saveAndRun() {
+  saveError.value = null
   try {
-    const saved = await wizardStore.saveConfig(true)
-    if (saved) {
-      router.push(`/config/${saved.id}`)
+    const result = await wizardStore.saveConfig(true)
+    if (result) {
+      saved.value = true
+      addToast('Configuration saved — ingestion started', 'success')
+      router.push(`/config/${result.id}`)
     }
   } catch (error) {
-    console.error('Failed to save and run ingestion:', error)
-    alert('Failed to save configuration. Check console for details.')
+    saveError.value = 'Failed to save configuration. Please try again.'
+    addToast('Failed to save configuration', 'error')
   }
 }
 </script>

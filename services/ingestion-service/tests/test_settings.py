@@ -7,7 +7,6 @@ import pytest
 
 def test_settings_defaults():
     """Test default settings values."""
-    # Clear cache to get fresh settings
     from app.core.settings import Settings
 
     settings = Settings()
@@ -19,18 +18,15 @@ def test_settings_defaults():
     assert settings.celery_task_default_queue == "ingestion"
 
 
-def test_settings_cors_parsing():
+def test_settings_cors_parsing(monkeypatch):
     """Test CORS origins parsing from string."""
     from app.core.settings import Settings
 
     # Test comma-separated string
-    os.environ["CORS_ORIGINS"] = "http://localhost:3000,http://localhost:5173"
+    monkeypatch.setenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173")
     settings = Settings()
     assert "http://localhost:3000" in settings.cors_origins
     assert "http://localhost:5173" in settings.cors_origins
-
-    # Clean up
-    del os.environ["CORS_ORIGINS"]
 
 
 def test_settings_celery_broker_fallback():

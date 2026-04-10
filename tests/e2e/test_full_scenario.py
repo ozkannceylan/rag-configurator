@@ -6,12 +6,13 @@ from datetime import datetime
 import httpx
 import pytest
 
+from helpers import get_data, get_id, make_config
+
 BASE_URL = "http://localhost:8000"
 MAX_POLL_ATTEMPTS = 30
 POLL_INTERVAL = 2
 
 
-@pytest.mark.asyncio
 async def test_complete_user_journey(client: httpx.AsyncClient):
     """
     Complete E2E journey:
@@ -43,7 +44,7 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
         register_response = await client.post("/api/v1/auth/register", json=user_data)
         assert register_response.status_code == 201, f"Registration failed: {register_response.text}"
 
-        auth_data = register_response.json()["data"]
+        auth_data = get_data(register_response)
         access_token = auth_data["access_token"]
         refresh_token = auth_data["refresh_token"]
         auth_headers = {
@@ -51,61 +52,14 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
             "Content-Type": "application/json",
         }
 
-        print(f"✓ User registered: {test_email}")
+        print(f"  User registered: {test_email}")
 
         # ============== 2. CREATE CONFIG ==============
         print("\n[2/6] Creating configuration...")
-        config_data = {
-            "name": f"Journey Test Config {timestamp}",
-            "description": "Complete journey test configuration",
-            "data_source": {
-                "type": "folder",
-                "source": {
-                    "folder_path": "/test/data",
-                    "recursive": True,
-                },
-                "rbac": {
-                    "roles": ["admin", "user"],
-                },
-            },
-            "models": {
-                "llm": {
-                    "provider": "openai",
-                    "model": "gpt-4o-mini",
-                    "temperature": 0.7,
-                    "max_tokens": 2048,
-                },
-                "embedding": {
-                    "provider": "openai",
-                    "model": "text-embedding-3-small",
-                    "dimensions": 1536,
-                },
-            },
-            "document_processing": {
-                "data_types": ["text", "pdf"],
-                "chunking": {
-                    "strategy": "recursive",
-                    "chunk_size": 1000,
-                    "chunk_overlap": 200,
-                },
-            },
-            "retrieval": {
-                "methods": ["vector", "keyword"],
-                "vector_search": {
-                    "top_k": 5,
-                },
-                "keyword_search": {
-                    "top_k": 3,
-                },
-            },
-            "agent": {
-                "type": "naive",
-                "max_iterations": 3,
-            },
-            "prompts": {
-                "system_prompt": "You are a helpful assistant for testing.",
-            },
-        }
+        config_data = make_config(
+            name=f"Journey Test Config {timestamp}",
+            description="Complete journey test configuration",
+        )
 
         create_response = await client.post(
             "/api/v1/configs/",
@@ -114,16 +68,16 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
         )
         assert create_response.status_code == 201, f"Config creation failed: {create_response.text}"
 
-        config = create_response.json()["data"]
-        config_id = config["id"]
+        config = get_data(create_response)
+        config_id = get_id(config)
         created_resources["config_id"] = config_id
 
-        print(f"✓ Config created: {config_id}")
+        print(f"  Config created: {config_id}")
 
         # Verify config exists
         get_response = await client.get(f"/api/v1/configs/{config_id}", headers=auth_headers)
         assert get_response.status_code == 200
-        assert get_response.json()["data"]["name"] == config_data["name"]
+        assert get_data(get_response)["name"] == config_data["name"]
 
         # ============== 3. RUN INGESTION ==============
         print("\n[3/6] Starting ingestion...")
@@ -133,11 +87,11 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
         )
         assert start_response.status_code == 202, f"Ingestion start failed: {start_response.text}"
 
-        start_data = start_response.json()["data"]
+        start_data = get_data(start_response)
         ingestion_id = start_data["ingestion_id"]
         created_resources["ingestion_id"] = ingestion_id
 
-        print(f"✓ Ingestion started: {ingestion_id}")
+        print(f"  Ingestion started: {ingestion_id}")
 
         # Poll for completion
         print("Polling ingestion status...")
@@ -149,7 +103,7 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
             )
             assert status_response.status_code == 200
 
-            status_data = status_response.json()["data"]
+            status_data = get_data(status_response)
             final_status = status_data["status"]
             progress = status_data.get("progress", 0)
             total_files = status_data.get("total_files", 0)
@@ -162,7 +116,7 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
 
             await asyncio.sleep(POLL_INTERVAL)
 
-        print(f"✓ Ingestion finished with status: {final_status}")
+        print(f"  Ingestion finished with status: {final_status}")
 
         # Get stats
         stats_response = await client.get(
@@ -170,7 +124,7 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
             headers=auth_headers,
         )
         if stats_response.status_code == 200:
-            stats = stats_response.json()["data"]
+            stats = get_data(stats_response)
             print(f"  Stats: {stats.get('total_documents', 0)} docs, {stats.get('total_chunks', 0)} chunks")
 
         # ============== 4. QUERY DATA ==============
@@ -191,8 +145,8 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
         )
 
         if query_response.status_code == 200:
-            query_data = query_response.json()["data"]
-            print(f"✓ Query successful")
+            query_data = get_data(query_response)
+            print(f"  Query successful")
             print(f"  Answer: {query_data.get('answer', 'N/A')[:100]}...")
             print(f"  Sources: {len(query_data.get('sources', []))}")
 
@@ -200,7 +154,7 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
                 debug = query_data["debug"]
                 print(f"  Timing: retrieval={debug.get('retrieval_time_ms')}ms, generation={debug.get('generation_time_ms')}ms")
         else:
-            print(f"⚠ Query returned: {query_response.status_code}")
+            print(f"  Query returned: {query_response.status_code}")
             print(f"  Response: {query_response.text[:200]}")
 
         # Test chat endpoint
@@ -217,10 +171,10 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
         )
 
         if chat_response.status_code == 200:
-            chat_data = chat_response.json()["data"]
+            chat_data = get_data(chat_response)
             conversation_id = chat_data["conversation_id"]
             created_resources["conversation_id"] = conversation_id
-            print(f"✓ Chat successful (conversation: {conversation_id})")
+            print(f"  Chat successful (conversation: {conversation_id})")
 
         # ============== 5. VERIFY RESULTS ==============
         print("\n[5/6] Verifying results...")
@@ -231,9 +185,9 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
             headers=auth_headers,
         )
         assert history_response.status_code == 200
-        history = history_response.json()["data"]["history"]
+        history = get_data(history_response)["history"]
         assert len(history) > 0, "Expected at least one ingestion in history"
-        print(f"✓ Ingestion history: {len(history)} entries")
+        print(f"  Ingestion history: {len(history)} entries")
 
         # Check logs
         logs_response = await client.get(
@@ -242,22 +196,23 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
             params={"limit": 10},
         )
         assert logs_response.status_code == 200
-        print(f"✓ Ingestion logs retrieved")
+        print(f"  Ingestion logs retrieved")
 
         # Verify user profile
         me_response = await client.get("/api/v1/users/me", headers=auth_headers)
         assert me_response.status_code == 200
-        user_info = me_response.json()["data"]
+        user_info = get_data(me_response)
         assert user_info["email"] == test_email
-        print(f"✓ User profile verified")
+        print(f"  User profile verified")
 
         # List configs
         list_response = await client.get("/api/v1/configs/", headers=auth_headers)
         assert list_response.status_code == 200
-        configs = list_response.json()["data"]["items"]
+        list_data = get_data(list_response)
+        configs = list_data["items"]
         config_names = [c["name"] for c in configs]
         assert config_data["name"] in config_names
-        print(f"✓ Config appears in list")
+        print(f"  Config appears in list")
 
         # ============== 6. CLEANUP ==============
         print("\n[6/6] Cleaning up...")
@@ -270,9 +225,9 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
                 params={"include_history": True},
             )
             if delete_data_response.status_code == 200:
-                print(f"✓ Ingestion data deleted")
+                print(f"  Ingestion data deleted")
         except Exception as e:
-            print(f"⚠ Error deleting ingestion data: {e}")
+            print(f"  Error deleting ingestion data: {e}")
 
         # Delete conversation if created
         if created_resources["conversation_id"]:
@@ -281,7 +236,7 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
                     f"/api/v1/chat/history/{created_resources['conversation_id']}",
                     headers=auth_headers,
                 )
-                print(f"✓ Conversation deleted")
+                print(f"  Conversation deleted")
             except Exception:
                 pass
 
@@ -291,19 +246,19 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
             headers=auth_headers,
         )
         assert delete_response.status_code == 200
-        print(f"✓ Config deleted")
+        print(f"  Config deleted")
 
         # Logout
         logout_response = await client.post("/api/v1/auth/logout", headers=auth_headers)
         assert logout_response.status_code == 200
-        print(f"✓ User logged out")
+        print(f"  User logged out")
 
         print("\n" + "=" * 50)
-        print("✅ COMPLETE JOURNEY TEST PASSED")
+        print("COMPLETE JOURNEY TEST PASSED")
         print("=" * 50)
 
     except Exception as e:
-        print(f"\n❌ Test failed: {e}")
+        print(f"\nTest failed: {e}")
         raise
 
     finally:
@@ -317,7 +272,7 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
                 "password": "JourneyTest123!",
             })
             if login_response.status_code == 200:
-                cleanup_token = login_response.json()["data"]["access_token"]
+                cleanup_token = get_data(login_response)["access_token"]
                 cleanup_headers = {"Authorization": f"Bearer {cleanup_token}"}
 
                 # Delete config if still exists
@@ -327,7 +282,7 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
                             f"/api/v1/configs/{created_resources['config_id']}",
                             headers=cleanup_headers,
                         )
-                        print("  ✓ Config cleaned up")
+                        print("  Config cleaned up")
                     except Exception:
                         pass
 
@@ -338,7 +293,7 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
                             f"/api/v1/chat/history/{created_resources['conversation_id']}",
                             headers=cleanup_headers,
                         )
-                        print("  ✓ Conversation cleaned up")
+                        print("  Conversation cleaned up")
                     except Exception:
                         pass
 
@@ -347,7 +302,6 @@ async def test_complete_user_journey(client: httpx.AsyncClient):
             pass
 
 
-@pytest.mark.asyncio
 async def test_duplicate_and_export_import_journey(client: httpx.AsyncClient, auth_headers: dict):
     """
     Journey testing duplicate and export/import features.
@@ -357,21 +311,10 @@ async def test_duplicate_and_export_import_journey(client: httpx.AsyncClient, au
 
     try:
         # Create original config
-        config_data = {
-            "name": f"Original Config {timestamp}",
-            "description": "Original for duplicate test",
-            "data_source": {
-                "type": "folder",
-                "source": {"folder_path": "/test"},
-            },
-            "models": {
-                "llm": {"provider": "openai", "model": "gpt-4o-mini"},
-                "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
-            },
-            "document_processing": {"data_types": ["text"]},
-            "retrieval": {"methods": ["vector"]},
-            "agent": {"type": "naive"},
-        }
+        config_data = make_config(
+            name=f"Original Config {timestamp}",
+            description="Original for duplicate test",
+        )
 
         create_response = await client.post(
             "/api/v1/configs/",
@@ -379,7 +322,7 @@ async def test_duplicate_and_export_import_journey(client: httpx.AsyncClient, au
             json=config_data,
         )
         assert create_response.status_code == 201
-        original_id = create_response.json()["data"]["id"]
+        original_id = get_id(get_data(create_response))
         created_configs.append(original_id)
 
         # Duplicate config
@@ -389,7 +332,7 @@ async def test_duplicate_and_export_import_journey(client: httpx.AsyncClient, au
             params={"new_name": f"Duplicated Config {timestamp}"},
         )
         assert dup_response.status_code == 201
-        duplicated_id = dup_response.json()["data"]["id"]
+        duplicated_id = get_id(get_data(dup_response))
         created_configs.append(duplicated_id)
 
         # Export original
@@ -400,31 +343,34 @@ async def test_duplicate_and_export_import_journey(client: httpx.AsyncClient, au
         assert export_response.status_code == 200
         yaml_content = export_response.text
 
-        # Import
+        # Change name in YAML to avoid 409 conflict with the original
+        yaml_content = yaml_content.replace(config_data["name"], f"Imported {config_data['name']}")
+
+        # Import (don't override Content-Type — httpx sets multipart boundary)
+        import_headers = {k: v for k, v in auth_headers.items() if k.lower() != "content-type"}
         import_response = await client.post(
             "/api/v1/configs/import",
-            headers={**auth_headers, "Content-Type": "multipart/form-data"},
+            headers=import_headers,
             files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
         )
         assert import_response.status_code == 201
-        imported_id = import_response.json()["data"]["id"]
+        imported_id = get_id(get_data(import_response))
         created_configs.append(imported_id)
 
         # Verify all three exist
-        for config_id in created_configs:
-            get_response = await client.get(f"/api/v1/configs/{config_id}", headers=auth_headers)
+        for cid in created_configs:
+            get_response = await client.get(f"/api/v1/configs/{cid}", headers=auth_headers)
             assert get_response.status_code == 200
 
     finally:
         # Cleanup all configs
-        for config_id in created_configs:
+        for cid in created_configs:
             try:
-                await client.delete(f"/api/v1/configs/{config_id}", headers=auth_headers)
+                await client.delete(f"/api/v1/configs/{cid}", headers=auth_headers)
             except Exception:
                 pass
 
 
-@pytest.mark.asyncio
 async def test_conversation_history_journey(client: httpx.AsyncClient, auth_headers: dict, created_config_id: str):
     """
     Journey testing conversation history management.
@@ -443,7 +389,7 @@ async def test_conversation_history_journey(client: httpx.AsyncClient, auth_head
         if response1.status_code != 200:
             pytest.skip("Chat not available - ingestion may be needed")
 
-        data1 = response1.json()["data"]
+        data1 = get_data(response1)
         conversation_id = data1["conversation_id"]
 
         # Continue conversation
@@ -462,7 +408,7 @@ async def test_conversation_history_journey(client: httpx.AsyncClient, auth_head
             headers=auth_headers,
         )
         assert history_response.status_code == 200
-        history = history_response.json()["data"]
+        history = get_data(history_response)
         assert len(history["messages"]) >= 4  # 2 user + 2 assistant messages
 
     finally:
@@ -476,7 +422,6 @@ async def test_conversation_history_journey(client: httpx.AsyncClient, auth_head
                 pass
 
 
-@pytest.mark.asyncio
 async def test_refresh_token_during_journey(client: httpx.AsyncClient):
     """
     Journey testing token refresh during session.
@@ -492,7 +437,7 @@ async def test_refresh_token_during_journey(client: httpx.AsyncClient):
     })
     assert reg_response.status_code == 201
 
-    data = reg_response.json()["data"]
+    data = get_data(reg_response)
     access_token = data["access_token"]
     refresh_token = data["refresh_token"]
 
@@ -507,7 +452,7 @@ async def test_refresh_token_during_journey(client: httpx.AsyncClient):
     })
     assert refresh_response.status_code == 200
 
-    new_token = refresh_response.json()["data"]["access_token"]
+    new_token = get_data(refresh_response)["access_token"]
     new_headers = {"Authorization": f"Bearer {new_token}"}
 
     # Use new token
@@ -515,17 +460,9 @@ async def test_refresh_token_during_journey(client: httpx.AsyncClient):
     assert me2.status_code == 200
 
     # Create config with new token
-    config_data = {
-        "name": f"Refresh Journey Config {timestamp}",
-        "data_source": {"type": "folder", "source": {"folder_path": "/test"}},
-        "models": {
-            "llm": {"provider": "openai", "model": "gpt-4o-mini"},
-            "embedding": {"provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536},
-        },
-        "document_processing": {"data_types": ["text"]},
-        "retrieval": {"methods": ["vector"]},
-        "agent": {"type": "naive"},
-    }
+    config_data = make_config(
+        name=f"Refresh Journey Config {timestamp}",
+    )
 
     create_response = await client.post(
         "/api/v1/configs/",
@@ -533,7 +470,7 @@ async def test_refresh_token_during_journey(client: httpx.AsyncClient):
         json=config_data,
     )
     assert create_response.status_code == 201
-    config_id = create_response.json()["data"]["id"]
+    config_id = get_id(get_data(create_response))
 
     # Cleanup
     await client.delete(f"/api/v1/configs/{config_id}", headers=new_headers)

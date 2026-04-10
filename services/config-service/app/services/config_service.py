@@ -3,13 +3,20 @@
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from rag_config_common.models.enums import IngestionStatus
-from rag_config_common.models.config import RBACConfig, ChunkingConfig
+from rag_config_common.models.config import (
+    RBACConfig,
+    ChunkingConfig,
+    GuardrailsConfig,
+    EvaluationConfig,
+    CacheConfig,
+)
 
 from app.core.exceptions import (
     NotFoundException,
     AlreadyExistsException,
     ForbiddenException,
 )
+from app.core.audit import AuditLogger
 from app.db.repositories.config_repo import ConfigRepository
 from app.schemas.config import (
     ConfigCreate,
@@ -25,6 +32,18 @@ class ConfigService:
 
     def __init__(self, db: AsyncIOMotorDatabase):
         self.config_repo = ConfigRepository(db)
+        self.audit_logger = AuditLogger(db)
+
+    @staticmethod
+    def _apply_config_defaults(config: dict) -> dict:
+        """Backfill optional v2 fields for legacy config documents."""
+        config.setdefault("version", "1.0.0")
+        config.setdefault("rbac", RBACConfig().model_dump())
+        config.setdefault("guardrails", GuardrailsConfig().model_dump())
+        config.setdefault("chunking", ChunkingConfig().model_dump())
+        config.setdefault("evaluation", EvaluationConfig().model_dump())
+        config.setdefault("cache", CacheConfig().model_dump())
+        return config
 
     async def create(self, data: ConfigCreate, user_id: str) -> ConfigResponse:
         """Create a new configuration."""
@@ -36,7 +55,7 @@ class ConfigService:
         # Prepare config document
         config_data = data.model_dump()
         config_data["created_by"] = user_id
-        config_data["version"] = "1.0.0"
+        config_data["version"] = "2.0.0"
         config_data["status"] = IngestionStatus.PENDING.value
         config_data["api_endpoint"] = None
         config_data["stats"] = None
@@ -44,11 +63,24 @@ class ConfigService:
         # Set defaults for optional fields
         if config_data.get("rbac") is None:
             config_data["rbac"] = RBACConfig().model_dump()
+        if config_data.get("guardrails") is None:
+            config_data["guardrails"] = GuardrailsConfig().model_dump()
         if config_data.get("chunking") is None:
             config_data["chunking"] = ChunkingConfig().model_dump()
+        if config_data.get("evaluation") is None:
+            config_data["evaluation"] = EvaluationConfig().model_dump()
+        if config_data.get("cache") is None:
+            config_data["cache"] = CacheConfig().model_dump()
 
         # Create config
         config_id = await self.config_repo.create_config(config_data)
+        await self.audit_logger.log(
+            user_id=user_id,
+            action="config.create",
+            resource_type="config",
+            resource_id=config_id,
+            details={"name": data.name},
+        )
 
         # Fetch and return created config
         return await self.get_by_id(config_id, user_id)
@@ -63,6 +95,7 @@ class ConfigService:
         if config.get("created_by") != user_id:
             raise ForbiddenException("You don't have access to this configuration")
 
+        config = self._apply_config_defaults(config)
         config = ConfigRepository.serialize_doc(config)
         return ConfigResponse(**config)
 
@@ -114,6 +147,13 @@ class ConfigService:
 
         if update_data:
             await self.config_repo.update_config(config_id, update_data)
+            await self.audit_logger.log(
+                user_id=user_id,
+                action="config.update",
+                resource_type="config",
+                resource_id=config_id,
+                details={"fields": sorted(update_data.keys())},
+            )
 
         return await self.get_by_id(config_id, user_id)
 
@@ -125,7 +165,15 @@ class ConfigService:
                 raise NotFoundException("Configuration", config_id)
             raise ForbiddenException("You don't have access to this configuration")
 
-        return await self.config_repo.delete_one(config_id)
+        deleted = await self.config_repo.delete_one(config_id)
+        if deleted:
+            await self.audit_logger.log(
+                user_id=user_id,
+                action="config.delete",
+                resource_type="config",
+                resource_id=config_id,
+            )
+        return deleted
 
     async def duplicate(
         self, config_id: str, user_id: str, new_name: str
@@ -145,12 +193,19 @@ class ConfigService:
             raise AlreadyExistsException("Configuration", "name", new_name)
 
         # Create copy
-        new_config = original.copy()
+        new_config = self._apply_config_defaults(original.copy())
         del new_config["_id"]
         new_config["name"] = new_name
         new_config["status"] = IngestionStatus.PENDING.value
         new_config["api_endpoint"] = None
         new_config["stats"] = None
 
-        config_id = await self.config_repo.create_config(new_config)
-        return await self.get_by_id(config_id, user_id)
+        new_config_id = await self.config_repo.create_config(new_config)
+        await self.audit_logger.log(
+            user_id=user_id,
+            action="config.duplicate",
+            resource_type="config",
+            resource_id=new_config_id,
+            details={"source_config_id": config_id, "name": new_name},
+        )
+        return await self.get_by_id(new_config_id, user_id)

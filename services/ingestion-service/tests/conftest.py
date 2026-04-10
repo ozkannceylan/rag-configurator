@@ -15,8 +15,10 @@ import pytest_asyncio
 from bson import ObjectId
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
+from rag_config_common.auth.hmac_verify import build_signed_headers
 
 from app.main import app
+from app.core.settings import settings
 from app.db.mongodb import mongodb
 from app.storage.models import (
     ChunkRecord,
@@ -24,6 +26,48 @@ from app.storage.models import (
     IngestionRecord,
     IngestionStatus,
 )
+
+
+class SignedTestClient:
+    """Thin wrapper that signs each API request like the gateway."""
+
+    def __init__(self, client: TestClient, *, secret: str, user_id: str | None = None):
+        self._client = client
+        self._secret = secret
+        self._user_id = user_id
+
+    def request(self, method: str, url: str, **kwargs):
+        request = self._client.build_request(method, url, **kwargs)
+        if self._user_id and "X-User-ID" not in request.headers:
+            request.headers["X-User-ID"] = self._user_id
+        request.headers.update(
+            build_signed_headers(
+                self._secret,
+                request.method,
+                request.url.path,
+                request.content,
+                user_id=request.headers.get("X-User-ID"),
+            )
+        )
+        return self._client.send(request)
+
+    def get(self, url: str, **kwargs):
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs):
+        return self.request("POST", url, **kwargs)
+
+    def put(self, url: str, **kwargs):
+        return self.request("PUT", url, **kwargs)
+
+    def delete(self, url: str, **kwargs):
+        return self.request("DELETE", url, **kwargs)
+
+    def options(self, url: str, **kwargs):
+        return self.request("OPTIONS", url, **kwargs)
+
+    def __getattr__(self, item):
+        return getattr(self._client, item)
 
 
 @pytest.fixture(scope="session")
@@ -44,7 +88,11 @@ def client(mock_mongodb: MagicMock) -> Generator[TestClient, None, None]:
         mongodb, "disconnect", AsyncMock()
     ):
         with TestClient(app) as c:
-            yield c
+            yield SignedTestClient(
+                c,
+                secret=settings.inter_service_secret,
+                user_id="test-user-id",
+            )
 
     mongodb.database = original_database
 
@@ -55,10 +103,50 @@ async def async_client(mock_mongodb: MagicMock) -> AsyncGenerator[AsyncClient, N
     original_database = mongodb.database
     mongodb.database = mock_mongodb
 
+    async def sign_request(request):
+        request.headers.setdefault("X-User-ID", "test-user-id")
+        request.headers.update(
+            build_signed_headers(
+                settings.inter_service_secret,
+                request.method,
+                request.url.path,
+                request.content,
+                user_id=request.headers.get("X-User-ID"),
+            )
+        )
+
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
-        headers={"X-User-ID": "test-user-id"},
+        event_hooks={"request": [sign_request]},
+    ) as ac:
+        yield ac
+
+    mongodb.database = original_database
+
+
+@pytest_asyncio.fixture
+async def signed_client_without_user(
+    mock_mongodb: MagicMock,
+) -> AsyncGenerator[AsyncClient, None]:
+    """Create an async client that signs requests but omits X-User-ID."""
+    original_database = mongodb.database
+    mongodb.database = mock_mongodb
+
+    async def sign_request(request):
+        request.headers.update(
+            build_signed_headers(
+                settings.inter_service_secret,
+                request.method,
+                request.url.path,
+                request.content,
+            )
+        )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        event_hooks={"request": [sign_request]},
     ) as ac:
         yield ac
 

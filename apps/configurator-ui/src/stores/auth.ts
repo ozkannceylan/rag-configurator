@@ -33,13 +33,13 @@ export const useAuthStore = defineStore('auth', () => {
       return true
     } catch (err: any) {
       if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
-        error.value = 'Sunucuya bağlanılamıyor. Gateway ve Config Service çalıştığından emin olun.'
+        error.value = 'Cannot connect to server. Make sure the Gateway and Config Service are running.'
       } else if (err.response?.data?.error?.message) {
         error.value = err.response.data.error.message
       } else if (err.response?.data?.message) {
         error.value = err.response.data.message
       } else {
-        error.value = err.message || 'Giriş başarısız'
+        error.value = err.message || 'Login failed'
       }
       return false
     } finally {
@@ -64,13 +64,13 @@ export const useAuthStore = defineStore('auth', () => {
       return true
     } catch (err: any) {
       if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
-        error.value = 'Sunucuya bağlanılamıyor. Gateway ve Config Service çalıştığından emin olun.'
+        error.value = 'Cannot connect to server. Make sure the Gateway and Config Service are running.'
       } else if (err.response?.data?.error?.message) {
         error.value = err.response.data.error.message
       } else if (err.response?.data?.message) {
         error.value = err.response.data.message
       } else {
-        error.value = err.message || 'Kayıt başarısız'
+        error.value = err.message || 'Registration failed'
       }
       return false
     } finally {

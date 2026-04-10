@@ -205,7 +205,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed } from 'vue'
+import { ref, reactive, watch, computed, onMounted } from 'vue'
 import { useWizardStore } from '@/stores/wizard'
 import { configApi } from '@/api/configs'
 import FolderTreeItem from './FolderTreeItem.vue'
@@ -395,6 +395,14 @@ function validateStep() {
 
 // Validate on mount
 validateStep()
+
+// Re-populate folder tree if returning to this step with existing data
+onMounted(() => {
+  if (config.data_source?.folders?.length > 0 && basePath.value) {
+    scanAttempted.value = true
+    refreshFolders()
+  }
+})
 
 // Watch for changes
 watch(() => config.name, validateStep)

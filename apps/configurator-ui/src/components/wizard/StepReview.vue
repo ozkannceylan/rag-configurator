@@ -143,9 +143,9 @@
           <div class="text-gray-500">Max Depth:</div>
           <div class="text-gray-900">{{ config.retrieval?.graph?.max_depth }}</div>
           <div class="text-gray-500">Node Types:</div>
-          <div class="text-gray-900">{{ config.retrieval?.graph?.schema?.nodes?.length || 0 }}</div>
+          <div class="text-gray-900">{{ config.retrieval?.graph_schema?.nodes?.length || 0 }}</div>
           <div class="text-gray-500">Relation Types:</div>
-          <div class="text-gray-900">{{ config.retrieval?.graph?.schema?.relations?.length || 0 }}</div>
+          <div class="text-gray-900">{{ config.retrieval?.graph_schema?.relations?.length || 0 }}</div>
         </div>
       </div>
 

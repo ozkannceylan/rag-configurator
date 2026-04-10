@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useConfigStore } from './config'
 import type { RAGConfig } from '@/types'
 
@@ -78,7 +78,7 @@ const defaultConfig: Partial<RAGConfig> = {
 export const useWizardStore = defineStore('wizard', () => {
   // State
   const currentStep = ref(0)
-  const totalSteps = ref(8)
+  const totalSteps = ref(9)
   const config = ref<Partial<RAGConfig>>(JSON.parse(JSON.stringify(defaultConfig)))
   const stepValidation = ref<Record<number, boolean>>({
     0: false, // Data Source
@@ -88,7 +88,8 @@ export const useWizardStore = defineStore('wizard', () => {
     4: true,  // Graph (conditional)
     5: true,  // Agent
     6: true,  // Prompts
-    7: false, // Review (requires name)
+    7: true,  // Advanced (guardrails/eval/cache)
+    8: false, // Review (requires name)
   })
   const isEditing = ref(false)
   const configId = ref<string | null>(null)
@@ -132,22 +133,20 @@ export const useWizardStore = defineStore('wizard', () => {
   }
 
   function validateCurrentStep() {
-    const step = currentStep.value
-    
-    switch (step) {
-      case 0: // Data Source
-        stepValidation.value[step] = !!(
-          config.value.data_source?.folders?.length > 0 &&
-          config.value.data_source?.base_path
-        )
-        break
-      case 7: // Review
-        stepValidation.value[step] = !!(config.value.name && config.value.name.trim())
-        break
-      default:
-        stepValidation.value[step] = true
-    }
+    // Always validate step 0 and 8 since they depend on shared config state
+    stepValidation.value[0] = !!(
+      config.value.data_source?.folders?.length > 0 &&
+      config.value.data_source?.base_path
+    )
+    stepValidation.value[8] = !!(config.value.name && config.value.name.trim())
   }
+
+  // Re-validate whenever config changes (name, folders, etc.)
+  watch(
+    () => [config.value.name, config.value.data_source?.folders?.length, config.value.data_source?.base_path],
+    () => validateCurrentStep(),
+    { deep: true }
+  )
 
   function resetWizard() {
     currentStep.value = 0
@@ -157,10 +156,10 @@ export const useWizardStore = defineStore('wizard', () => {
     
     // Reset validation
     Object.keys(stepValidation.value).forEach(key => {
-      stepValidation.value[Number(key)] = key === '1' || key === '2' || key === '3' || key === '4' || key === '5' || key === '6'
+      stepValidation.value[Number(key)] = key === '1' || key === '2' || key === '3' || key === '4' || key === '5' || key === '6' || key === '7'
     })
     stepValidation.value[0] = false
-    stepValidation.value[7] = false
+    stepValidation.value[8] = false
   }
 
   async function loadConfigForEdit(id: string) {

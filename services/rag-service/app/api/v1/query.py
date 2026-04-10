@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.agents.base import AgentResponse
 from app.core.auth import get_authenticated_user_id, require_config_access
+from app.core.query_cache import query_cache
 from app.db.mongodb import mongodb
 from app.llm.base import LLMContextLengthError, LLMError
 from app.llm.factory import LLMProvider, get_llm
@@ -83,6 +84,27 @@ async def query(request: QueryRequest, http_request: Request):
         from app.api.v1.stream import build_pipeline_config
         pipeline_config = build_pipeline_config(config_doc)
 
+        # Check query cache if caching is enabled
+        cache_config = config_doc.get("cache", {})
+        cache_enabled = cache_config.get("enabled", False)
+        query_cache_ttl = cache_config.get("query_cache_ttl", 300)
+
+        if cache_enabled:
+            cached = await query_cache.get(request.config_id, request.query)
+            if cached is not None:
+                total_time = int((time.time() - start_time) * 1000)
+                cached_metadata = cached.get("metadata", {})
+                cached_metadata["cache_hit"] = True
+                cached_metadata["total_duration_ms"] = total_time
+                return QueryResponse(
+                    answer=cached.get("answer", ""),
+                    sources=[
+                        SourceResponse(**s) for s in cached.get("sources", [])
+                    ],
+                    debug=cached.get("debug"),
+                    metadata=cached_metadata,
+                )
+
         # Create retriever
         retriever = get_retriever_from_config(
             db=db,
@@ -150,12 +172,29 @@ async def query(request: QueryRequest, http_request: Request):
             **response.metadata,
         }
 
-        return QueryResponse(
+        query_response = QueryResponse(
             answer=response.answer,
             sources=sources,
             debug=debug,
             metadata=metadata,
         )
+
+        # Store in cache if caching is enabled
+        if cache_enabled:
+            cache_data = {
+                "answer": query_response.answer,
+                "sources": [s.model_dump() for s in query_response.sources],
+                "debug": query_response.debug,
+                "metadata": query_response.metadata,
+            }
+            await query_cache.set(
+                request.config_id,
+                request.query,
+                cache_data,
+                ttl_seconds=query_cache_ttl,
+            )
+
+        return query_response
 
     except HTTPException:
         raise
@@ -237,11 +276,21 @@ def get_agent(
     from app.agents.self_rag import SelfRAGAgent, SelfRAGConfig
     from app.agents.multi_query import MultiQueryAgent, MultiQueryConfig
     from app.agents.plan_solve import PlanSolveAgent, PlanSolveConfig
+    from app.agents.graph_rag import GraphRAGAgent, GraphRAGConfig
     from app.agents.base import AgentConfig
 
     agent_type_lower = agent_type.lower()
 
-    if agent_type_lower in ["naive", "naive_rag", "simple"]:
+    if agent_type_lower in ["graph_rag", "graphrag", "graph-rag"]:
+        graph_config = GraphRAGConfig.from_dict(config)
+        return GraphRAGAgent(
+            retriever=retriever,
+            llm=llm,
+            prompt_manager=prompt_manager,
+            config=graph_config,
+        )
+
+    elif agent_type_lower in ["naive", "naive_rag", "simple"]:
         agent_config = AgentConfig.from_dict(config)
         return NaiveRAGAgent(
             retriever=retriever,

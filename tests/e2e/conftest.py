@@ -9,7 +9,27 @@ import httpx
 import pytest
 from pytest_asyncio import fixture
 
+from helpers import make_config
+
 BASE_URL = "http://localhost:8000"
+
+
+def get_data(response: httpx.Response) -> Any:
+    """Extract data from API response, supporting both envelope and direct formats.
+
+    Handles two response formats:
+    - Envelope: {"data": {...}, "success": true, ...}
+    - Direct: {...} (the data itself)
+    """
+    resp = response.json()
+    if isinstance(resp, dict):
+        return resp.get("data", resp)
+    return resp
+
+
+def get_id(data: dict) -> str:
+    """Extract ID from response data, supporting both 'id' and '_id' field names."""
+    return data.get("id") or data.get("_id")
 
 
 @fixture(scope="session")
@@ -44,7 +64,7 @@ async def auth_headers(client: httpx.AsyncClient) -> Dict[str, str]:
     # Register user
     response = await client.post("/api/v1/auth/register", json=test_user)
     if response.status_code == 201:
-        data = response.json()["data"]
+        data = get_data(response)
         access_token = data["access_token"]
     else:
         # User might already exist, try logging in
@@ -53,7 +73,7 @@ async def auth_headers(client: httpx.AsyncClient) -> Dict[str, str]:
             "password": test_user["password"],
         })
         assert response.status_code == 200, f"Failed to login: {response.text}"
-        data = response.json()["data"]
+        data = get_data(response)
         access_token = data["access_token"]
 
     headers = {
@@ -75,57 +95,10 @@ async def sample_config(client: httpx.AsyncClient, auth_headers: Dict[str, str])
     """Create a sample RAG configuration for testing."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-    config_data = {
-        "name": f"E2E Test Config {timestamp}",
-        "description": "Test configuration for E2E testing",
-        "data_source": {
-            "type": "folder",
-            "source": {
-                "folder_path": "/test/data",
-                "recursive": True,
-            },
-            "rbac": {
-                "roles": ["admin", "user"],
-            },
-        },
-        "models": {
-            "llm": {
-                "provider": "openai",
-                "model": "gpt-4o-mini",
-                "temperature": 0.7,
-                "max_tokens": 2048,
-            },
-            "embedding": {
-                "provider": "openai",
-                "model": "text-embedding-3-small",
-                "dimensions": 1536,
-            },
-        },
-        "document_processing": {
-            "data_types": ["text", "pdf", "docx"],
-            "chunking": {
-                "strategy": "recursive",
-                "chunk_size": 1000,
-                "chunk_overlap": 200,
-            },
-        },
-        "retrieval": {
-            "methods": ["vector", "keyword"],
-            "vector_search": {
-                "top_k": 5,
-            },
-            "keyword_search": {
-                "top_k": 3,
-            },
-        },
-        "agent": {
-            "type": "naive",
-            "max_iterations": 3,
-        },
-        "prompts": {
-            "system_prompt": "You are a helpful assistant.",
-        },
-    }
+    config_data = make_config(
+        name=f"E2E Test Config {timestamp}",
+        description="Test configuration for E2E testing",
+    )
 
     response = await client.post(
         "/api/v1/configs/",
@@ -134,8 +107,8 @@ async def sample_config(client: httpx.AsyncClient, auth_headers: Dict[str, str])
     )
     assert response.status_code == 201, f"Failed to create config: {response.text}"
 
-    config = response.json()["data"]
-    config_id = config["id"]
+    config = get_data(response)
+    config_id = get_id(config)
 
     yield config
 
@@ -151,57 +124,10 @@ async def created_config_id(client: httpx.AsyncClient, auth_headers: Dict[str, s
     """Create a config and return just the ID."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-    config_data = {
-        "name": f"E2E Test Config {timestamp}",
-        "description": "Test configuration for E2E testing",
-        "data_source": {
-            "type": "folder",
-            "source": {
-                "folder_path": "/test/data",
-                "recursive": True,
-            },
-            "rbac": {
-                "roles": ["admin", "user"],
-            },
-        },
-        "models": {
-            "llm": {
-                "provider": "openai",
-                "model": "gpt-4o-mini",
-                "temperature": 0.7,
-                "max_tokens": 2048,
-            },
-            "embedding": {
-                "provider": "openai",
-                "model": "text-embedding-3-small",
-                "dimensions": 1536,
-            },
-        },
-        "document_processing": {
-            "data_types": ["text", "pdf", "docx"],
-            "chunking": {
-                "strategy": "recursive",
-                "chunk_size": 1000,
-                "chunk_overlap": 200,
-            },
-        },
-        "retrieval": {
-            "methods": ["vector", "keyword"],
-            "vector_search": {
-                "top_k": 5,
-            },
-            "keyword_search": {
-                "top_k": 3,
-            },
-        },
-        "agent": {
-            "type": "naive",
-            "max_iterations": 3,
-        },
-        "prompts": {
-            "system_prompt": "You are a helpful assistant.",
-        },
-    }
+    config_data = make_config(
+        name=f"E2E Test Config {timestamp}",
+        description="Test configuration for E2E testing",
+    )
 
     response = await client.post(
         "/api/v1/configs/",
@@ -210,7 +136,8 @@ async def created_config_id(client: httpx.AsyncClient, auth_headers: Dict[str, s
     )
     assert response.status_code == 201, f"Failed to create config: {response.text}"
 
-    config_id = response.json()["data"]["id"]
+    config = get_data(response)
+    config_id = get_id(config)
 
     yield config_id
 

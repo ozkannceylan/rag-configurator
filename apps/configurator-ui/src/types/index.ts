@@ -31,6 +31,9 @@ export interface RAGConfig {
   chunking: ChunkingConfig
   agent: AgentConfig
   prompts: PromptsConfig
+  guardrails?: GuardrailsConfig
+  evaluation?: EvaluationConfig
+  cache?: CacheConfig
   created_at?: string
   updated_at?: string
   status?: 'draft' | 'ready' | 'processing' | 'error'
@@ -49,6 +52,9 @@ export interface FolderConfig {
 export interface DataSourceConfig {
   type: 'local' | 's3' | 'gcs' | 'azure_blob'
   base_path: string
+  bucket?: string
+  prefix?: string
+  region?: string
   credentials?: Record<string, string>
   folders: FolderConfig[]
   has_multimodal?: boolean
@@ -93,7 +99,7 @@ export interface LLMConfig {
 }
 
 export interface EmbeddingConfig {
-  provider: 'openai' | 'ollama' | 'huggingface'
+  provider: 'openai' | 'ollama' | 'huggingface' | 'cohere' | 'voyage' | 'jina'
   model_name: string
   dimensions?: number
   base_url?: string
@@ -142,22 +148,43 @@ export interface RelationType {
 }
 
 export interface ChunkingConfig {
-  strategy: 'recursive' | 'semantic' | 'document'
+  strategy: 'recursive' | 'semantic' | 'document' | 'late' | 'raptor'
   chunk_size: number
   chunk_overlap: number
   separators?: string[]
 }
 
 export interface AgentConfig {
-  template: 'naive_rag' | 'react' | 'crag' | 'self_rag' | 'multi_query' | 'plan_solve'
+  template: 'naive_rag' | 'react' | 'crag' | 'self_rag' | 'multi_query' | 'plan_solve' | 'adaptive_rag' | 'agentic_rag' | 'graph_rag'
   max_iterations: number
   enable_judge?: boolean
   judge_llm?: LLMConfig
+  config?: Record<string, any>
 }
 
 export interface PromptsConfig {
   system_prompt: string
   rag_prompt_template: string
+}
+
+export interface GuardrailsConfig {
+  enabled: boolean
+  prompt_injection: boolean
+  pii: boolean
+  toxicity: boolean
+  fail_closed: boolean
+}
+
+export interface EvaluationConfig {
+  enabled: boolean
+  async_mode: boolean
+  sample_rate: number
+}
+
+export interface CacheConfig {
+  enabled: boolean
+  embedding_cache_ttl: number
+  query_cache_ttl: number
 }
 
 // API response types
@@ -176,6 +203,8 @@ export interface IngestionStatus {
   current_step: string
   stats?: {
     files_processed: number
+    failed_files?: number
+    total_files?: number
     chunks_created: number
     embeddings_generated: number
     nodes_created?: number

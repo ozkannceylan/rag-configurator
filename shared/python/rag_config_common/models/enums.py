@@ -36,6 +36,9 @@ class EmbeddingProvider(str, Enum):
     OPENAI = "openai"
     OLLAMA = "ollama"
     HUGGINGFACE = "huggingface"
+    COHERE = "cohere"
+    VOYAGE = "voyage"
+    JINA = "jina"
 
 
 class RetrievalMethod(str, Enum):
@@ -55,6 +58,9 @@ class AgentTemplate(str, Enum):
     SELF_RAG = "self_rag"
     MULTI_QUERY = "multi_query"
     PLAN_SOLVE = "plan_solve"
+    ADAPTIVE_RAG = "adaptive_rag"
+    AGENTIC_RAG = "agentic_rag"
+    GRAPH_RAG = "graph_rag"
 
 
 class ChunkingStrategy(str, Enum):
@@ -62,6 +68,8 @@ class ChunkingStrategy(str, Enum):
     RECURSIVE = "recursive"
     SEMANTIC = "semantic"
     DOCUMENT = "document"
+    LATE = "late"
+    RAPTOR = "raptor"
 
 
 class IngestionStatus(str, Enum):

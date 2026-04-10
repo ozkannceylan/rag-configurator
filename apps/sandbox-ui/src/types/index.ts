@@ -88,7 +88,7 @@ export interface LLMConfig {
 }
 
 export interface EmbeddingConfig {
-  provider: 'openai' | 'ollama' | 'huggingface'
+  provider: 'openai' | 'ollama' | 'huggingface' | 'cohere' | 'voyage' | 'jina'
   model_name: string
   dimensions?: number
   base_url?: string
@@ -112,14 +112,14 @@ export interface RetrievalConfig {
 }
 
 export interface ChunkingConfig {
-  strategy: 'recursive' | 'semantic' | 'document'
+  strategy: 'recursive' | 'semantic' | 'document' | 'late' | 'raptor'
   chunk_size: number
   chunk_overlap: number
   separators?: string[]
 }
 
 export interface AgentConfig {
-  template: 'naive_rag' | 'react' | 'crag' | 'self_rag' | 'multi_query' | 'plan_solve'
+  template: 'naive_rag' | 'react' | 'crag' | 'self_rag' | 'multi_query' | 'plan_solve' | 'adaptive_rag' | 'agentic_rag' | 'graph_rag'
   max_iterations: number
   enable_streaming: boolean
   temperature_override?: number

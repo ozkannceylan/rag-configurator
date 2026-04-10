@@ -159,6 +159,32 @@ export interface PromptConfig {
   judge_prompts?: Record<string, string> | null;
 }
 
+// ==================== GUARDRAILS ====================
+
+export interface GuardrailsConfig {
+  enabled: boolean;
+  prompt_injection: boolean;
+  pii: boolean;
+  toxicity: boolean;
+  fail_closed: boolean;
+}
+
+// ==================== EVALUATION ====================
+
+export interface EvaluationConfig {
+  enabled: boolean;
+  async_mode: boolean;
+  sample_rate: number;
+}
+
+// ==================== CACHE ====================
+
+export interface CacheConfig {
+  enabled: boolean;
+  embedding_cache_ttl: number;
+  query_cache_ttl: number;
+}
+
 // ==================== MAIN CONFIG ====================
 
 export interface RAGPipelineConfig {
@@ -178,5 +204,8 @@ export interface RAGPipelineConfig {
   chunking: ChunkingConfig;
   agent: AgentConfig;
   prompts: PromptConfig;
+  guardrails?: GuardrailsConfig | null;
+  evaluation?: EvaluationConfig | null;
+  cache?: CacheConfig | null;
   stats?: Record<string, any> | null;
 }

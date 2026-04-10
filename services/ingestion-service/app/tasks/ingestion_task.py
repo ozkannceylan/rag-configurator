@@ -86,6 +86,7 @@ class IngestionPipeline:
         self._embedder = None
         self._vector_store = None
         self._graph_builder = None
+        self._embedding_cache = None
 
     async def initialize(self) -> None:
         """Initialize database connection and load config."""
@@ -97,8 +98,26 @@ class IngestionPipeline:
         if not self.config:
             raise ValueError(f"Configuration not found: {self.config_id}")
 
+        # Initialize embedding cache if caching is enabled
+        cache_config = self.config.get("cache", {})
+        if cache_config.get("enabled", False) and settings.redis_url:
+            try:
+                from rag_config_common.cache import EmbeddingCache
+
+                ttl = cache_config.get("embedding_cache_ttl", 3600)
+                self._embedding_cache = EmbeddingCache(
+                    redis_url=settings.redis_url,
+                    ttl_seconds=ttl,
+                )
+                await self._embedding_cache.connect()
+            except Exception as exc:
+                logger.warning("Failed to initialize embedding cache: %s", exc)
+                self._embedding_cache = None
+
     async def cleanup(self) -> None:
         """Clean up resources."""
+        if self._embedding_cache:
+            await self._embedding_cache.disconnect()
         if self._embedder and hasattr(self._embedder, 'close'):
             await self._embedder.close()
         if self._graph_builder and hasattr(self._graph_builder, 'close'):
@@ -270,15 +289,77 @@ class IngestionPipeline:
         if provider == EmbeddingProvider.OLLAMA:
             base_url = settings.ollama_base_url
 
+        batch_size = embedding_config.get("batch_size", 100)
+
         config = EmbeddingConfig(
             model=model,
             api_key=api_key,
             base_url=base_url,
             dimensions=dimensions,
+            batch_size=batch_size,
         )
 
         self._embedder = get_embedder(provider=provider, config=config)
         return self._embedder
+
+    async def _embed_with_cache(self, embedder, chunk_texts: List[str]):
+        """Generate embeddings, using cache when available."""
+        from app.embedders.base import EmbeddingResult
+
+        cache = self._embedding_cache
+        model_name = embedder.model_name
+
+        if cache is None or cache.client is None:
+            return await embedder.embed(chunk_texts)
+
+        # Check cache for all texts
+        cached = await cache.get_batch(chunk_texts, model_name)
+
+        if len(cached) == len(chunk_texts):
+            # Full cache hit
+            embeddings = [cached[i] for i in range(len(chunk_texts))]
+            return EmbeddingResult(
+                embeddings=embeddings,
+                model=model_name,
+                dimensions=len(embeddings[0]) if embeddings and embeddings[0] else 0,
+                metadata={"cache_hit": True, "cache_hits": len(chunk_texts)},
+            )
+
+        # Partial hit: compute only uncached texts
+        uncached_indices = [i for i in range(len(chunk_texts)) if i not in cached]
+        uncached_texts = [chunk_texts[i] for i in uncached_indices]
+
+        result = await embedder.embed(uncached_texts)
+
+        # Merge cached + new embeddings in original order
+        all_embeddings: List[List[float]] = [[] for _ in chunk_texts]
+        for i, emb in cached.items():
+            all_embeddings[i] = emb
+        for j, idx in enumerate(uncached_indices):
+            if j < len(result.embeddings):
+                all_embeddings[idx] = result.embeddings[j]
+
+        # Store newly computed embeddings in cache
+        new_texts = [chunk_texts[i] for i in uncached_indices]
+        new_embeddings = [
+            result.embeddings[j]
+            for j in range(len(uncached_indices))
+            if j < len(result.embeddings)
+        ]
+        if new_texts and new_embeddings:
+            await cache.set_batch(new_texts, model_name, new_embeddings)
+
+        return EmbeddingResult(
+            embeddings=all_embeddings,
+            model=result.model,
+            dimensions=result.dimensions,
+            total_tokens=result.total_tokens,
+            processing_time_ms=result.processing_time_ms,
+            metadata={
+                "cache_hits": len(cached),
+                "cache_misses": len(uncached_indices),
+            },
+        )
 
     async def _get_vector_store(self):
         """Get the vector store."""
@@ -474,13 +555,13 @@ class IngestionPipeline:
                 result["error"] = "No chunks created"
                 return result
 
-            # Generate embeddings
+            # Generate embeddings (with optional cache)
             self.tracker.set_step(f"Embedding: {file_meta['file_name']}")
 
             embedder = await self._get_embedder()
             chunk_texts = [c.content for c in chunks]
 
-            embedding_result = await embedder.embed(chunk_texts)
+            embedding_result = await self._embed_with_cache(embedder, chunk_texts)
 
             # Create chunk records with embeddings
             from app.storage.models import ChunkRecord

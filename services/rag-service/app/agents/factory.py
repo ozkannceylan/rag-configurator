@@ -10,6 +10,7 @@ from app.agents.crag import CRAGAgent, CRAGConfig
 from app.agents.self_rag import SelfRAGAgent, SelfRAGConfig
 from app.agents.multi_query import MultiQueryAgent, MultiQueryConfig
 from app.agents.plan_solve import PlanSolveAgent, PlanSolveConfig
+from app.agents.graph_rag import GraphRAGAgent, GraphRAGConfig
 from app.llm.base import BaseLLM
 from app.prompts.manager import PromptManager
 from app.retrieval.base import BaseRetriever
@@ -96,6 +97,15 @@ def create_agent(
             config=plan_config,
         )
 
+    elif agent_type_lower in ["graph_rag", "graphrag", "graph-rag"]:
+        graph_config = GraphRAGConfig.from_dict(config)
+        return GraphRAGAgent(
+            retriever=retriever,
+            llm=llm,
+            prompt_manager=prompt_manager,
+            config=graph_config,
+        )
+
     else:
         logger.warning(f"Unknown agent type '{agent_type}', using naive")
         agent_config = AgentConfig.from_dict(config)
@@ -144,6 +154,11 @@ def list_available_agents() -> Dict[str, Dict[str, Any]]:
             "name": "Plan-Solve",
             "description": "Planning-based agent for complex questions",
             "use_case": "Multi-step questions requiring decomposition",
+        },
+        "graph_rag": {
+            "name": "GraphRAG",
+            "description": "Microsoft GraphRAG with community summaries for global questions",
+            "use_case": "Broad overview questions across large document collections",
         },
     }
 

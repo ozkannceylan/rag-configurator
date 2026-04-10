@@ -26,6 +26,13 @@ type Config struct {
 	// Redis
 	RedisURL string `env:"REDIS_URL" envDefault:"redis://localhost:6379/0"`
 
+	// Inter-service auth
+	InterServiceSecret string `env:"INTER_SERVICE_SECRET,required"`
+
+	// Observability
+	OTELExporterOTLPEndpoint string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+	OTELServiceName          string `env:"OTEL_SERVICE_NAME" envDefault:"gateway"`
+
 	// Backend Services
 	ConfigServiceURL    string `env:"CONFIG_SERVICE_URL" envDefault:"http://localhost:8001"`
 	IngestionServiceURL string `env:"INGESTION_SERVICE_URL" envDefault:"http://localhost:8002"`
@@ -69,6 +76,9 @@ func Load() (*Config, error) {
 func (c *Config) validate() error {
 	if c.JWTSecretKey == "" {
 		return fmt.Errorf("JWT_SECRET_KEY is required")
+	}
+	if c.InterServiceSecret == "" {
+		return fmt.Errorf("INTER_SERVICE_SECRET is required")
 	}
 	if c.JWTAlgorithm != "HS256" && c.JWTAlgorithm != "HS384" && c.JWTAlgorithm != "HS512" {
 		return fmt.Errorf("JWT_ALGORITHM must be HS256, HS384, or HS512")

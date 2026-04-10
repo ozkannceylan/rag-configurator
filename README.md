@@ -6,16 +6,52 @@ Design your retrieval strategy, pick your LLM, ingest documents, and chat with y
 
 ---
 
+## Screenshots
+
+### Configuration Wizard — Data Source
+
+![Data Source Step](docs/screenshots/screenshot-wizard-datasource-filled.png)
+*Browse local folders or S3 buckets, scan for documents, and select which directories to ingest.*
+
+### Configuration Wizard — Model Selection
+
+![Model Selection](docs/screenshots/screenshot-wizard-models.png)
+*Choose from 4 LLM providers (OpenAI, Anthropic, Ollama, vLLM) and 6 embedding providers. Configure temperature, max tokens, and model-specific parameters.*
+
+### Configuration Wizard — Retrieval Strategy
+
+![Retrieval Strategy](docs/screenshots/screenshot-wizard-retrieval.png)
+*Select chunking strategy (Recursive, Semantic, Document, Late Chunking, RAPTOR), retrieval method (Vector, Keyword, Hybrid, Graph), and fine-tune search parameters.*
+
+### Configuration Wizard — Agent Architecture
+
+![Agent Selection](docs/screenshots/screenshot-wizard-agent.png)
+*Pick from 9 agent architectures — from simple Naive RAG to sophisticated Adaptive RAG, CRAG, and Graph RAG. Each shows use cases and configurable parameters.*
+
+### Sandbox — Chat Interface
+
+![Sandbox Chat](docs/screenshots/screenshot-sandbox-chat.png)
+*Real-time SSE streaming chat with source citations. Right panel shows retrieved chunks with relevance scores and a retrieval debug panel.*
+
+### Dashboard
+
+![Dashboard](docs/screenshots/screenshot-dashboard.png)
+*Manage all your RAG configurations. Create, edit, delete, and jump into the sandbox to test.*
+
+---
+
 ## Highlights
 
-- **Visual Pipeline Builder** — Step-by-step wizard to configure chunking, embedding, retrieval, and generation
-- **6 Agent Architectures** — Naive RAG, ReAct, Corrective RAG, Self-RAG, Multi-Query, Plan-and-Solve
+- **Visual Pipeline Builder** — 9-step wizard to configure chunking, embedding, retrieval, and generation
+- **9 Agent Architectures** — Naive RAG, ReAct, CRAG, Self-RAG, Multi-Query, Plan-and-Solve, Adaptive, Agentic, Graph RAG
 - **4 LLM Providers** — OpenAI, Anthropic, Ollama (local GPU), vLLM (self-hosted)
+- **6 Embedding Providers** — OpenAI, Ollama, HuggingFace, Cohere, Voyage, Jina
 - **Hybrid Retrieval** — Vector, keyword, graph, and hybrid search with re-ranking
 - **Real-time Chat** — SSE streaming responses with source citations
 - **Local File Browsing** — Mount and browse host folders directly from the UI for document ingestion
 - **Async Ingestion** — Celery workers process documents in the background with live progress tracking
 - **Multi-tenant Auth** — JWT authentication with role-based access control
+- **Full Local Mode** — Run entirely on your own hardware with Ollama, no cloud APIs required
 
 ---
 
@@ -41,7 +77,7 @@ Design your retrieval strategy, pick your LLM, ingest documents, and chat with y
               │              │  │              │  │                 │
               │ • Users/Auth │  │ • Processors │  │ • Retrievers    │
               │ • Config CRUD│  │ • Chunkers   │  │ • LLM Clients   │
-              │ • Folder API │  │ • Embedders  │  │ • 6 Agent Types │
+              │ • Folder API │  │ • Embedders  │  │ • 9 Agent Types │
               │ • RBAC       │  │ • Celery     │  │ • SSE Streaming │
               └──────┬───────┘  └──────┬───────┘  └──────┬──────────┘
                      │                 │                  │
@@ -69,53 +105,6 @@ Design your retrieval strategy, pick your LLM, ingest documents, and chat with y
 
 ---
 
-## Tech Stack
-
-### Backend
-
-| | Technology | Purpose |
-|---|---|---|
-| **Language** | Go 1.24 | API Gateway |
-| **Language** | Python 3.11 | All microservices |
-| **Web Framework** | FastAPI 0.111 | REST APIs with async support |
-| **Agent Framework** | LangGraph 0.2 | Stateful agent orchestration |
-| **LLM Libraries** | LangChain, langchain-openai, langchain-anthropic | LLM provider abstraction |
-| **Task Queue** | Celery 5.4 + Redis | Async document ingestion |
-| **Database** | MongoDB 7.0 + Motor 3.4 | Async document store + vector index |
-| **Auth** | JWT (python-jose, golang-jwt/v5) | Stateless authentication |
-| **Validation** | Pydantic 2.x | Schema validation across all services |
-| **HTTP Router** | Gin 1.10 | High-performance Go HTTP framework |
-| **Doc Parsing** | Unstructured 0.14, PyMuPDF, python-docx | PDF, DOCX, HTML, TXT, MD |
-| **OCR** | pytesseract + Pillow | Scanned document extraction |
-| **Embeddings** | OpenAI, Ollama, sentence-transformers | Multiple embedding providers |
-| **Streaming** | sse-starlette | Server-Sent Events for real-time chat |
-| **Logging** | zerolog (Go), structlog (Python) | Structured JSON logging |
-
-### Frontend
-
-| | Technology | Purpose |
-|---|---|---|
-| **Framework** | Vue 3.4 (Composition API) | Reactive UI |
-| **Language** | TypeScript 5.4 | Type-safe frontend code |
-| **Build** | Vite 5.2 | Fast dev server + production builds |
-| **State** | Pinia 2.1 | Centralized state management |
-| **Styling** | Tailwind CSS 3.4 | Utility-first CSS |
-| **Components** | Headless UI 1.7 | Accessible, unstyled primitives |
-| **Icons** | Heroicons 2.1 | SVG icon set |
-| **Validation** | vee-validate + zod | Form validation with schema inference |
-| **Markdown** | marked + highlight.js | Chat message rendering with syntax highlighting |
-
-### Infrastructure
-
-| | Technology | Purpose |
-|---|---|---|
-| **Containers** | Docker + Docker Compose | Service orchestration |
-| **Database** | MongoDB 7.0 | Document store with vector search indexes |
-| **Cache/Queue** | Redis 7 | Celery broker + result backend |
-| **Reverse Proxy** | Nginx | Production routing + TLS termination |
-
----
-
 ## RAG Capabilities
 
 ### Agent Architectures
@@ -124,19 +113,23 @@ Design your retrieval strategy, pick your LLM, ingest documents, and chat with y
 |-------|-------------|
 | **Naive RAG** | Retrieve → Generate. Simple and fast baseline. |
 | **ReAct** | Reasoning + Acting loop with tool use for complex queries |
-| **Corrective RAG (CRAG)** | Evaluates retrieval quality, self-corrects with web fallback |
+| **Corrective RAG (CRAG)** | Evaluates retrieval quality, self-corrects with query rewriting |
 | **Self-RAG** | Iterative self-reflection — generates, critiques, and refines |
 | **Multi-Query** | Expands user query into multiple perspectives, parallel retrieval |
 | **Plan-and-Solve** | Decomposes complex questions into sub-tasks, solves step-by-step |
+| **Adaptive RAG** | Automatically selects strategy based on query complexity |
+| **Agentic RAG** | Autonomous agent with tool use for open-ended exploration |
+| **Graph RAG** | Knowledge graph-based retrieval for connected, relational data |
 
 ### Retrieval Methods
 
 | Method | Description |
 |--------|-------------|
-| **Vector Search** | Semantic similarity via MongoDB Atlas vector index (HNSW) |
-| **Keyword Search** | Full-text search with Atlas Search |
+| **Vector Search** | Semantic similarity via cosine distance |
+| **Keyword Search** | Full-text search with fuzzy matching |
 | **Hybrid Search** | Reciprocal Rank Fusion of vector + keyword results |
 | **Graph Search** | Entity-relationship traversal for connected knowledge |
+| **Hybrid + Graph** | All methods combined for maximum recall |
 
 ### Chunking Strategies
 
@@ -145,6 +138,17 @@ Design your retrieval strategy, pick your LLM, ingest documents, and chat with y
 | **Recursive** | Recursive character splitting with configurable overlap |
 | **Semantic** | Embedding-based boundary detection for coherent chunks |
 | **Document** | Preserves document structure as single chunks |
+| **Late Chunking** | Chunk after embedding for better context preservation |
+| **RAPTOR** | Recursive abstractive processing for tree-organized retrieval |
+
+### LLM Providers
+
+| Provider | Models |
+|----------|--------|
+| **OpenAI** | GPT-4o, GPT-4o Mini, GPT-4 Turbo, GPT-3.5 Turbo |
+| **Anthropic** | Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku |
+| **Ollama** | Llama 3, Mistral, Qwen, Phi — any GGUF model (local, GPU) |
+| **vLLM** | Any HuggingFace model via vLLM server |
 
 ### Embedding Providers
 
@@ -153,15 +157,9 @@ Design your retrieval strategy, pick your LLM, ingest documents, and chat with y
 | **OpenAI** | text-embedding-3-small, text-embedding-3-large, ada-002 |
 | **Ollama** | nomic-embed-text, all-minilm, mxbai-embed-large (local) |
 | **HuggingFace** | Any sentence-transformers model (local) |
-
-### LLM Providers
-
-| Provider | Models |
-|----------|--------|
-| **OpenAI** | GPT-4o, GPT-4, GPT-3.5-turbo |
-| **Anthropic** | Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku |
-| **Ollama** | Llama 3, Mistral, Qwen, Phi — any GGUF model (local, GPU) |
-| **vLLM** | Any HuggingFace model via vLLM server |
+| **Cohere** | embed-english-v3.0, embed-multilingual-v3.0 |
+| **Voyage** | voyage-3, voyage-3-lite |
+| **Jina** | jina-embeddings-v3 |
 
 ---
 
@@ -175,7 +173,7 @@ Design your retrieval strategy, pick your LLM, ingest documents, and chat with y
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/rag-configurator.git
+git clone https://github.com/ozkannceylan/rag-configurator.git
 cd rag-configurator
 cp .env.example .env
 ```
@@ -203,6 +201,8 @@ ollama pull nomic-embed-text   # embedding model
 docker compose up -d
 ```
 
+This starts 11 containers: gateway, 3 backend services, celery worker, 2 frontend apps, MongoDB, Redis, and dev tools (Mongo Express, Redis Commander).
+
 ### 4. Create a demo user
 
 ```bash
@@ -225,10 +225,57 @@ docker compose up -d
 ### First Steps
 
 1. Log in at `http://localhost:5173`
-2. Click **New Configuration** → follow the wizard
+2. Click **New Configuration** → follow the 9-step wizard
 3. Set a data source path → **Browse** your local folders or use the included sample docs
-4. Click **Scan** → select folders → **Start Ingestion**
-5. Once ingestion completes, open `http://localhost:3001` → select your config → start chatting
+4. Configure models, retrieval, and agent settings
+5. Click **Scan** → select folders → save the config
+6. Start document ingestion from the config detail page
+7. Once ingestion completes, open `http://localhost:3001` → select your config → start chatting
+
+---
+
+## Tech Stack
+
+### Backend
+
+| | Technology | Purpose |
+|---|---|---|
+| **Language** | Go 1.24 | API Gateway |
+| **Language** | Python 3.11 | All microservices |
+| **Web Framework** | FastAPI 0.111 | REST APIs with async support |
+| **Agent Framework** | LangGraph 0.2 | Stateful agent orchestration |
+| **LLM Libraries** | LangChain, langchain-openai, langchain-anthropic | LLM provider abstraction |
+| **Task Queue** | Celery 5.4 + Redis | Async document ingestion |
+| **Database** | MongoDB 7.0 + Motor 3.4 | Async document store + vector index |
+| **Auth** | JWT (python-jose, golang-jwt/v5) | Stateless authentication |
+| **Validation** | Pydantic 2.x | Schema validation across all services |
+| **HTTP Router** | Gin 1.10 | High-performance Go HTTP framework |
+| **Doc Parsing** | Docling, PyMuPDF, python-docx | PDF, DOCX, HTML, TXT, MD |
+| **OCR** | pytesseract + Pillow | Scanned document extraction |
+| **Embeddings** | OpenAI, Ollama, sentence-transformers | Multiple embedding providers |
+| **Streaming** | sse-starlette | Server-Sent Events for real-time chat |
+| **Observability** | Langfuse, OpenTelemetry | LLM tracing and metrics |
+
+### Frontend
+
+| | Technology | Purpose |
+|---|---|---|
+| **Framework** | Vue 3.4 (Composition API) | Reactive UI |
+| **Language** | TypeScript 5.4 | Type-safe frontend code |
+| **Build** | Vite 5.2 | Fast dev server + production builds |
+| **State** | Pinia 2.1 | Centralized state management |
+| **Styling** | Tailwind CSS 3.4 | Utility-first CSS |
+| **Components** | Headless UI 1.7, Naive UI | Accessible UI primitives |
+| **Icons** | Heroicons 2.1 | SVG icon set |
+
+### Infrastructure
+
+| | Technology | Purpose |
+|---|---|---|
+| **Containers** | Docker + Docker Compose | Service orchestration (11 containers) |
+| **Database** | MongoDB 7.0 | Document store + vector search |
+| **Cache/Queue** | Redis 7 | Celery broker + result backend + caching |
+| **Reverse Proxy** | Nginx | Production routing + TLS termination |
 
 ---
 
@@ -238,11 +285,10 @@ docker compose up -d
 rag-configurator/
 ├── gateway/                        # Go API Gateway
 │   ├── cmd/server/                 #   Entrypoint
-│   ├── internal/
-│   │   ├── middleware/             #   JWT auth, CORS, rate-limit
-│   │   ├── router/                #   Route definitions
-│   │   └── proxy/                 #   Reverse proxy + SSE support
-│   └── go.mod
+│   └── internal/
+│       ├── middleware/             #   JWT auth, CORS, rate-limit
+│       ├── router/                #   Route definitions
+│       └── proxy/                 #   Reverse proxy + SSE support
 │
 ├── services/
 │   ├── config-service/             # Python — Config & Auth
@@ -261,25 +307,19 @@ rag-configurator/
 │   │
 │   └── rag-service/                # Python — RAG Runtime
 │       └── app/
-│           ├── agents/             #   Naive, ReAct, CRAG, Self-RAG, Multi-Query, Plan-Solve
+│           ├── agents/             #   9 agent architectures (LangGraph)
 │           ├── retrieval/          #   Vector, Keyword, Hybrid, Graph
 │           ├── llm/                #   OpenAI, Anthropic, Ollama, vLLM clients
 │           └── api/v1/             #   Query + SSE stream endpoints
 │
 ├── apps/
 │   ├── configurator-ui/            # Vue 3 — Pipeline Configuration Wizard
-│   │   └── src/
-│   │       ├── views/              #   Wizard steps, config detail
-│   │       ├── components/         #   Reusable UI components
-│   │       ├── stores/             #   Pinia state management
-│   │       └── api/                #   API client layer
-│   │
 │   └── sandbox-ui/                 # Vue 3 — Chat Testing Interface
-│       └── src/
-│           ├── views/              #   Chat view with streaming
-│           └── components/         #   Config selector, message list
 │
-├── shared/python/                  # Shared Pydantic models across services
+├── shared/
+│   ├── python/                     # Shared Pydantic models (rag_config_common)
+│   └── typescript/                 # Shared TypeScript interfaces
+│
 ├── demo/
 │   ├── sample-docs/                # Example documents for testing
 │   ├── sample-configs/             # Pre-built pipeline configurations
@@ -299,8 +339,10 @@ rag-configurator/
 **Prerequisites**: Python 3.11+, Node.js 20+, Go 1.24+, MongoDB 7.0+, Redis 7+
 
 ```bash
-# Backend services
+# Install shared package first (required before any Python service)
 pip install -e shared/python
+
+# Backend services
 pip install -r services/config-service/requirements.txt
 pip install -r services/ingestion-service/requirements.txt
 pip install -r services/rag-service/requirements.txt
@@ -316,11 +358,25 @@ cd apps/sandbox-ui && npm install && cd ../..
 docker compose up -d mongodb redis
 
 # Run services individually in separate terminals
-uvicorn app.main:app --port 8001 --reload   # config-service
-uvicorn app.main:app --port 8002 --reload   # ingestion-service
-uvicorn app.main:app --port 8003 --reload   # rag-service
-go run cmd/server/main.go                    # gateway
-npm run dev                                  # each UI app
+cd services/config-service && uvicorn app.main:app --port 8001 --reload
+cd services/ingestion-service && uvicorn app.main:app --port 8002 --reload
+cd services/rag-service && uvicorn app.main:app --port 8003 --reload
+cd gateway && go run cmd/server/main.go
+cd apps/configurator-ui && npm run dev
+cd apps/sandbox-ui && npm run dev
+```
+
+### Testing
+
+```bash
+# All tests
+make test
+
+# Per-service
+cd services/config-service && python -m pytest tests/ -v
+cd services/ingestion-service && python -m pytest tests/ -v
+cd services/rag-service && python -m pytest tests/ -v
+cd gateway && go test ./... -v
 ```
 
 ---
@@ -354,6 +410,8 @@ All endpoints are served through the gateway at `http://localhost:8000/api/v1/`.
 | `GET` | `/configs` | List pipeline configurations |
 | `POST` | `/configs` | Create a new pipeline config |
 | `GET` | `/configs/:id` | Get config details |
+| `PUT` | `/configs/:id` | Update configuration |
+| `DELETE` | `/configs/:id` | Delete configuration |
 | `POST` | `/folders/browse` | Browse server-side folders |
 | `POST` | `/folders/scan` | Scan folder for documents |
 | `POST` | `/ingestion/start` | Start document ingestion |
@@ -371,4 +429,4 @@ All endpoints are served through the gateway at `http://localhost:8000/api/v1/`.
 
 ## Acknowledgments
 
-Built with [FastAPI](https://fastapi.tiangolo.com), [LangGraph](https://github.com/langchain-ai/langgraph), [Vue 3](https://vuejs.org), [Gin](https://gin-gonic.com), [MongoDB](https://www.mongodb.com), and [Ollama](https://ollama.com).
+Built with [FastAPI](https://fastapi.tiangolo.com), [LangGraph](https://github.com/langchain-ai/langgraph), [Vue 3](https://vuejs.org), [Gin](https://gin-gonic.com), [MongoDB](https://www.mongodb.com), [Ollama](https://ollama.com), and [Langfuse](https://langfuse.com).

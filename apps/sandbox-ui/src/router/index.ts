@@ -16,6 +16,18 @@ const router = createRouter({
       component: () => import('@/views/ChatView.vue'),
     },
     {
+      path: '/comparison',
+      name: 'Comparison',
+      component: () => import('@/views/ComparisonView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/evaluation',
+      name: 'Evaluation',
+      component: () => import('@/views/EvaluationView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },
@@ -26,9 +38,12 @@ router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
   authStore.initialize()
 
-  if (!to.meta.public && !authStore.isAuthenticated) {
+  const isPublic = to.meta.public === true
+  const requiresAuth = to.meta.requiresAuth === true || !isPublic
+
+  if (requiresAuth && !authStore.isAuthenticated) {
     next('/login')
-  } else if (to.meta.public && authStore.isAuthenticated) {
+  } else if (isPublic && authStore.isAuthenticated) {
     next('/')
   } else {
     next()

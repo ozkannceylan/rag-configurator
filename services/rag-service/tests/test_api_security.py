@@ -8,6 +8,17 @@ from app.llm.base import LLMError
 
 
 @pytest.mark.asyncio
+async def test_query_requires_hmac_signature(unsigned_client):
+    """Unsigned API requests should be rejected by service auth middleware."""
+    response = await unsigned_client.post(
+        "/api/v1/query/",
+        json={"query": "hello", "config_id": "config-123"},
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_query_rejects_non_owner(client, mock_mongodb):
     """Query endpoint should reject access to someone else's config."""
     mock_configs = MagicMock()

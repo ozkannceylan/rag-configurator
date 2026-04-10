@@ -38,7 +38,7 @@ class QueryEmbedder:
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=30.0)
+            self._client = httpx.AsyncClient(timeout=120.0)
         return self._client
 
     async def close(self) -> None:

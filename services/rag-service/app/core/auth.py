@@ -5,19 +5,9 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from bson import ObjectId
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
-
-
-def get_authenticated_user_id(request: Request) -> str:
-    """Read the trusted user identity forwarded by the gateway."""
-    user_id = request.headers.get("X-User-ID")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing X-User-ID header",
-        )
-    return user_id
+from rag_config_common.auth.middleware import get_authenticated_user_id
 
 
 async def get_config_by_id(

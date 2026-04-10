@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import DuplicateKeyError
 
 from app.storage.models import (
     ChunkRecord,
@@ -25,12 +26,12 @@ class VectorStore:
     Uses MongoDB collections:
     - documents: Processed file records
     - chunks: Text chunks with embeddings
-    - ingestions: Ingestion job tracking
+    - ingestion_jobs: Ingestion job tracking
     """
 
     DOCUMENTS_COLLECTION = "documents"
     CHUNKS_COLLECTION = "chunks"
-    INGESTIONS_COLLECTION = "ingestions"
+    INGESTIONS_COLLECTION = "ingestion_jobs"
 
     def __init__(self, db: AsyncIOMotorDatabase):
         """
@@ -53,7 +54,10 @@ class VectorStore:
         await self.documents.create_index("user_id")
         await self.documents.create_index("content_hash")
         await self.documents.create_index("ingestion_id")
-        await self.documents.create_index([("config_id", 1), ("file_path", 1)])
+        await self.documents.create_index(
+            [("config_id", 1), ("file_path", 1)],
+            unique=True,
+        )
 
         # Chunks indexes
         await self.chunks.create_index("config_id")
@@ -62,12 +66,17 @@ class VectorStore:
         await self.chunks.create_index("ingestion_id")
         await self.chunks.create_index("folder_path")
         await self.chunks.create_index([("config_id", 1), ("document_id", 1)])
+        await self.chunks.create_index(
+            [("config_id", 1), ("document_id", 1), ("chunk_index", 1)],
+            unique=True,
+        )
 
         # Ingestions indexes
         await self.ingestions.create_index("config_id")
         await self.ingestions.create_index("user_id")
         await self.ingestions.create_index("status")
         await self.ingestions.create_index("celery_task_id")
+        await self.ingestions.create_index("idempotency_key", unique=True, sparse=True)
 
         logger.info("Vector store indexes created")
 
@@ -243,13 +252,34 @@ class VectorStore:
     # ==================== Ingestion Operations ====================
 
     async def create_ingestion(self, ingestion: IngestionRecord) -> str:
-        """Create a new ingestion record."""
+        """Create a new ingestion record.
+
+        Handles concurrent duplicate inserts gracefully by returning
+        the existing record when a unique-index collision occurs on
+        ``idempotency_key``.
+        """
         data = ingestion.to_mongo()
         if "_id" not in data or not data["_id"]:
             data["_id"] = str(ObjectId())
 
-        result = await self.ingestions.insert_one(data)
-        return str(result.inserted_id)
+        # Remove null idempotency_key so the sparse unique index skips it
+        if data.get("idempotency_key") is None:
+            data.pop("idempotency_key", None)
+
+        try:
+            result = await self.ingestions.insert_one(data)
+            return str(result.inserted_id)
+        except DuplicateKeyError:
+            # Another request won the race — return the existing record.
+            idem_key = data.get("idempotency_key")
+            if idem_key is not None:
+                existing = await self.ingestions.find_one(
+                    {"idempotency_key": idem_key}
+                )
+                if existing:
+                    return str(existing["_id"])
+            # Fallback: re-raise if we somehow can't find the duplicate.
+            raise
 
     async def get_ingestion(self, ingestion_id: str) -> Optional[IngestionRecord]:
         """Get an ingestion by ID."""

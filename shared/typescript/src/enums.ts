@@ -31,6 +31,9 @@ export enum EmbeddingProvider {
   OPENAI = 'openai',
   OLLAMA = 'ollama',
   HUGGINGFACE = 'huggingface',
+  COHERE = 'cohere',
+  VOYAGE = 'voyage',
+  JINA = 'jina',
 }
 
 export enum RetrievalMethod {
@@ -48,12 +51,17 @@ export enum AgentTemplate {
   SELF_RAG = 'self_rag',
   MULTI_QUERY = 'multi_query',
   PLAN_SOLVE = 'plan_solve',
+  ADAPTIVE_RAG = 'adaptive_rag',
+  AGENTIC_RAG = 'agentic_rag',
+  GRAPH_RAG = 'graph_rag',
 }
 
 export enum ChunkingStrategy {
   RECURSIVE = 'recursive',
   SEMANTIC = 'semantic',
   DOCUMENT = 'document',
+  LATE = 'late',
+  RAPTOR = 'raptor',
 }
 
 export enum IngestionStatus {

@@ -16,6 +16,25 @@ async def test_register_success(client, test_user_data):
 
 
 @pytest.mark.asyncio
+async def test_api_requests_require_hmac_signature(unsigned_client, test_user_data):
+    """Test service API routes reject unsigned requests."""
+    response = await unsigned_client.post("/api/v1/auth/register", json=test_user_data)
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_register_writes_audit_log(client, test_db, test_user_data):
+    """Test user registration creates an audit log entry."""
+    response = await client.post("/api/v1/auth/register", json=test_user_data)
+    assert response.status_code == 201
+
+    audit_log = await test_db["audit_logs"].find_one({"action": "user.create"})
+    assert audit_log is not None
+    assert audit_log["resource_type"] == "user"
+    assert audit_log["details"]["email"] == test_user_data["email"]
+
+
+@pytest.mark.asyncio
 async def test_register_duplicate_email(client, test_user_data):
     """Test registration with duplicate email."""
     # First registration

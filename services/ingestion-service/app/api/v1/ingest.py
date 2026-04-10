@@ -1,5 +1,7 @@
 """Ingestion API endpoints."""
 
+import hashlib
+import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -17,6 +19,7 @@ from app.storage.vector_store import VectorStore
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+INGESTION_COLLECTION = "ingestion_jobs"
 
 
 # ==================== Request/Response Models ====================
@@ -127,39 +130,44 @@ class IngestionHistoryResponse(BaseModel):
 # ==================== Helper Functions ====================
 
 
-async def get_config(db: AsyncIOMotorDatabase, config_id: str) -> Optional[Dict[str, Any]]:
-    """Get configuration by ID."""
-    configs = db["configs"]
+def get_ingestion_collection(db: AsyncIOMotorDatabase):
+    """Return the MongoDB collection used for ingestion jobs."""
+    return db[INGESTION_COLLECTION]
 
-    # Try ObjectId first
-    try:
-        config = await configs.find_one({"_id": ObjectId(config_id)})
-        if config:
-            config["_id"] = str(config["_id"])
-            return config
-    except Exception:
-        pass
 
-    # Try string ID
-    config = await configs.find_one({"_id": config_id})
-    if config:
-        config["_id"] = str(config["_id"])
-        return config
+def compute_data_source_hash(config: Dict[str, Any]) -> str:
+    """Build a stable hash of the effective data source definition."""
+    data_source = config.get("data_source", {})
+    normalized = json.dumps(data_source, sort_keys=True, default=str)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
-    # Try id field
-    config = await configs.find_one({"id": config_id})
-    if config:
-        config["_id"] = str(config["_id"])
-        return config
 
-    return None
+def build_idempotency_key(config_id: str, config: Dict[str, Any]) -> str:
+    """Build the idempotency key for ingestion dispatch."""
+    source_hash = compute_data_source_hash(config)
+    return hashlib.sha256(f"{config_id}:{source_hash}".encode("utf-8")).hexdigest()
+
+
+async def get_latest_ingestion_by_idempotency(
+    db: AsyncIOMotorDatabase,
+    idempotency_key: str,
+) -> Optional[Dict[str, Any]]:
+    """Return the newest ingestion job for the given idempotency key."""
+    ingestions = get_ingestion_collection(db)
+    ingestion = await ingestions.find_one(
+        {"idempotency_key": idempotency_key},
+        sort=[("created_at", -1)],
+    )
+    if ingestion:
+        ingestion["_id"] = str(ingestion["_id"])
+    return ingestion
 
 
 async def get_latest_ingestion(
     db: AsyncIOMotorDatabase, config_id: str
 ) -> Optional[Dict[str, Any]]:
     """Get the latest ingestion for a config."""
-    ingestions = db["ingestions"]
+    ingestions = get_ingestion_collection(db)
     ingestion = await ingestions.find_one(
         {"config_id": config_id},
         sort=[("created_at", -1)],
@@ -173,7 +181,7 @@ async def get_running_ingestion(
     db: AsyncIOMotorDatabase, config_id: str
 ) -> Optional[Dict[str, Any]]:
     """Get a running ingestion for a config."""
-    ingestions = db["ingestions"]
+    ingestions = get_ingestion_collection(db)
     ingestion = await ingestions.find_one(
         {
             "config_id": config_id,
@@ -212,6 +220,16 @@ async def start_ingestion(
     """
     user_id = get_authenticated_user_id(request)
     config = await require_config_access(db, config_id, user_id)
+    idempotency_key = build_idempotency_key(config_id, config)
+    existing = await get_latest_ingestion_by_idempotency(db, idempotency_key)
+    if existing and existing.get("status") not in {"failed", "cancelled"}:
+        return StartIngestionResponse(
+            task_id=existing.get("celery_task_id") or f"existing-{existing['_id']}",
+            ingestion_id=existing["_id"],
+            config_id=config_id,
+            status=existing.get("status", "pending"),
+            message="Returning existing ingestion",
+        )
 
     # Check if ingestion already running
     running = await get_running_ingestion(db, config_id)
@@ -227,6 +245,8 @@ async def start_ingestion(
         config_id=config_id,
         user_id=user_id,
         status=IngestionStatus.PENDING,
+        idempotency_key=idempotency_key,
+        data_source_hash=compute_data_source_hash(config),
         config_snapshot=config,
     )
     ingestion_id = await vector_store.create_ingestion(ingestion)
@@ -239,7 +259,7 @@ async def start_ingestion(
         task_id = task.id
 
         # Update ingestion with task ID
-        await db["ingestions"].update_one(
+        await get_ingestion_collection(db).update_one(
             {"_id": ingestion_id},
             {"$set": {"celery_task_id": task_id}},
         )
@@ -248,7 +268,7 @@ async def start_ingestion(
         logger.warning("Celery not available, ingestion will not run")
         task_id = f"mock-task-{ingestion_id}"
 
-        await db["ingestions"].update_one(
+        await get_ingestion_collection(db).update_one(
             {"_id": ingestion_id},
             {"$set": {"celery_task_id": task_id}},
         )
@@ -355,7 +375,7 @@ async def cancel_ingestion(
             logger.error(f"Failed to revoke task: {e}")
 
     # Update status to cancelled
-    await db["ingestions"].update_one(
+    await get_ingestion_collection(db).update_one(
         {"_id": ingestion_id},
         {
             "$set": {
@@ -398,6 +418,7 @@ async def retry_ingestion(
     """
     user_id = get_authenticated_user_id(request)
     config = await require_config_access(db, config_id, user_id)
+    idempotency_key = build_idempotency_key(config_id, config)
 
     # Get latest ingestion
     ingestion = await get_latest_ingestion(db, config_id)
@@ -406,6 +427,16 @@ async def retry_ingestion(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No ingestion found for this configuration",
+        )
+
+    if ingestion.get("status") in ("pending", "running") and ingestion.get(
+        "idempotency_key"
+    ) == idempotency_key:
+        return RetryIngestionResponse(
+            task_id=ingestion.get("celery_task_id") or f"existing-{ingestion['_id']}",
+            ingestion_id=ingestion["_id"],
+            config_id=config_id,
+            message="Returning existing ingestion",
         )
 
     if ingestion.get("status") not in ("failed", "cancelled"):
@@ -426,6 +457,8 @@ async def retry_ingestion(
         config_id=config_id,
         user_id=user_id,
         status=IngestionStatus.PENDING,
+        idempotency_key=idempotency_key,
+        data_source_hash=compute_data_source_hash(config),
         config_snapshot=config,
     )
     ingestion_id = await vector_store.create_ingestion(new_ingestion)
@@ -437,13 +470,13 @@ async def retry_ingestion(
         task = run_ingestion.delay(config_id, user_id, ingestion_id)
         task_id = task.id
 
-        await db["ingestions"].update_one(
+        await get_ingestion_collection(db).update_one(
             {"_id": ingestion_id},
             {"$set": {"celery_task_id": task_id}},
         )
     except ImportError:
         task_id = f"mock-task-{ingestion_id}"
-        await db["ingestions"].update_one(
+        await get_ingestion_collection(db).update_one(
             {"_id": ingestion_id},
             {"$set": {"celery_task_id": task_id}},
         )
@@ -663,7 +696,7 @@ async def get_ingestion_history(
     user_id = get_authenticated_user_id(request)
     await require_config_access(db, config_id, user_id)
 
-    ingestions = db["ingestions"]
+    ingestions = get_ingestion_collection(db)
 
     # Get total count
     total_count = await ingestions.count_documents({"config_id": config_id})
@@ -743,7 +776,7 @@ async def delete_ingestion_data(
     # Delete history if requested
     deleted_ingestions = 0
     if include_history:
-        result = await db["ingestions"].delete_many({"config_id": config_id})
+        result = await get_ingestion_collection(db).delete_many({"config_id": config_id})
         deleted_ingestions = result.deleted_count
 
     logger.info(

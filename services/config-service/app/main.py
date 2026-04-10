@@ -3,6 +3,8 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from rag_config_common.auth.middleware import ServiceAuthMiddleware
+from rag_config_common.observability import setup_tracing
 
 from app.api.v1.router import api_router
 from app.core.settings import settings
@@ -29,6 +31,18 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
+)
+
+setup_tracing(
+    app,
+    service_name=settings.OTEL_SERVICE_NAME,
+    environment=settings.ENVIRONMENT,
+    endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+)
+
+app.add_middleware(
+    ServiceAuthMiddleware,
+    secret=settings.INTER_SERVICE_SECRET,
 )
 
 # CORS middleware

@@ -64,7 +64,7 @@ def build_authorized_mock_db(
     def get_collection(name):
         if name == "configs":
             return mock_configs
-        if name == "ingestions":
+        if name in {"ingestion_jobs", "ingestions"}:
             return mock_ingestions
         if name == "documents":
             return mock_documents
@@ -117,8 +117,27 @@ class TestStartIngestion:
     """Tests for starting ingestion."""
 
     @pytest.mark.asyncio
-    async def test_start_ingestion_requires_user_header(self, sample_config: Dict[str, Any]):
+    async def test_start_ingestion_requires_user_header(
+        self,
+        signed_client_without_user: AsyncClient,
+        sample_config: Dict[str, Any],
+    ):
         """Test starting ingestion without X-User-ID is rejected."""
+        mock_db = MagicMock()
+        mock_configs = AsyncMock()
+        mock_configs.find_one = AsyncMock(return_value=sample_config)
+        mock_db.__getitem__ = MagicMock(return_value=mock_configs)
+
+        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
+            response = await signed_client_without_user.post(
+                f"/api/v1/ingest/{sample_config['_id']}/start"
+            )
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_start_ingestion_requires_hmac_signature(self, sample_config: Dict[str, Any]):
+        """Test unsigned ingestion requests are rejected by service auth middleware."""
         mock_db = MagicMock()
         mock_configs = AsyncMock()
         mock_configs.find_one = AsyncMock(return_value=sample_config)
@@ -127,13 +146,13 @@ class TestStartIngestion:
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
-        ) as client_without_auth:
+        ) as unsigned_client:
             with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
-                response = await client_without_auth.post(
+                response = await unsigned_client.post(
                     f"/api/v1/ingest/{sample_config['_id']}/start"
                 )
 
-        assert response.status_code == 401
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_start_ingestion_forbidden_for_non_owner(
@@ -181,7 +200,7 @@ class TestStartIngestion:
         async_client: AsyncClient,
         sample_config: Dict[str, Any],
     ):
-        """Test starting ingestion when one is already running."""
+        """Test duplicate starts return the existing ingestion job."""
         config_id = sample_config["_id"]
 
         # Create mock database
@@ -204,13 +223,16 @@ class TestStartIngestion:
         def get_collection(name):
             if name == "configs":
                 return mock_configs
+            if name in {"ingestion_jobs", "ingestions"}:
+                return mock_ingestions
             return mock_ingestions
         
         mock_db.__getitem__ = MagicMock(side_effect=get_collection)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/start")
-            assert response.status_code == 409
+            assert response.status_code == 202
+            assert response.json()["ingestion_id"] == "running-ingestion-id"
 
     @pytest.mark.asyncio
     async def test_start_ingestion_success(
@@ -239,6 +261,8 @@ class TestStartIngestion:
         def get_collection(name):
             if name == "configs":
                 return mock_configs
+            if name in {"ingestion_jobs", "ingestions"}:
+                return mock_ingestions
             return mock_ingestions
         
         mock_db.__getitem__ = MagicMock(side_effect=get_collection)
@@ -455,7 +479,7 @@ class TestRetryIngestion:
         def get_collection(name):
             if name == "configs":
                 return mock_configs
-            elif name == "ingestions":
+            elif name in {"ingestion_jobs", "ingestions"}:
                 return mock_ingestions
             elif name == "chunks":
                 return mock_chunks

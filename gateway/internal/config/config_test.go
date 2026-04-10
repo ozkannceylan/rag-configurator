@@ -8,7 +8,9 @@ import (
 func TestLoad_WithRequiredEnvVars(t *testing.T) {
 	// Set required environment variable
 	os.Setenv("JWT_SECRET_KEY", "test-secret-key")
+	os.Setenv("INTER_SERVICE_SECRET", "test-inter-service-secret")
 	defer os.Unsetenv("JWT_SECRET_KEY")
+	defer os.Unsetenv("INTER_SERVICE_SECRET")
 
 	cfg, err := Load()
 	if err != nil {
@@ -32,7 +34,9 @@ func TestLoad_WithoutRequiredEnvVars(t *testing.T) {
 
 func TestLoad_DefaultValues(t *testing.T) {
 	os.Setenv("JWT_SECRET_KEY", "test-secret")
+	os.Setenv("INTER_SERVICE_SECRET", "test-inter-service-secret")
 	defer os.Unsetenv("JWT_SECRET_KEY")
+	defer os.Unsetenv("INTER_SERVICE_SECRET")
 
 	cfg, err := Load()
 	if err != nil {
@@ -62,6 +66,7 @@ func TestLoad_DefaultValues(t *testing.T) {
 
 func TestLoad_CustomValues(t *testing.T) {
 	os.Setenv("JWT_SECRET_KEY", "custom-secret")
+	os.Setenv("INTER_SERVICE_SECRET", "custom-inter-service-secret")
 	os.Setenv("GATEWAY_PORT", "9000")
 	os.Setenv("ENVIRONMENT", "production")
 	os.Setenv("LOG_LEVEL", "debug")
@@ -70,6 +75,7 @@ func TestLoad_CustomValues(t *testing.T) {
 
 	defer func() {
 		os.Unsetenv("JWT_SECRET_KEY")
+		os.Unsetenv("INTER_SERVICE_SECRET")
 		os.Unsetenv("GATEWAY_PORT")
 		os.Unsetenv("ENVIRONMENT")
 		os.Unsetenv("LOG_LEVEL")
@@ -147,8 +153,9 @@ func TestParseCSV(t *testing.T) {
 
 func TestValidate_InvalidJWTAlgorithm(t *testing.T) {
 	cfg := &Config{
-		JWTSecretKey: "test",
-		JWTAlgorithm: "RS256", // Invalid - only HS* supported
+		JWTSecretKey:       "test",
+		InterServiceSecret: "test-inter-service-secret",
+		JWTAlgorithm:       "RS256", // Invalid - only HS* supported
 	}
 
 	err := cfg.validate()
@@ -162,8 +169,9 @@ func TestValidate_ValidJWTAlgorithms(t *testing.T) {
 
 	for _, alg := range algorithms {
 		cfg := &Config{
-			JWTSecretKey: "test",
-			JWTAlgorithm: alg,
+			JWTSecretKey:       "test",
+			InterServiceSecret: "test-inter-service-secret",
+			JWTAlgorithm:       alg,
 		}
 		if err := cfg.validate(); err != nil {
 			t.Errorf("Expected no error for algorithm %s, got: %v", alg, err)

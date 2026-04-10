@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Inter-service auth
+    INTER_SERVICE_SECRET: str = "change-this-inter-service-secret"
+
+    # OpenTelemetry
+    OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
+    OTEL_SERVICE_NAME: str = "config-service"
+
     # JWT
     JWT_SECRET_KEY: str = "change-this-in-production"
     JWT_ALGORITHM: str = "HS256"

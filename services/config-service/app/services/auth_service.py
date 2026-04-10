@@ -11,6 +11,7 @@ from app.core.security import (
     get_token_ttl_seconds,
     verify_password,
 )
+from app.core.audit import AuditLogger
 from app.core.token_blacklist import token_blacklist
 from app.core.settings import settings
 from app.core.exceptions import (
@@ -26,6 +27,7 @@ class AuthService:
 
     def __init__(self, db: AsyncIOMotorDatabase):
         self.user_repo = UserRepository(db)
+        self.audit_logger = AuditLogger(db)
 
     async def register(self, data: RegisterRequest) -> TokenResponse:
         """Register a new user."""
@@ -41,6 +43,13 @@ class AuthService:
             "password_hash": get_password_hash(data.password),
         }
         user_id = await self.user_repo.create_user(user_data)
+        await self.audit_logger.log(
+            user_id=user_id,
+            action="user.create",
+            resource_type="user",
+            resource_id=user_id,
+            details={"email": data.email},
+        )
 
         # Generate tokens
         return self._create_tokens(user_id)

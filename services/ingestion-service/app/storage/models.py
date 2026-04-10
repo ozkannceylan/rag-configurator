@@ -114,6 +114,14 @@ class IngestionRecord(BaseModel):
     # Status
     status: IngestionStatus = Field(IngestionStatus.PENDING)
     celery_task_id: Optional[str] = Field(None, description="Celery task ID")
+    idempotency_key: Optional[str] = Field(
+        None,
+        description="Stable key used to collapse duplicate ingestion starts",
+    )
+    data_source_hash: Optional[str] = Field(
+        None,
+        description="Hash of the effective data source definition",
+    )
 
     # Progress
     total_files: int = Field(0)

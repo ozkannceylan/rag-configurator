@@ -7,8 +7,11 @@ from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from rag_config_common.auth.middleware import ServiceAuthMiddleware
+from rag_config_common.observability import setup_tracing
 
 from app.api.v1.router import router as api_v1_router
+from app.core.query_cache import query_cache
 from app.core.settings import settings
 from app.db.mongodb import mongodb
 
@@ -30,6 +33,9 @@ async def lifespan(app: FastAPI):
     # Connect to MongoDB
     await mongodb.connect()
 
+    # Connect query cache
+    await query_cache.connect()
+
     # Initialize MLflow if configured
     if settings.mlflow_enabled:
         try:
@@ -47,6 +53,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info(f"Shutting down {settings.service_name}...")
+    await query_cache.disconnect()
     await mongodb.disconnect()
     logger.info(f"{settings.service_name} stopped")
 
@@ -59,6 +66,18 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs" if settings.is_development else None,
     redoc_url="/redoc" if settings.is_development else None,
+)
+
+setup_tracing(
+    app,
+    service_name=settings.otel_service_name,
+    environment=settings.environment,
+    endpoint=settings.otel_exporter_otlp_endpoint,
+)
+
+app.add_middleware(
+    ServiceAuthMiddleware,
+    secret=settings.inter_service_secret,
 )
 
 # Add CORS middleware

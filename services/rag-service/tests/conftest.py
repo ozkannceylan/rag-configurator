@@ -4,6 +4,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from unittest.mock import AsyncMock, MagicMock
+from rag_config_common.auth.hmac_verify import build_signed_headers
 
 
 @pytest.fixture
@@ -19,16 +20,45 @@ def mock_mongodb():
 async def client(mock_mongodb):
     """Create a test client with mocked dependencies."""
     from app.main import app
+    from app.core.settings import settings
     from app.db.mongodb import mongodb
 
     # Mock the database
     mongodb.database = mock_mongodb
     mongodb.client = MagicMock()
 
+    async def sign_request(request):
+        request.headers.setdefault("X-User-ID", "user-456")
+        request.headers.update(
+            build_signed_headers(
+                settings.inter_service_secret,
+                request.method,
+                request.url.path,
+                request.content,
+                user_id=request.headers.get("X-User-ID"),
+            )
+        )
+
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
-        headers={"X-User-ID": "user-456"},
+        event_hooks={"request": [sign_request]},
+    ) as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def unsigned_client(mock_mongodb):
+    """Create a client that does not sign requests."""
+    from app.main import app
+    from app.db.mongodb import mongodb
+
+    mongodb.database = mock_mongodb
+    mongodb.client = MagicMock()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
     ) as ac:
         yield ac
 
