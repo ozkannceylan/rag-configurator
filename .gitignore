@@ -97,3 +97,6 @@ gateway/.gocache/
 gateway/.gotmp/
 gateway/.gotelemetry/
 services/ingestion-service/.tmp-tests/
+
+# Mock compare runs are regenerated output, never a published result.
+artifacts/jev-eval/mock/

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Fixed Naive RAG traces for offline Jev vs LLM-as-judge comparison. Synthetic but realistic TechCorp handbook Q&A. oracle_* are human labels against the shared 1-5 quality / pass rubric.",
+  "description": "Fixed Naive RAG traces for offline Jev vs LLM-as-judge comparison. Synthetic but realistic TechCorp handbook Q&A. oracle_* are human labels against the shared 1-5 quality / pass rubric. One case carries oracle_quality_disputed=true pending re-adjudication.",
   "source": "demo/scripts/data/company-handbook + technical-docs",
   "cases": [
     {
@@ -34,7 +34,9 @@
       "answer": "Remote employees need at least 25 Mbps down and 10 Mbps up. TechCorp reimburses a $100 monthly internet stipend automatically without receipts.",
       "oracle_pass": false,
       "oracle_quality": 3,
-      "notes": "Speed is grounded; stipend amount and 'no receipt' claim are not."
+      "notes": "Speed is grounded; stipend amount and 'no receipt' claim are not.",
+      "oracle_quality_disputed": true,
+      "oracle_review_note": "oracle_quality=3 predates the rubric's contradiction precedence rule and conflicts with it. The answer does not merely omit the stipend: it states $100 where the chunk says $50, and 'without receipts' where the chunk requires one. Under the current rubric a material contradiction caps quality at 2. Needs re-adjudication by two annotators before this case is used to score any judge on the 1-5 axis. oracle_pass=False is undisputed and all judges agree."
     },
     {
       "id": "hmo-premium-grounded",

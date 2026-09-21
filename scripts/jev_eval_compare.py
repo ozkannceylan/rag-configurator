@@ -117,6 +117,11 @@ async def _main_async(args: argparse.Namespace) -> int:
         usd_cap=usd_cap,
         mode=mode,
     )
+    # A mock run must never overwrite a live one. The published report and
+    # latest.json disagreed by three minutes for exactly this reason: a mock
+    # run landed on top of a live one and the API then served the mock.
+    if not str(result.mode).startswith("live"):
+        out_dir = out_dir / "mock"
     paths = write_artifacts(result, out_dir)
     print(
         f"mode={result.mode} cases={len(cases)} repeats={repeats} cost=${result.total_cost_usd:.6f}"

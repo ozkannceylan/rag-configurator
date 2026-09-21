@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from app.evaluation.compare import (
     EvalCase,
     default_cases_path,
@@ -414,3 +416,125 @@ class TestEvaluationAPIJev:
             response = await client.get("/api/v1/evaluation/jev-compare/latest")
         assert response.status_code == 200
         assert response.json()["data"]["mode"] == "mock/demo"
+
+
+class TestMockModeCannotPublish:
+    """A mock run must not look like, or overwrite, a real result."""
+
+    @staticmethod
+    def _result(mode: str):
+        from app.evaluation.compare import CompareResult, JudgeSummary
+
+        def summary(judge: str) -> JudgeSummary:
+            return JudgeSummary(
+                judge=judge,
+                model=f"{judge}-model",
+                n_calls=10,
+                n_valid=10,
+                error_rate=0.0,
+                agreement=1.0,
+                mean_quality_variance=0.0,
+                binary_repeatability=1.0,
+                signal_value=1.0,
+                latency_p50_ms=1.0,
+                latency_p95_ms=1.0,
+                mean_latency_ms=1.0,
+                total_cost_usd=0.0,
+                mean_cost_usd=0.0,
+                mean_quality=5.0,
+                pass_rate=1.0,
+            )
+
+        return CompareResult(
+            mode=mode,
+            repeats=10,
+            generated_at="2026-09-21T00:00:00+00:00",
+            cases=[],
+            summaries={"jev": summary("jev"), "llm": summary("llm")},
+        )
+
+    def test_mock_report_draws_no_comparison(self):
+        from app.evaluation.compare import render_compare_report
+
+        report = render_compare_report(self._result("mock/demo"))
+        assert "Jev vs LLM on this product" not in report
+        assert "No comparison is drawn for a mock run" in report
+
+    def test_live_report_does_draw_a_comparison(self):
+        from app.evaluation.compare import render_compare_report
+
+        report = render_compare_report(self._result("live"))
+        assert "Jev vs LLM on this product" in report
+        assert "No comparison is drawn for a mock run" not in report
+
+    def test_mock_artifacts_land_in_their_own_directory(self, tmp_path):
+        """Regression: a mock run once overwrote the published live report."""
+        from app.evaluation.compare import write_artifacts
+
+        live = tmp_path / "jev-eval"
+        live.mkdir()
+        sentinel = live / "COMPARE_REPORT.md"
+        sentinel.write_text("LIVE RESULT", encoding="utf-8")
+
+        out_dir = live
+        result = self._result("mock/demo")
+        if not str(result.mode).startswith("live"):
+            out_dir = out_dir / "mock"
+        write_artifacts(result, out_dir)
+
+        assert sentinel.read_text(encoding="utf-8") == "LIVE RESULT"
+        assert (live / "mock" / "COMPARE_REPORT.md").exists()
+
+
+class TestErroredCallsAreNotScored:
+    """A failed call is not a judgement and must not reach any statistic."""
+
+    def test_errored_verdicts_excluded_from_every_metric(self):
+        from app.evaluation.compare import EvalCase, RepeatRecord, summarize_judge
+        from app.evaluation.verdict import JudgeVerdict
+
+        case = EvalCase(
+            id="c1",
+            question="q",
+            retrieved_chunks=[],
+            answer="a",
+            oracle_pass=False,
+            oracle_quality=2.0,
+        )
+
+        def verdict(quality: float, error: str | None = None) -> JudgeVerdict:
+            return JudgeVerdict(
+                judge="llm",
+                quality=quality,
+                does_pass=False,
+                groundedness=0.0,
+                latency_ms=1.0,
+                cost_usd=0.0,
+                model="m",
+                error=error,
+            )
+
+        # Reproduces the published run: 4 real calls at 2.0, 6 parse failures
+        # clamped to 1.0. Counting the failures yields variance 0.267.
+        records = [RepeatRecord("c1", i + 1, verdict(2.0)) for i in range(4)]
+        records += [
+            RepeatRecord("c1", i + 5, verdict(1.0, "json_decode")) for i in range(6)
+        ]
+
+        summary = summarize_judge("llm", records, [case], {"c1": False})
+
+        assert summary.n_calls == 10
+        assert summary.n_valid == 4
+        assert summary.error_rate == pytest.approx(0.6)
+        assert summary.mean_quality_variance == pytest.approx(0.0)
+        assert summary.mean_quality == pytest.approx(2.0)
+
+    def test_quantizing_removes_resolution_penalty(self):
+        """Raw variance punishes a judge for emitting at finer resolution."""
+        from app.evaluation.compare import exact_match_rate, sample_variance
+
+        fine = [4.98, 4.87, 4.86]  # Jev-style continuous output
+        coarse = [5.0, 5.0, 5.0]  # integer-constrained output
+
+        assert sample_variance(fine) > sample_variance(coarse)
+        assert exact_match_rate(fine) == exact_match_rate(coarse) == 1.0

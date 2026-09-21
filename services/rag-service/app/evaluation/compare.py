@@ -67,6 +67,11 @@ class JudgeSummary:
     mean_cost_usd: float
     mean_quality: float
     pass_rate: float
+    quantized_quality_variance: float = 0.0
+    quality_exact_match: float = 0.0
+    quality_mae_vs_oracle: float = 0.0
+    quality_spearman_vs_oracle: float = 0.0
+    n_oracle_quality: int = 0
     notes: str = ""
 
 
@@ -197,6 +202,52 @@ def _oracle_or_reference(
     return reference
 
 
+def _ranks(values: Sequence[float]) -> list[float]:
+    """Fractional ranks, averaging ties. Basis for Spearman."""
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    ranks = [0.0] * len(values)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and values[order[j + 1]] == values[order[i]]:
+            j += 1
+        shared = (i + j) / 2.0 + 1.0
+        for k in range(i, j + 1):
+            ranks[order[k]] = shared
+        i = j + 1
+    return ranks
+
+
+def spearman(xs: Sequence[float], ys: Sequence[float]) -> float:
+    """Spearman rank correlation. 0.0 when undefined (n < 2 or no variation)."""
+    if len(xs) != len(ys) or len(xs) < 2:
+        return 0.0
+    rx, ry = _ranks(xs), _ranks(ys)
+    mx, my = statistics.mean(rx), statistics.mean(ry)
+    num = sum((a - mx) * (b - my) for a, b in zip(rx, ry, strict=True))
+    dx = math.sqrt(sum((a - mx) ** 2 for a in rx))
+    dy = math.sqrt(sum((b - my) ** 2 for b in ry))
+    if dx == 0.0 or dy == 0.0:
+        return 0.0
+    return num / (dx * dy)
+
+
+def exact_match_rate(values: Sequence[float]) -> float:
+    """Fraction of repeats equal to the case's modal integer score.
+
+    Quality is ordinal. Comparing raw variance across judges that emit at
+    different resolutions is apples to oranges: a judge returning 4.98 and
+    4.87 shows variance where a judge constrained to integers shows none, for
+    identical underlying stability. Quantizing to a common grid first is what
+    makes the two comparable.
+    """
+    if not values:
+        return 0.0
+    rounded = [round(v) for v in values]
+    modal = Counter(rounded).most_common(1)[0][0]
+    return sum(1 for v in rounded if v == modal) / len(rounded)
+
+
 def summarize_judge(
     judge: str,
     records: Sequence[RepeatRecord],
@@ -213,7 +264,11 @@ def summarize_judge(
     pass_flags: list[bool] = []
     agreements: list[float] = []
     variances: list[float] = []
+    quantized_variances: list[float] = []
+    exact_matches: list[float] = []
     repeatabilities: list[float] = []
+    oracle_q: list[float] = []
+    judged_q: list[float] = []
     models: list[str] = []
 
     n_valid = 0
@@ -244,9 +299,18 @@ def summarize_judge(
         # Averaging a placeholder 0.0 in would understate both.
         if len(case_recs) >= 2:
             variances.append(sample_variance(case_quality))
+            quantized_variances.append(
+                sample_variance([round(q) for q in case_quality])
+            )
             repeatabilities.append(pairwise_repeatability(case_pass))
+            exact_matches.append(exact_match_rate(case_quality))
         else:
             n_skipped_cases += 1
+        # oracle_quality is a human 1-5 label. Without this the 1-5 axis is only
+        # ever checked for self-consistency, never for correctness.
+        if case.oracle_quality is not None:
+            oracle_q.append(float(case.oracle_quality))
+            judged_q.append(statistics.mean(case_quality))
         expected = reference.get(case.id)
         if expected is None:
             continue
@@ -275,6 +339,17 @@ def summarize_judge(
         pass_rate=(
             sum(1 for f in pass_flags if f) / len(pass_flags) if pass_flags else 0.0
         ),
+        quantized_quality_variance=(
+            statistics.mean(quantized_variances) if quantized_variances else 0.0
+        ),
+        quality_exact_match=statistics.mean(exact_matches) if exact_matches else 0.0,
+        quality_mae_vs_oracle=(
+            statistics.mean(abs(j - o) for o, j in zip(oracle_q, judged_q, strict=True))
+            if oracle_q
+            else 0.0
+        ),
+        quality_spearman_vs_oracle=spearman(oracle_q, judged_q),
+        n_oracle_quality=len(oracle_q),
         notes=(
             f"{n_skipped_cases} case(s) excluded from variance/repeatability "
             "for having fewer than 2 valid calls"
@@ -430,6 +505,31 @@ def render_compare_report(result: CompareResult) -> str:
             f"{s.latency_p95_ms:.1f} | ${s.total_cost_usd:.6f} |"
         )
     lines.append("")
+    lines.append("### Quality axis vs the human labels")
+    lines.append("")
+    lines.append(
+        "Ordinal accuracy and scale-fair repeatability. Raw variance is kept "
+        "in the table above for continuity, but it is not comparable across "
+        "judges that emit at different resolutions: a judge returning 4.98 and "
+        "4.87 shows variance where a judge constrained to integers shows none, "
+        "for identical underlying stability. Read `Quantized var` and "
+        "`Exact match` instead; both quantize to a common integer grid first."
+    )
+    lines.append("")
+    lines.append(
+        "| Judge | Labelled cases | MAE vs human | Spearman | "
+        "Quantized var | Exact match |"
+    )
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: |")
+    for name, summary in result.summaries.items():
+        lines.append(
+            f"| {name} | {summary.n_oracle_quality} | "
+            f"{summary.quality_mae_vs_oracle:.3f} | "
+            f"{summary.quality_spearman_vs_oracle:.3f} | "
+            f"{summary.quantized_quality_variance:.6f} | "
+            f"{summary.quality_exact_match:.3f} |"
+        )
+    lines.append("")
     lines.append("### What the columns mean")
     lines.append("")
     lines.append(
@@ -457,7 +557,27 @@ def render_compare_report(result: CompareResult) -> str:
         "not a billing statement."
     )
     lines.append("")
-    if "jev" in result.summaries and "llm" in result.summaries:
+    is_live = str(result.mode).startswith("live")
+    if not is_live:
+        # In mock mode the two judges are not comparable artifacts. Mock Jev
+        # replays committed real payloads, so its variance is zero by
+        # construction; the mock LLM is generated from the answer key and then
+        # corrupted with hand-chosen constants. Any ratio between them is
+        # arithmetic on those constants, not a measurement, so the head-to-head
+        # verdict is withheld rather than dressed up in the same table layout
+        # a live run uses.
+        lines.append("## No comparison is drawn for a mock run")
+        lines.append("")
+        lines.append(
+            "These numbers exercise the harness. They do not compare the "
+            "judges. Mock Jev replays recorded responses and cannot vary; the "
+            "mock LLM is synthesised from the oracle labels and perturbed by "
+            "fixed constants, and its reported latency is a constant, not a "
+            "measurement. Run with `JEV_EVAL_LIVE=1` and real keys for figures "
+            "that mean anything."
+        )
+        lines.append("")
+    if is_live and "jev" in result.summaries and "llm" in result.summaries:
         jev = result.summaries["jev"]
         llm = result.summaries["llm"]
         lines.append("## Jev vs LLM on this product")

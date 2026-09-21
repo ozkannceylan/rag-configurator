@@ -9,19 +9,42 @@ from __future__ import annotations
 import json
 from typing import Any
 
+# The rubric separates two failure modes that an earlier version conflated:
+#   - INCOMPLETENESS: the answer omits part of what was asked, but every claim
+#     it does make is supported by the chunks. The reader is under-served.
+#   - CONTRADICTION: the answer asserts something the chunks refute, or invents
+#     a specific fact. The reader is actively misled.
+#
+# These are not the same severity and must not share a band. A confidently
+# wrong dollar amount is worse than a missing one, because the reader acts on
+# it. CONTRADICTION_CAP encodes that as an explicit precedence rule rather than
+# leaving each judge to guess, which is what produced a 1.39 / 2.0 / 3.0 spread
+# between Jev, the LLM baseline and the human label on the same trace.
+CONTRADICTION_CAP = 2
+
 # Ordered Score levels. TypeSafe Score is 0-indexed over this list.
 QUALITY_SCORE_CRITERIA: list[str] = [
-    "Unhelpful or contradicts the retrieved evidence; mostly unsupported.",
-    "Partially relevant but incomplete or weakly grounded in the chunks.",
-    "Adequate: addresses the question with some support from retrieved chunks.",
-    "Good: grounded, relevant, and mostly complete given the evidence.",
-    "Excellent: fully grounded in retrieved evidence, complete, and useful.",
+    "Useless or actively misleading: the central claim contradicts the chunks, "
+    "or the answer is fabricated with no support at all.",
+    "Materially wrong: at least one specific claim (a number, amount, name, "
+    "date, or condition) contradicts the chunks or is invented, even if other "
+    "parts of the answer are correctly grounded.",
+    "Grounded but incomplete: every claim made is supported by the chunks, but "
+    "part of the question is left unanswered.",
+    "Good: grounded and essentially complete, with only minor omissions.",
+    "Excellent: fully grounded in the chunks, complete, and directly useful.",
 ]
 
 QUALITY_INSTRUCTIONS = (
     "Rate the RAG answer quality given `question`, `retrieved_chunks`, and "
-    "`answer`. Use only the retrieved chunks as evidence. Penalize claims that "
-    "are not supported by those chunks."
+    "`answer`. Use only the retrieved chunks as evidence; ignore anything you "
+    "know from outside them, and do not reward fluency. "
+    "Apply this precedence rule before choosing a level: if any specific claim "
+    "in the answer contradicts the chunks or is invented, the score cannot "
+    f"exceed {CONTRADICTION_CAP}, no matter how much of the rest is correct. "
+    "Only answers whose every claim is supported may score above "
+    f"{CONTRADICTION_CAP}, and among those the level is set by how completely "
+    "they address the question."
 )
 
 DOES_PASS_INSTRUCTIONS = (
@@ -51,6 +74,12 @@ Rubric for `quality` (integer 1-5):
 3. {c2}
 4. {c3}
 5. {c4}
+
+PRECEDENCE RULE. Decide grounding before completeness. If any specific claim in
+the answer contradicts the chunks or is invented, `quality` must not exceed
+{cap}, however much of the rest is correct. Only an answer whose every claim is
+supported may score above {cap}; among those, the level is set by how completely
+it addresses the question.
 
 `does_pass` is true only if the answer is grounded in the chunks AND adequately
 addresses the question without material hallucination.
@@ -88,6 +117,7 @@ def llm_judge_prompt(state: dict[str, Any]) -> str:
         c2=criteria[2],
         c3=criteria[3],
         c4=criteria[4],
+        cap=CONTRADICTION_CAP,
         state=json.dumps(state, ensure_ascii=False, indent=2),
     )
 
