@@ -137,6 +137,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 - [Deployment](DEPLOYMENT.md) - Production deployment guides
 - [Development](DEVELOPMENT.md) - Contributing and local development
 - [Troubleshooting](TROUBLESHOOTING.md) - Common issues and solutions
+- [Jev vs LLM-as-judge](jev-eval.md) - Frozen-trace compare harness
 
 ## License
 

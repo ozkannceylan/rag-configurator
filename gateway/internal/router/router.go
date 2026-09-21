@@ -119,6 +119,16 @@ func New(cfg *config.Config) *gin.Engine {
 			query.POST("", proxyHandler.ToRAGService())
 		}
 
+		// Evaluation endpoints - proxy to RAG Service
+		evaluation := v1.Group("/evaluation")
+		evaluation.Use(authMiddleware)
+		{
+			evaluation.POST("/evaluate", proxyHandler.ToRAGService())
+			evaluation.GET("/jev-compare/latest", proxyHandler.ToRAGService())
+			evaluation.GET("/:config_id", proxyHandler.ToRAGService())
+			evaluation.GET("/:config_id/summary", proxyHandler.ToRAGService())
+		}
+
 		// Chat endpoints - proxy to RAG Service
 		chat := v1.Group("/chat")
 		chat.Use(authMiddleware)

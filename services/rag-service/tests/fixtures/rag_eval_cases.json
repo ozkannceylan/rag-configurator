@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "description": "Fixed Naive RAG traces for offline Jev vs LLM-as-judge comparison. Synthetic but realistic TechCorp handbook Q&A. oracle_* are human labels against the shared 1-5 quality / pass rubric.",
+  "source": "demo/scripts/data/company-handbook + technical-docs",
+  "cases": [
+    {
+      "id": "pto-allowance-grounded",
+      "question": "How many PTO days does a TechCorp employee with 1 year of tenure receive?",
+      "retrieved_chunks": [
+        "Annual PTO Allowance by Tenure:\n- 0-2 years: 15 days (3 weeks)\n- 3-5 years: 20 days (4 weeks)\n- 6+ years: 25 days (5 weeks)\n- Executive team: 30 days (6 weeks)"
+      ],
+      "answer": "Employees with 0–2 years of tenure receive 15 days of PTO, which is 3 weeks. A 1-year employee falls in that band.",
+      "oracle_pass": true,
+      "oracle_quality": 5,
+      "notes": "Fully supported by the PTO policy chunk."
+    },
+    {
+      "id": "pto-hallucinated-unlimited",
+      "question": "How many PTO days does a TechCorp employee with 1 year of tenure receive?",
+      "retrieved_chunks": [
+        "Annual PTO Allowance by Tenure:\n- 0-2 years: 15 days (3 weeks)\n- 3-5 years: 20 days (4 weeks)\n- 6+ years: 25 days (5 weeks)\n- Executive team: 30 days (6 weeks)"
+      ],
+      "answer": "TechCorp offers unlimited PTO from day one, so a 1-year employee can take as much time as they want as long as their manager is informed on Slack.",
+      "oracle_pass": false,
+      "oracle_quality": 1,
+      "notes": "Contradicts the retrieved tenure table; invents unlimited PTO."
+    },
+    {
+      "id": "remote-internet-partial",
+      "question": "What internet speed and stipend does TechCorp require for remote work?",
+      "retrieved_chunks": [
+        "Work Environment Requirements:\n- Internet: Minimum 25 Mbps download / 10 Mbps upload required\nExpense Reimbursement:\n- Internet stipend: $50/month reimbursement with receipt\n- Coworking space: Up to $200/month with manager approval"
+      ],
+      "answer": "Remote employees need at least 25 Mbps down and 10 Mbps up. TechCorp reimburses a $100 monthly internet stipend automatically without receipts.",
+      "oracle_pass": false,
+      "oracle_quality": 3,
+      "notes": "Speed is grounded; stipend amount and 'no receipt' claim are not."
+    },
+    {
+      "id": "hmo-premium-grounded",
+      "question": "What is the employee monthly premium for the HMO medical plan?",
+      "retrieved_chunks": [
+        "2. HMO Plan - Value\n- Monthly Premium: Employee: $80 | Family: $250\n- Deductible: $500 individual / $1,000 family\n- Primary Care: $15 copay"
+      ],
+      "answer": "The HMO plan employee monthly premium is $80. Family coverage is $250 per month.",
+      "oracle_pass": true,
+      "oracle_quality": 5,
+      "notes": "Direct extraction from the benefits chunk."
+    },
+    {
+      "id": "wrong-retrieval-architecture",
+      "question": "How many weeks of paid leave does a birth parent get at TechCorp?",
+      "retrieved_chunks": [
+        "Gateway Layer: API Gateway (Kong) provides rate limiting, auth, SSL termination, and request routing. The web app is Vue.js behind CloudFront."
+      ],
+      "answer": "Birth parents receive routing through the Kong API gateway with 16 weeks of SSL termination leave. The architecture document confirms parental leave is handled at the edge.",
+      "oracle_pass": false,
+      "oracle_quality": 1,
+      "notes": "Retrieved chunks are unrelated architecture text; answer fabricates leave policy from them."
+    },
+    {
+      "id": "empty-context-fabricated",
+      "question": "What is TechCorp's parental leave for a birth parent?",
+      "retrieved_chunks": [],
+      "answer": "Birth parents receive 26 weeks fully paid leave plus a $10,000 baby bonus. Non-birth parents receive 12 weeks.",
+      "oracle_pass": false,
+      "oracle_quality": 1,
+      "notes": "No retrieved evidence; answer invents a policy."
+    },
+    {
+      "id": "parental-leave-grounded",
+      "question": "What is TechCorp's parental leave for a birth parent?",
+      "retrieved_chunks": [
+        "Parental Leave Policy:\n- Birth Parent: 16 weeks fully paid leave\n- Non-Birth Parent: 8 weeks fully paid leave\n- Adoption/Foster: 8 weeks paid leave from placement date\n- Return-to-work: Flexible return options available (part-time transition, remote work)"
+      ],
+      "answer": "A birth parent receives 16 weeks of fully paid parental leave. Non-birth parents and adoption/foster placements receive 8 weeks.",
+      "oracle_pass": true,
+      "oracle_quality": 5,
+      "notes": "Matches the parental leave chunk."
+    }
+  ]
+}

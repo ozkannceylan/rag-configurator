@@ -1,0 +1,53 @@
+{
+  "case_ids": [
+    "pto-allowance-grounded",
+    "pto-hallucinated-unlimited",
+    "remote-internet-partial",
+    "hmo-premium-grounded",
+    "wrong-retrieval-architecture",
+    "empty-context-fabricated",
+    "parental-leave-grounded"
+  ],
+  "generated_at": "2026-09-21T08:17:33.923390+00:00",
+  "mode": "mock/demo",
+  "repeats": 10,
+  "stopped_reason": null,
+  "summaries": {
+    "jev": {
+      "agreement": 1.0,
+      "binary_repeatability": 1.0,
+      "judge": "jev",
+      "latency_p50_ms": 18.0,
+      "latency_p95_ms": 18.0,
+      "mean_cost_usd": 0.00014125,
+      "mean_latency_ms": 18.0,
+      "mean_quality": 3.0042857142857144,
+      "mean_quality_variance": 0.0,
+      "model": "jev-1.13.0",
+      "n_calls": 70,
+      "notes": "",
+      "pass_rate": 0.42857142857142855,
+      "signal_value": 1.0,
+      "total_cost_usd": 0.009887499999999999
+    },
+    "llm": {
+      "agreement": 0.8142857142857143,
+      "binary_repeatability": 0.8314285714285715,
+      "judge": "llm",
+      "latency_p50_ms": 277.00929704959754,
+      "latency_p95_ms": 332.3868174176975,
+      "mean_cost_usd": 0.0025,
+      "mean_latency_ms": 278.92378997773505,
+      "mean_quality": 2.9517142857142855,
+      "mean_quality_variance": 0.08231142857142859,
+      "model": "gpt-4o-mini-sim",
+      "n_calls": 70,
+      "notes": "",
+      "pass_rate": 0.5285714285714286,
+      "signal_value": 0.6770204081632654,
+      "total_cost_usd": 0.17500000000000002
+    }
+  },
+  "total_cost_usd": 0.18488750000000004,
+  "usd_cap": 2.0
+}

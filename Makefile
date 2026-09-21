@@ -1,4 +1,4 @@
-.PHONY: help dev dev-up dev-down dev-logs build test lint clean install
+.PHONY: help dev dev-up dev-down dev-logs build test lint clean install jev-eval-compare jev-eval-compare-live
 
 # Default target
 help:
@@ -13,6 +13,8 @@ help:
 	@echo "  dev-logs     View Docker container logs"
 	@echo "  build        Build all Docker images"
 	@echo "  test         Run all tests"
+	@echo "  jev-eval-compare  Jev vs LLM-as-judge on frozen RAG traces (mock/demo)"
+	@echo "  jev-eval-compare-live  Same compare with live TypeSafe + Ollama Cloud keys"
 	@echo "  lint         Run linters"
 	@echo "  clean        Clean up generated files"
 	@echo "  install      Install all dependencies"
@@ -58,6 +60,13 @@ test-ui:
 	@echo "Running UI tests..."
 	cd apps/configurator-ui && npm run test
 	cd apps/sandbox-ui && npm run test
+
+# Jev vs LLM-as-judge compare (offline mock by default)
+jev-eval-compare:
+	PYTHONPATH=services/rag-service python scripts/jev_eval_compare.py --mock
+
+jev-eval-compare-live:
+	PYTHONPATH=services/rag-service python scripts/jev_eval_compare.py --live
 
 # Linting
 lint: lint-python lint-go lint-ui

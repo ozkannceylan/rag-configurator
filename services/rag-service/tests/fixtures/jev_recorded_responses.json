@@ -1,0 +1,153 @@
+{
+  "description": "Recorded TypeSafe /v1/systemone payloads for offline Jev replay. Shapes match live API answers (Score 0-indexed over 5 levels, Noul probabilities). Not a live measurement.",
+  "model": "jev-1.13.0",
+  "responses": {
+    "pto-allowance-grounded": {
+      "model": "jev-1.13.0",
+      "answers": {
+        "quality": {
+          "type": "score",
+          "score": 4.0,
+          "confidence": 0.99,
+          "legend": {
+            "0": "Unhelpful or contradicts the retrieved evidence; mostly unsupported.",
+            "1": "Partially relevant but incomplete or weakly grounded in the chunks.",
+            "2": "Adequate: addresses the question with some support from retrieved chunks.",
+            "3": "Good: grounded, relevant, and mostly complete given the evidence.",
+            "4": "Excellent: fully grounded in retrieved evidence, complete, and useful."
+          },
+          "probabilities": {"0": 0.0, "1": 0.0, "2": 0.0, "3": 0.02, "4": 0.98}
+        },
+        "does_pass": {"type": "noul", "noul": 0.99},
+        "grounded": {"type": "noul", "noul": 0.98}
+      },
+      "usage": {"input_tokens": 420, "output_tokens": 64}
+    },
+    "pto-hallucinated-unlimited": {
+      "model": "jev-1.13.0",
+      "answers": {
+        "quality": {
+          "type": "score",
+          "score": 0.02,
+          "confidence": 0.97,
+          "legend": {
+            "0": "Unhelpful or contradicts the retrieved evidence; mostly unsupported.",
+            "1": "Partially relevant but incomplete or weakly grounded in the chunks.",
+            "2": "Adequate: addresses the question with some support from retrieved chunks.",
+            "3": "Good: grounded, relevant, and mostly complete given the evidence.",
+            "4": "Excellent: fully grounded in retrieved evidence, complete, and useful."
+          },
+          "probabilities": {"0": 0.98, "1": 0.02, "2": 0.0, "3": 0.0, "4": 0.0}
+        },
+        "does_pass": {"type": "noul", "noul": 0.02},
+        "grounded": {"type": "noul", "noul": 0.03}
+      },
+      "usage": {"input_tokens": 430, "output_tokens": 64}
+    },
+    "remote-internet-partial": {
+      "model": "jev-1.13.0",
+      "answers": {
+        "quality": {
+          "type": "score",
+          "score": 2.0,
+          "confidence": 0.86,
+          "legend": {
+            "0": "Unhelpful or contradicts the retrieved evidence; mostly unsupported.",
+            "1": "Partially relevant but incomplete or weakly grounded in the chunks.",
+            "2": "Adequate: addresses the question with some support from retrieved chunks.",
+            "3": "Good: grounded, relevant, and mostly complete given the evidence.",
+            "4": "Excellent: fully grounded in retrieved evidence, complete, and useful."
+          },
+          "probabilities": {"0": 0.02, "1": 0.12, "2": 0.72, "3": 0.14, "4": 0.0}
+        },
+        "does_pass": {"type": "noul", "noul": 0.28},
+        "grounded": {"type": "noul", "noul": 0.45}
+      },
+      "usage": {"input_tokens": 455, "output_tokens": 64}
+    },
+    "hmo-premium-grounded": {
+      "model": "jev-1.13.0",
+      "answers": {
+        "quality": {
+          "type": "score",
+          "score": 4.0,
+          "confidence": 0.99,
+          "legend": {
+            "0": "Unhelpful or contradicts the retrieved evidence; mostly unsupported.",
+            "1": "Partially relevant but incomplete or weakly grounded in the chunks.",
+            "2": "Adequate: addresses the question with some support from retrieved chunks.",
+            "3": "Good: grounded, relevant, and mostly complete given the evidence.",
+            "4": "Excellent: fully grounded in retrieved evidence, complete, and useful."
+          },
+          "probabilities": {"0": 0.0, "1": 0.0, "2": 0.0, "3": 0.01, "4": 0.99}
+        },
+        "does_pass": {"type": "noul", "noul": 0.99},
+        "grounded": {"type": "noul", "noul": 0.99}
+      },
+      "usage": {"input_tokens": 390, "output_tokens": 64}
+    },
+    "wrong-retrieval-architecture": {
+      "model": "jev-1.13.0",
+      "answers": {
+        "quality": {
+          "type": "score",
+          "score": 0.05,
+          "confidence": 0.96,
+          "legend": {
+            "0": "Unhelpful or contradicts the retrieved evidence; mostly unsupported.",
+            "1": "Partially relevant but incomplete or weakly grounded in the chunks.",
+            "2": "Adequate: addresses the question with some support from retrieved chunks.",
+            "3": "Good: grounded, relevant, and mostly complete given the evidence.",
+            "4": "Excellent: fully grounded in retrieved evidence, complete, and useful."
+          },
+          "probabilities": {"0": 0.95, "1": 0.05, "2": 0.0, "3": 0.0, "4": 0.0}
+        },
+        "does_pass": {"type": "noul", "noul": 0.01},
+        "grounded": {"type": "noul", "noul": 0.04}
+      },
+      "usage": {"input_tokens": 410, "output_tokens": 64}
+    },
+    "empty-context-fabricated": {
+      "model": "jev-1.13.0",
+      "answers": {
+        "quality": {
+          "type": "score",
+          "score": 0.0,
+          "confidence": 0.99,
+          "legend": {
+            "0": "Unhelpful or contradicts the retrieved evidence; mostly unsupported.",
+            "1": "Partially relevant but incomplete or weakly grounded in the chunks.",
+            "2": "Adequate: addresses the question with some support from retrieved chunks.",
+            "3": "Good: grounded, relevant, and mostly complete given the evidence.",
+            "4": "Excellent: fully grounded in retrieved evidence, complete, and useful."
+          },
+          "probabilities": {"0": 1.0, "1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0}
+        },
+        "does_pass": {"type": "noul", "noul": 0.01},
+        "grounded": {"type": "noul", "noul": 0.0}
+      },
+      "usage": {"input_tokens": 280, "output_tokens": 64}
+    },
+    "parental-leave-grounded": {
+      "model": "jev-1.13.0",
+      "answers": {
+        "quality": {
+          "type": "score",
+          "score": 3.96,
+          "confidence": 0.97,
+          "legend": {
+            "0": "Unhelpful or contradicts the retrieved evidence; mostly unsupported.",
+            "1": "Partially relevant but incomplete or weakly grounded in the chunks.",
+            "2": "Adequate: addresses the question with some support from retrieved chunks.",
+            "3": "Good: grounded, relevant, and mostly complete given the evidence.",
+            "4": "Excellent: fully grounded in retrieved evidence, complete, and useful."
+          },
+          "probabilities": {"0": 0.0, "1": 0.0, "2": 0.01, "3": 0.03, "4": 0.96}
+        },
+        "does_pass": {"type": "noul", "noul": 0.97},
+        "grounded": {"type": "noul", "noul": 0.98}
+      },
+      "usage": {"input_tokens": 440, "output_tokens": 64}
+    }
+  }
+}

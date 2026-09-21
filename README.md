@@ -52,6 +52,7 @@ Design your retrieval strategy, pick your LLM, ingest documents, and chat with y
 - **Async Ingestion** — Celery workers process documents in the background with live progress tracking
 - **Multi-tenant Auth** — JWT authentication with role-based access control
 - **Full Local Mode** — Run entirely on your own hardware with Ollama, no cloud APIs required
+- **Jev vs LLM judges** — Compare TypeSafe Jev and LLM-as-judge on frozen RAG traces (`make jev-eval-compare`)
 
 ---
 
@@ -377,6 +378,9 @@ cd services/config-service && python -m pytest tests/ -v
 cd services/ingestion-service && python -m pytest tests/ -v
 cd services/rag-service && python -m pytest tests/ -v
 cd gateway && go test ./... -v
+
+# Jev vs LLM-as-judge on frozen RAG traces (offline mock, no API keys)
+make jev-eval-compare
 ```
 
 ---
@@ -387,10 +391,12 @@ All settings are managed through `.env`. Key variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Ollama endpoint for local LLM |
+| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Native local Ollama (`/api/chat`) |
+| `OLLAMA_API_KEY` | — | Ollama Cloud key for live LLM-as-judge (`https://ollama.com/v1`) |
 | `LOCAL_DATA_PATH` | `.` | Host folder mounted into containers for browsing |
 | `OPENAI_API_KEY` | — | OpenAI API key (if using OpenAI models) |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key (if using Claude) |
+| `TYPESAFE_API_KEY` | — | TypeSafe Jev key for `evaluator_type=jev` and live compare |
 | `JWT_SECRET_KEY` | (dev default) | **Change in production** |
 | `MONGODB_URI` | `mongodb://localhost:27017` | MongoDB connection string |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string |
@@ -418,6 +424,8 @@ All endpoints are served through the gateway at `http://localhost:8000/api/v1/`.
 | `GET` | `/ingestion/:id/status` | Get ingestion progress |
 | `POST` | `/query` | Single-turn RAG query |
 | `POST` | `/stream` | SSE streaming chat |
+| `POST` | `/evaluation/evaluate` | RAGAS, LLM-judge, quality, or Jev evaluation |
+| `GET` | `/evaluation/jev-compare/latest` | Last Jev vs LLM compare summary |
 
 ---
 
