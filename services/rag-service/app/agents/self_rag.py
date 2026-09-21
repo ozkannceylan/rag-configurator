@@ -3,16 +3,17 @@
 import logging
 import re
 import time
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, TypedDict
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any, TypedDict
 
 from app.agents.base import (
-    BaseAgent,
     AgentConfig,
     AgentError,
     AgentResponse,
     AgentStep,
+    BaseAgent,
     StepType,
 )
 from app.llm.base import BaseLLM, Message
@@ -22,14 +23,14 @@ from app.retrieval.base import BaseRetriever, RetrievedChunk
 logger = logging.getLogger(__name__)
 
 
-class RetrievalDecision(str, Enum):
+class RetrievalDecision(StrEnum):
     """Decision on whether retrieval is needed."""
 
     YES = "yes"
     NO = "no"
 
 
-class SupportVerdict(str, Enum):
+class SupportVerdict(StrEnum):
     """Verdict on whether answer is supported by context."""
 
     SUPPORTED = "supported"
@@ -37,7 +38,7 @@ class SupportVerdict(str, Enum):
     UNSUPPORTED = "unsupported"
 
 
-class UtilityVerdict(str, Enum):
+class UtilityVerdict(StrEnum):
     """Verdict on whether answer is useful."""
 
     USEFUL = "useful"
@@ -64,31 +65,31 @@ class SelfRAGState(TypedDict, total=False):
     # Input
     query: str
     config_id: str
-    conversation_history: List[Dict[str, str]]
+    conversation_history: list[dict[str, str]]
 
     # Retrieval decision
     needs_retrieval: bool
     retrieval_decision_reason: str
 
     # Retrieval
-    retrieved_chunks: List[RetrievedChunk]
+    retrieved_chunks: list[RetrievedChunk]
     context: str
 
     # Generation
     answer: str
-    sources: List[RetrievedChunk]
+    sources: list[RetrievedChunk]
 
     # Critique
-    critique: Optional[SelfRAGCritique]
+    critique: SelfRAGCritique | None
     is_supported: bool
     is_useful: bool
     refinements: int
     max_refinements: int
 
     # Tracking
-    steps: List[AgentStep]
-    error: Optional[str]
-    metadata: Dict[str, Any]
+    steps: list[AgentStep]
+    error: str | None
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -109,7 +110,7 @@ class SelfRAGConfig(AgentConfig):
     critique_temperature: float = 0.3
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SelfRAGConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "SelfRAGConfig":
         """Create from dictionary."""
         base = AgentConfig.from_dict(data)
         return cls(
@@ -217,8 +218,8 @@ class SelfRAGAgent(BaseAgent):
         self,
         retriever: BaseRetriever,
         llm: BaseLLM,
-        prompt_manager: Optional[PromptManager] = None,
-        config: Optional[SelfRAGConfig] = None,
+        prompt_manager: PromptManager | None = None,
+        config: SelfRAGConfig | None = None,
     ):
         """
         Initialize Self-RAG agent.
@@ -244,7 +245,9 @@ class SelfRAGAgent(BaseAgent):
     def _init_langgraph(self) -> bool:
         """Initialize LangGraph if available."""
         try:
-            from langgraph.graph import StateGraph, END
+            # Availability probe: the import must stay so a missing LangGraph
+            # raises ImportError here rather than later at call time.
+            from langgraph.graph import END, StateGraph  # noqa: F401
 
             self._graph = self._build_graph()
             return True
@@ -254,7 +257,7 @@ class SelfRAGAgent(BaseAgent):
 
     def _build_graph(self):
         """Build the LangGraph state graph."""
-        from langgraph.graph import StateGraph, END
+        from langgraph.graph import END, StateGraph
 
         graph = StateGraph(SelfRAGState)
 
@@ -272,7 +275,7 @@ class SelfRAGAgent(BaseAgent):
         graph.add_conditional_edges(
             "check_retrieval",
             self._needs_retrieval,
-            {"yes": "retrieve", "no": "generate"}
+            {"yes": "retrieve", "no": "generate"},
         )
 
         # Standard edges
@@ -281,9 +284,7 @@ class SelfRAGAgent(BaseAgent):
 
         # Conditional edge: critique → END or refine
         graph.add_conditional_edges(
-            "critique",
-            self._is_good_answer,
-            {"good": END, "refine": "refine"}
+            "critique", self._is_good_answer, {"good": END, "refine": "refine"}
         )
 
         graph.add_edge("refine", "generate")
@@ -299,7 +300,9 @@ class SelfRAGAgent(BaseAgent):
         """Determine if answer is good enough or needs refinement."""
         critique = state.get("critique")
         refinements = state.get("refinements", 0)
-        max_refinements = state.get("max_refinements", self.selfrag_config.max_refinements)
+        max_refinements = state.get(
+            "max_refinements", self.selfrag_config.max_refinements
+        )
 
         # Check if max refinements reached
         if refinements >= max_refinements:
@@ -312,8 +315,9 @@ class SelfRAGAgent(BaseAgent):
 
         # Check if answer is supported and useful
         is_good = (
-            critique.support_verdict == SupportVerdict.SUPPORTED and
-            critique.utility_verdict in [UtilityVerdict.USEFUL, UtilityVerdict.PARTIALLY_USEFUL]
+            critique.support_verdict == SupportVerdict.SUPPORTED
+            and critique.utility_verdict
+            in [UtilityVerdict.USEFUL, UtilityVerdict.PARTIALLY_USEFUL]
         )
 
         return "good" if is_good else "refine"
@@ -378,7 +382,9 @@ class SelfRAGAgent(BaseAgent):
             needs_retrieval = decision_match.group(1).lower() == "yes"
 
         # Parse reason
-        reason_match = re.search(r"REASON:\s*(.+?)(?:\n|$)", response, re.DOTALL | re.IGNORECASE)
+        reason_match = re.search(
+            r"REASON:\s*(.+?)(?:\n|$)", response, re.DOTALL | re.IGNORECASE
+        )
         if reason_match:
             reason = reason_match.group(1).strip()
 
@@ -455,7 +461,9 @@ class SelfRAGAgent(BaseAgent):
             # Build user prompt
             if needs_retrieval and context:
                 # RAG prompt with context
-                history_str = self.prompt_manager.format_history(history) if history else ""
+                history_str = (
+                    self.prompt_manager.format_history(history) if history else ""
+                )
                 user_prompt = self.prompt_manager.get_rag_prompt(
                     context=context,
                     query=query,
@@ -567,9 +575,21 @@ class SelfRAGAgent(BaseAgent):
                 critique = SelfRAGCritique(
                     retrieval_needed=True,
                     relevance_verdict="medium" if has_context else "low",
-                    support_verdict=SupportVerdict.SUPPORTED if answer_uses_context else SupportVerdict.PARTIALLY_SUPPORTED,
-                    utility_verdict=UtilityVerdict.USEFUL if len(answer) > 100 else UtilityVerdict.PARTIALLY_USEFUL,
-                    critique_text="Heuristic evaluation" if not self.selfrag_config.use_llm_critique else "No context available",
+                    support_verdict=(
+                        SupportVerdict.SUPPORTED
+                        if answer_uses_context
+                        else SupportVerdict.PARTIALLY_SUPPORTED
+                    ),
+                    utility_verdict=(
+                        UtilityVerdict.USEFUL
+                        if len(answer) > 100
+                        else UtilityVerdict.PARTIALLY_USEFUL
+                    ),
+                    critique_text=(
+                        "Heuristic evaluation"
+                        if not self.selfrag_config.use_llm_critique
+                        else "No context available"
+                    ),
                     score=0.7 if answer_uses_context else 0.5,
                 )
 
@@ -584,8 +604,9 @@ class SelfRAGAgent(BaseAgent):
                     "support": critique.support_verdict.value,
                     "utility": critique.utility_verdict.value,
                     "needs_refinement": not (
-                        critique.support_verdict == SupportVerdict.SUPPORTED and
-                        critique.utility_verdict in [UtilityVerdict.USEFUL, UtilityVerdict.PARTIALLY_USEFUL]
+                        critique.support_verdict == SupportVerdict.SUPPORTED
+                        and critique.utility_verdict
+                        in [UtilityVerdict.USEFUL, UtilityVerdict.PARTIALLY_USEFUL]
                     ),
                 },
                 duration_ms=duration,
@@ -598,7 +619,8 @@ class SelfRAGAgent(BaseAgent):
                 **state,
                 "critique": critique,
                 "is_supported": critique.support_verdict == SupportVerdict.SUPPORTED,
-                "is_useful": critique.utility_verdict in [UtilityVerdict.USEFUL, UtilityVerdict.PARTIALLY_USEFUL],
+                "is_useful": critique.utility_verdict
+                in [UtilityVerdict.USEFUL, UtilityVerdict.PARTIALLY_USEFUL],
                 "steps": steps,
             }
 
@@ -631,7 +653,9 @@ class SelfRAGAgent(BaseAgent):
         needs_refinement = False
 
         # Parse relevance
-        relevance_match = re.search(r"RELEVANCE:\s*(high|medium|low)", response, re.IGNORECASE)
+        relevance_match = re.search(
+            r"RELEVANCE:\s*(high|medium|low)", response, re.IGNORECASE
+        )
         if relevance_match:
             relevance = relevance_match.group(1).lower()
 
@@ -639,7 +663,7 @@ class SelfRAGAgent(BaseAgent):
         support_match = re.search(
             r"SUPPORT:\s*(supported|partially_supported|unsupported)",
             response,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
         if support_match:
             support_str = support_match.group(1).lower()
@@ -650,9 +674,7 @@ class SelfRAGAgent(BaseAgent):
 
         # Parse utility
         utility_match = re.search(
-            r"UTILITY:\s*(useful|partially_useful|not_useful)",
-            response,
-            re.IGNORECASE
+            r"UTILITY:\s*(useful|partially_useful|not_useful)", response, re.IGNORECASE
         )
         if utility_match:
             utility_str = utility_match.group(1).lower()
@@ -671,17 +693,28 @@ class SelfRAGAgent(BaseAgent):
                 pass
 
         # Parse critique text
-        critique_match = re.search(r"CRITIQUE:\s*(.+?)(?:NEEDS_REFINEMENT:|$)", response, re.DOTALL)
+        critique_match = re.search(
+            r"CRITIQUE:\s*(.+?)(?:NEEDS_REFINEMENT:|$)", response, re.DOTALL
+        )
         if critique_match:
             critique_text = critique_match.group(1).strip()
 
         # Parse needs refinement
-        refinement_match = re.search(r"NEEDS_REFINEMENT:\s*(yes|no)", response, re.IGNORECASE)
+        refinement_match = re.search(
+            r"NEEDS_REFINEMENT:\s*(yes|no)", response, re.IGNORECASE
+        )
         if refinement_match:
             needs_refinement = refinement_match.group(1).lower() == "yes"
         else:
             # Infer from support/utility
-            needs_refinement = support != SupportVerdict.SUPPORTED or utility == UtilityVerdict.NOT_USEFUL
+            # TODO: `needs_refinement` is never returned -- SelfRAGCritique has no
+            # such field, so the LLM's NEEDS_REFINEMENT verdict is thrown away and
+            # the caller re-infers it at line ~589. Suspected logic bug; behaviour
+            # left unchanged here on purpose.
+            needs_refinement = (  # noqa: F841
+                support != SupportVerdict.SUPPORTED
+                or utility == UtilityVerdict.NOT_USEFUL
+            )
 
         return SelfRAGCritique(
             retrieval_needed=True,
@@ -723,14 +756,19 @@ class SelfRAGAgent(BaseAgent):
                 refined_answer = response.content.strip()
             else:
                 # Simple refinement - just note the issue
-                refined_answer = f"{answer}\n\n[Note: This answer may need verification.]"
+                refined_answer = (
+                    f"{answer}\n\n[Note: This answer may need verification.]"
+                )
 
             duration = (time.time() - start_time) * 1000
 
             step = AgentStep(
                 step_type=StepType.REFINE,
                 name="refine_answer",
-                input={"previous_answer_length": len(answer), "refinement": refinements + 1},
+                input={
+                    "previous_answer_length": len(answer),
+                    "refinement": refinements + 1,
+                },
                 output={"refined_answer_length": len(refined_answer)},
                 duration_ms=duration,
             )
@@ -761,7 +799,7 @@ class SelfRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """
@@ -812,12 +850,16 @@ class SelfRAGAgent(BaseAgent):
                 "needs_retrieval": final_state.get("needs_retrieval", True),
                 "retrieval_reason": final_state.get("retrieval_decision_reason", ""),
                 "refinements": final_state.get("refinements", 0),
-                "critique": {
-                    "score": critique.score if critique else None,
-                    "support": critique.support_verdict.value if critique else None,
-                    "utility": critique.utility_verdict.value if critique else None,
-                    "critique_text": critique.critique_text if critique else None,
-                } if critique else None,
+                "critique": (
+                    {
+                        "score": critique.score if critique else None,
+                        "support": critique.support_verdict.value if critique else None,
+                        "utility": critique.utility_verdict.value if critique else None,
+                        "critique_text": critique.critique_text if critique else None,
+                    }
+                    if critique
+                    else None
+                ),
                 **final_state.get("metadata", {}),
             }
 
@@ -878,7 +920,7 @@ class SelfRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """

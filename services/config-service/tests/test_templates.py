@@ -1,13 +1,12 @@
 """Tests for template marketplace endpoints."""
 
 import pytest
-
 from rag_config_common.models.enums import (
-    DataSourceType,
-    LLMProvider,
-    EmbeddingProvider,
-    RetrievalMethod,
     AgentTemplate,
+    DataSourceType,
+    EmbeddingProvider,
+    LLMProvider,
+    RetrievalMethod,
 )
 
 
@@ -76,7 +75,9 @@ def template_create_data():
 
 
 @pytest.mark.asyncio
-async def test_create_template(client, auth_headers, sample_config, template_create_data):
+async def test_create_template(
+    client, auth_headers, sample_config, template_create_data
+):
     """Test creating a template from a config."""
     # Create a config first
     config_response = await client.post(
@@ -102,7 +103,9 @@ async def test_create_template(client, auth_headers, sample_config, template_cre
 
 
 @pytest.mark.asyncio
-async def test_list_templates(client, auth_headers, sample_config, template_create_data):
+async def test_list_templates(
+    client, auth_headers, sample_config, template_create_data
+):
     """Test listing templates."""
     # Create a config and template
     config_response = await client.post(
@@ -148,9 +151,7 @@ async def test_list_templates_with_category_filter(
     )
 
     # Filter by category
-    response = await client.get(
-        "/api/v1/templates/?category=qa", headers=auth_headers
-    )
+    response = await client.get("/api/v1/templates/?category=qa", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert all(item["category"] == "qa" for item in data["items"])
@@ -171,9 +172,7 @@ async def test_list_templates_with_search(
     )
 
     # Search by name
-    response = await client.get(
-        "/api/v1/templates/?search=Test", headers=auth_headers
-    )
+    response = await client.get("/api/v1/templates/?search=Test", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total"] >= 1
@@ -206,7 +205,9 @@ async def test_get_template(client, auth_headers, sample_config, template_create
 
 
 @pytest.mark.asyncio
-async def test_clone_template(client, auth_headers, sample_config, template_create_data):
+async def test_clone_template(
+    client, auth_headers, sample_config, template_create_data
+):
     """Test cloning a template as a new config."""
     # Create config and template
     config_response = await client.post(
@@ -238,7 +239,9 @@ async def test_clone_template(client, auth_headers, sample_config, template_crea
 
 
 @pytest.mark.asyncio
-async def test_delete_template(client, auth_headers, sample_config, template_create_data):
+async def test_delete_template(
+    client, auth_headers, sample_config, template_create_data
+):
     """Test deleting a template."""
     # Create config and template
     config_response = await client.post(

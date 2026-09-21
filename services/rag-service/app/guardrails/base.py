@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 
 @dataclass
@@ -12,7 +11,7 @@ class GuardrailCheck:
     name: str
     passed: bool
     score: float = 1.0
-    details: Optional[str] = None
+    details: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -28,8 +27,8 @@ class GuardrailResult:
     """Aggregated result from all guardrail checks."""
 
     passed: bool
-    checks: List[GuardrailCheck] = field(default_factory=list)
-    blocked_reason: Optional[str] = None
+    checks: list[GuardrailCheck] = field(default_factory=list)
+    blocked_reason: str | None = None
 
     def to_dict(self) -> dict:
         return {

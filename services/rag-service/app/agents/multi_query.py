@@ -2,15 +2,16 @@
 
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List, Optional, TypedDict
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Any, TypedDict
 
 from app.agents.base import (
-    BaseAgent,
     AgentConfig,
     AgentError,
     AgentResponse,
     AgentStep,
+    BaseAgent,
     StepType,
 )
 from app.llm.base import BaseLLM, Message
@@ -26,24 +27,24 @@ class MultiQueryState(TypedDict, total=False):
     # Input
     original_query: str
     config_id: str
-    conversation_history: List[Dict[str, str]]
+    conversation_history: list[dict[str, str]]
 
     # Query expansion
-    expanded_queries: List[str]
+    expanded_queries: list[str]
     num_variations: int
 
     # Retrieval results
-    all_results: Dict[str, List[RetrievedChunk]]  # query -> chunks
-    merged_context: List[RetrievedChunk]
+    all_results: dict[str, list[RetrievedChunk]]  # query -> chunks
+    merged_context: list[RetrievedChunk]
 
     # Generation
     answer: str
-    sources: List[RetrievedChunk]
+    sources: list[RetrievedChunk]
 
     # Tracking
-    steps: List[AgentStep]
-    error: Optional[str]
-    metadata: Dict[str, Any]
+    steps: list[AgentStep]
+    error: str | None
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -63,7 +64,7 @@ class MultiQueryConfig(AgentConfig):
     rrf_k: int = 60
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MultiQueryConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "MultiQueryConfig":
         """Create from dictionary."""
         base = AgentConfig.from_dict(data)
         return cls(
@@ -120,8 +121,8 @@ class MultiQueryAgent(BaseAgent):
         self,
         retriever: BaseRetriever,
         llm: BaseLLM,
-        prompt_manager: Optional[PromptManager] = None,
-        config: Optional[MultiQueryConfig] = None,
+        prompt_manager: PromptManager | None = None,
+        config: MultiQueryConfig | None = None,
     ):
         """
         Initialize Multi-Query agent.
@@ -147,7 +148,9 @@ class MultiQueryAgent(BaseAgent):
     def _init_langgraph(self) -> bool:
         """Initialize LangGraph if available."""
         try:
-            from langgraph.graph import StateGraph, END
+            # Availability probe: the import must stay so a missing LangGraph
+            # raises ImportError here rather than later at call time.
+            from langgraph.graph import END, StateGraph  # noqa: F401
 
             self._graph = self._build_graph()
             return True
@@ -157,7 +160,7 @@ class MultiQueryAgent(BaseAgent):
 
     def _build_graph(self):
         """Build the LangGraph state graph."""
-        from langgraph.graph import StateGraph, END
+        from langgraph.graph import END, StateGraph
 
         graph = StateGraph(MultiQueryState)
 
@@ -183,7 +186,9 @@ class MultiQueryAgent(BaseAgent):
         start_time = time.time()
 
         query = state["original_query"]
-        num_variations = state.get("num_variations", self.multiquery_config.num_variations)
+        num_variations = state.get(
+            "num_variations", self.multiquery_config.num_variations
+        )
 
         try:
             # Generate query variations
@@ -248,7 +253,7 @@ class MultiQueryAgent(BaseAgent):
                 "error": str(e),
             }
 
-    def _parse_expanded_queries(self, response: str, expected_count: int) -> List[str]:
+    def _parse_expanded_queries(self, response: str, expected_count: int) -> list[str]:
         """Parse expanded queries from LLM response."""
         queries = []
 
@@ -259,11 +264,11 @@ class MultiQueryAgent(BaseAgent):
             # Remove common prefixes
             for prefix in ["1.", "2.", "3.", "4.", "5.", "-", "•"]:
                 if line.startswith(prefix):
-                    line = line[len(prefix):].strip()
+                    line = line[len(prefix) :].strip()
                     break
 
             # Clean up quotes
-            line = line.strip('"\'')
+            line = line.strip("\"'")
 
             if line and len(line) > 10:  # Minimum length for a valid query
                 queries.append(line)
@@ -285,7 +290,9 @@ class MultiQueryAgent(BaseAgent):
             # Retrieve for each query in parallel
             import asyncio
 
-            async def retrieve_for_query(query: str) -> tuple[str, List[RetrievedChunk]]:
+            async def retrieve_for_query(
+                query: str,
+            ) -> tuple[str, list[RetrievedChunk]]:
                 try:
                     chunks = await self.retriever.retrieve(
                         query=query,
@@ -302,7 +309,7 @@ class MultiQueryAgent(BaseAgent):
             results = await asyncio.gather(*tasks)
 
             # Collect results
-            all_results: Dict[str, List[RetrievedChunk]] = {}
+            all_results: dict[str, list[RetrievedChunk]] = {}
             total_chunks = 0
 
             for query, chunks in results:
@@ -344,7 +351,9 @@ class MultiQueryAgent(BaseAgent):
         start_time = time.time()
 
         all_results = state.get("all_results", {})
-        max_total = state.get("max_total_chunks", self.multiquery_config.max_total_chunks)
+        max_total = state.get(
+            "max_total_chunks", self.multiquery_config.max_total_chunks
+        )
 
         try:
             if self.multiquery_config.use_rrf:
@@ -396,15 +405,15 @@ class MultiQueryAgent(BaseAgent):
 
     def _rrf_merge(
         self,
-        all_results: Dict[str, List[RetrievedChunk]],
+        all_results: dict[str, list[RetrievedChunk]],
         max_total: int,
-    ) -> List[RetrievedChunk]:
+    ) -> list[RetrievedChunk]:
         """Merge results using Reciprocal Rank Fusion."""
         from collections import defaultdict
 
         k = self.multiquery_config.rrf_k
-        rrf_scores: Dict[str, float] = defaultdict(float)
-        chunks_by_id: Dict[str, RetrievedChunk] = {}
+        rrf_scores: dict[str, float] = defaultdict(float)
+        chunks_by_id: dict[str, RetrievedChunk] = {}
 
         # Calculate RRF scores
         for query, chunks in all_results.items():
@@ -413,11 +422,16 @@ class MultiQueryAgent(BaseAgent):
                 rrf_scores[chunk_id] += 1.0 / (k + rank + 1)
 
                 # Keep chunk with highest original score
-                if chunk_id not in chunks_by_id or chunk.score > chunks_by_id[chunk_id].score:
+                if (
+                    chunk_id not in chunks_by_id
+                    or chunk.score > chunks_by_id[chunk_id].score
+                ):
                     chunks_by_id[chunk_id] = chunk
 
         # Sort by RRF score
-        sorted_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)
+        sorted_ids = sorted(
+            rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True
+        )
 
         # Build result list
         merged = []
@@ -431,9 +445,9 @@ class MultiQueryAgent(BaseAgent):
 
     def _simple_merge(
         self,
-        all_results: Dict[str, List[RetrievedChunk]],
+        all_results: dict[str, list[RetrievedChunk]],
         max_total: int,
-    ) -> List[RetrievedChunk]:
+    ) -> list[RetrievedChunk]:
         """Simple merge with deduplication by chunk ID."""
         seen_ids = set()
         merged = []
@@ -536,7 +550,7 @@ class MultiQueryAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """
@@ -632,7 +646,7 @@ class MultiQueryAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """

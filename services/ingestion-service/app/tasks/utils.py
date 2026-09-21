@@ -2,10 +2,9 @@
 
 import hashlib
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 # Supported file extensions by processor type
-SUPPORTED_EXTENSIONS: Dict[str, List[str]] = {
+SUPPORTED_EXTENSIONS: dict[str, list[str]] = {
     "text": [".txt", ".md", ".rst", ".log"],
     "pdf": [".pdf"],
     "docx": [".docx", ".doc"],
@@ -25,7 +24,7 @@ SUPPORTED_EXTENSIONS: Dict[str, List[str]] = {
 }
 
 
-def get_all_supported_extensions() -> Set[str]:
+def get_all_supported_extensions() -> set[str]:
     """Get all supported file extensions."""
     all_extensions = set()
     for extensions in SUPPORTED_EXTENSIONS.values():
@@ -39,7 +38,7 @@ def is_supported_file(file_path: str) -> bool:
     return ext in get_all_supported_extensions()
 
 
-def get_processor_type(file_path: str) -> Optional[str]:
+def get_processor_type(file_path: str) -> str | None:
     """Get the processor type for a file based on extension."""
     ext = Path(file_path).suffix.lower()
     for processor_type, extensions in SUPPORTED_EXTENSIONS.items():
@@ -56,7 +55,7 @@ def compute_file_hash(file_path: str) -> str:
             for chunk in iter(lambda: f.read(65536), b""):
                 hasher.update(chunk)
         return hasher.hexdigest()
-    except (IOError, OSError) as e:
+    except OSError as e:
         logger.error(f"Failed to hash file {file_path}: {e}")
         return ""
 
@@ -69,9 +68,9 @@ def compute_content_hash(content: str) -> str:
 def scan_directory(
     directory: str,
     recursive: bool = True,
-    include_extensions: Optional[List[str]] = None,
-    exclude_patterns: Optional[List[str]] = None,
-) -> List[str]:
+    include_extensions: list[str] | None = None,
+    exclude_patterns: list[str] | None = None,
+) -> list[str]:
     """
     Scan a directory for files.
 
@@ -160,7 +159,7 @@ def format_file_size(size_bytes: int) -> str:
     return f"{size_bytes:.2f} PB"
 
 
-def get_file_metadata(file_path: str) -> Dict[str, Any]:
+def get_file_metadata(file_path: str) -> dict[str, Any]:
     """Get metadata for a file."""
     path = Path(file_path)
     try:
@@ -174,7 +173,7 @@ def get_file_metadata(file_path: str) -> Dict[str, Any]:
             "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
             "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
         }
-    except (OSError, IOError) as e:
+    except OSError as e:
         logger.error(f"Failed to get file metadata for {file_path}: {e}")
         return {
             "file_name": path.name,
@@ -221,8 +220,8 @@ class ProgressTracker:
         self.graph_nodes = 0
         self.graph_edges = 0
         self.current_step = ""
-        self.steps_completed: List[str] = []
-        self.errors: List[Dict[str, Any]] = []
+        self.steps_completed: list[str] = []
+        self.errors: list[dict[str, Any]] = []
         self.started_at = datetime.utcnow()
 
     @property
@@ -247,11 +246,13 @@ class ProgressTracker:
     def file_failed(self, file_path: str, error: str) -> None:
         """Mark a file as failed."""
         self.failed_files += 1
-        self.errors.append({
-            "file_path": file_path,
-            "error": error,
-            "timestamp": datetime.utcnow().isoformat(),
-        })
+        self.errors.append(
+            {
+                "file_path": file_path,
+                "error": error,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
         self._update_celery_state()
 
     def set_step(self, step: str) -> None:
@@ -277,7 +278,7 @@ class ProgressTracker:
             except Exception as e:
                 logger.debug(f"Failed to update Celery state: {e}")
 
-    def get_meta(self) -> Dict[str, Any]:
+    def get_meta(self) -> dict[str, Any]:
         """Get progress metadata."""
         return {
             "ingestion_id": self.ingestion_id,
@@ -292,7 +293,7 @@ class ProgressTracker:
             "graph_edges": self.graph_edges,
         }
 
-    def get_final_stats(self) -> Dict[str, Any]:
+    def get_final_stats(self) -> dict[str, Any]:
         """Get final statistics."""
         completed_at = datetime.utcnow()
         duration = (completed_at - self.started_at).total_seconds()

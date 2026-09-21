@@ -1,11 +1,11 @@
 """Configuration export/import endpoints."""
 
-from fastapi import APIRouter, Depends, UploadFile, File, Response, status
+from fastapi import APIRouter, Depends, File, Response, UploadFile, status
 from fastapi.responses import PlainTextResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.db.mongodb import get_db
 from app.api.deps import CurrentUser
+from app.db.mongodb import get_db
 from app.schemas.config import ConfigResponse
 from app.services.export_service import ExportService
 
@@ -31,7 +31,9 @@ async def export_config(
     return Response(
         content=yaml_content,
         media_type="application/x-yaml",
-        headers={"Content-Disposition": f"attachment; filename=config-{config_id}.yaml"},
+        headers={
+            "Content-Disposition": f"attachment; filename=config-{config_id}.yaml"
+        },
     )
 
 

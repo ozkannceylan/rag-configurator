@@ -5,7 +5,6 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from rag_config_common.cache.embedding_cache import EmbeddingCache
 
 
@@ -31,7 +30,7 @@ class TestCacheKey:
     """Test cache key generation."""
 
     def test_cache_key_format(self, cache):
-        text_hash = hashlib.sha256("hello".encode("utf-8")).hexdigest()
+        text_hash = hashlib.sha256(b"hello").hexdigest()
         key = cache._cache_key("hello", "text-embedding-3-small")
         assert key == f"test_emb:text-embedding-3-small:{text_hash}"
 
@@ -137,9 +136,7 @@ class TestBatchGet:
     async def test_batch_get_handles_redis_error(self, connected_cache):
         from redis.exceptions import RedisError
 
-        connected_cache.client.pipeline = MagicMock(
-            side_effect=RedisError("fail")
-        )
+        connected_cache.client.pipeline = MagicMock(side_effect=RedisError("fail"))
 
         result = await connected_cache.get_batch(["a"], "model")
         assert result == {}
@@ -174,9 +171,7 @@ class TestBatchSet:
     async def test_batch_set_handles_redis_error(self, connected_cache):
         from redis.exceptions import RedisError
 
-        connected_cache.client.pipeline = MagicMock(
-            side_effect=RedisError("fail")
-        )
+        connected_cache.client.pipeline = MagicMock(side_effect=RedisError("fail"))
 
         # Should not raise
         await connected_cache.set_batch(["a"], "model", [[0.1]])

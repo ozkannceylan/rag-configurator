@@ -2,6 +2,11 @@
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.core.audit import AuditLogger
+from app.core.exceptions import (
+    AlreadyExistsException,
+    UnauthorizedException,
+)
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -11,15 +16,10 @@ from app.core.security import (
     get_token_ttl_seconds,
     verify_password,
 )
-from app.core.audit import AuditLogger
-from app.core.token_blacklist import token_blacklist
 from app.core.settings import settings
-from app.core.exceptions import (
-    UnauthorizedException,
-    AlreadyExistsException,
-)
+from app.core.token_blacklist import token_blacklist
 from app.db.repositories.user_repo import UserRepository
-from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 
 
 class AuthService:

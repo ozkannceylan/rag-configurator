@@ -1,7 +1,8 @@
 """vLLM client for self-hosted inference servers."""
 
 import logging
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 
@@ -16,7 +17,7 @@ class VLLMLlm(BaseLLM):
 
     DEFAULT_BASE_URL = "http://localhost:8000"
 
-    def __init__(self, config: Optional[LLMConfig] = None):
+    def __init__(self, config: LLMConfig | None = None):
         """
         Initialize vLLM client.
 
@@ -47,9 +48,9 @@ class VLLMLlm(BaseLLM):
 
     async def generate(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """
@@ -138,9 +139,9 @@ class VLLMLlm(BaseLLM):
 
     async def stream(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """
@@ -183,6 +184,7 @@ class VLLMLlm(BaseLLM):
                             break
 
                         import json
+
                         try:
                             data = json.loads(data_str)
                             if data.get("choices"):
@@ -206,7 +208,7 @@ class VLLMLlm(BaseLLM):
                 provider=self.provider,
             )
 
-    async def list_models(self) -> List[Dict[str, Any]]:
+    async def list_models(self) -> list[dict[str, Any]]:
         """
         List available models from vLLM server.
 
@@ -224,7 +226,7 @@ class VLLMLlm(BaseLLM):
             logger.error(f"Failed to list models: {e}")
             return []
 
-    async def get_model_info(self) -> Optional[Dict[str, Any]]:
+    async def get_model_info(self) -> dict[str, Any] | None:
         """
         Get information about the current model.
 
@@ -293,9 +295,9 @@ class VLLMCompletionsLLM(VLLMLlm):
 
     async def generate(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """
@@ -343,7 +345,11 @@ class VLLMCompletionsLLM(VLLMLlm):
                 content=content,
                 model=data.get("model", self.config.model),
                 usage=usage,
-                finish_reason=data["choices"][0].get("finish_reason") if data.get("choices") else None,
+                finish_reason=(
+                    data["choices"][0].get("finish_reason")
+                    if data.get("choices")
+                    else None
+                ),
             )
 
         except httpx.HTTPStatusError as e:
@@ -351,7 +357,7 @@ class VLLMCompletionsLLM(VLLMLlm):
         except Exception as e:
             raise LLMError(message=str(e), provider=self.provider)
 
-    def _messages_to_prompt(self, messages: List[Message]) -> str:
+    def _messages_to_prompt(self, messages: list[Message]) -> str:
         """Convert messages to a single prompt string."""
         parts = []
         for msg in messages:

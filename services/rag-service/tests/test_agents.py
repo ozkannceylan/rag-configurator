@@ -1,20 +1,21 @@
 """Tests for agent module."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.agents.base import (
-    BaseAgent,
-    AgentResponse,
-    AgentStep,
-    AgentState,
     AgentConfig,
     AgentError,
+    AgentResponse,
+    AgentState,
+    AgentStep,
+    BaseAgent,
     StepType,
 )
 from app.agents.naive import NaiveRAGAgent
-from app.retrieval.base import RetrievedChunk, SourceType
-from app.llm.base import Message, LLMResponse, LLMUsage
+from app.llm.base import LLMResponse, LLMUsage
+from app.retrieval.base import RetrievedChunk
 
 
 class TestStepType:
@@ -212,33 +213,39 @@ class TestNaiveRAGAgent:
     def mock_retriever(self):
         """Create a mock retriever."""
         retriever = AsyncMock()
-        retriever.retrieve = AsyncMock(return_value=[
-            RetrievedChunk(
-                content="Test content 1",
-                score=0.9,
-                chunk_id="c1",
-                document_id="d1",
-                config_id="cfg",
-            ),
-            RetrievedChunk(
-                content="Test content 2",
-                score=0.8,
-                chunk_id="c2",
-                document_id="d1",
-                config_id="cfg",
-            ),
-        ])
+        retriever.retrieve = AsyncMock(
+            return_value=[
+                RetrievedChunk(
+                    content="Test content 1",
+                    score=0.9,
+                    chunk_id="c1",
+                    document_id="d1",
+                    config_id="cfg",
+                ),
+                RetrievedChunk(
+                    content="Test content 2",
+                    score=0.8,
+                    chunk_id="c2",
+                    document_id="d1",
+                    config_id="cfg",
+                ),
+            ]
+        )
         return retriever
 
     @pytest.fixture
     def mock_llm(self):
         """Create a mock LLM."""
         llm = AsyncMock()
-        llm.generate = AsyncMock(return_value=LLMResponse(
-            content="This is the generated answer.",
-            model="gpt-4o-mini",
-            usage=LLMUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150),
-        ))
+        llm.generate = AsyncMock(
+            return_value=LLMResponse(
+                content="This is the generated answer.",
+                model="gpt-4o-mini",
+                usage=LLMUsage(
+                    prompt_tokens=100, completion_tokens=50, total_tokens=150
+                ),
+            )
+        )
 
         async def mock_stream(*args, **kwargs):
             for chunk in ["This ", "is ", "streaming ", "response."]:
@@ -252,7 +259,9 @@ class TestNaiveRAGAgent:
         """Create a mock prompt manager."""
         manager = MagicMock()
         manager.get_system_prompt = MagicMock(return_value="You are helpful.")
-        manager.get_rag_prompt = MagicMock(return_value="Context: {context}\nQuery: {query}")
+        manager.get_rag_prompt = MagicMock(
+            return_value="Context: {context}\nQuery: {query}"
+        )
         manager.format_context = MagicMock(return_value="[1] Content 1\n[2] Content 2")
         manager.format_history = MagicMock(return_value="")
         return manager
@@ -335,7 +344,9 @@ class TestNaiveRAGAgent:
         assert StepType.GENERATE in step_types
 
     @pytest.mark.asyncio
-    async def test_run_without_steps(self, mock_retriever, mock_llm, mock_prompt_manager):
+    async def test_run_without_steps(
+        self, mock_retriever, mock_llm, mock_prompt_manager
+    ):
         """Test run without step tracking."""
         config = AgentConfig(include_steps=False)
         agent = NaiveRAGAgent(
@@ -375,7 +386,9 @@ class TestNaiveRAGAgent:
         assert response.total_tokens == 150
 
     @pytest.mark.asyncio
-    async def test_run_with_min_score_filter(self, mock_retriever, mock_llm, mock_prompt_manager):
+    async def test_run_with_min_score_filter(
+        self, mock_retriever, mock_llm, mock_prompt_manager
+    ):
         """Test run with minimum score filtering."""
         config = AgentConfig(min_score=0.85)
         agent = NaiveRAGAgent(
@@ -461,7 +474,9 @@ class TestNaiveRAGAgent:
 
         # Should return a fallback response
         assert response is not None
-        assert "error" in response.answer.lower() or "apologize" in response.answer.lower()
+        assert (
+            "error" in response.answer.lower() or "apologize" in response.answer.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_close(self, agent, mock_retriever, mock_llm):
@@ -522,6 +537,7 @@ class TestBaseAgent:
 
     def test_create_step_helper(self):
         """Test _create_step helper method."""
+
         # Create a concrete implementation for testing
         class TestAgent(BaseAgent):
             async def run(self, *args, **kwargs):
@@ -585,26 +601,30 @@ class TestNaiveRAGAgentSimpleFlow:
     def mock_retriever(self):
         """Create a mock retriever."""
         retriever = AsyncMock()
-        retriever.retrieve = AsyncMock(return_value=[
-            RetrievedChunk(
-                content="Content",
-                score=0.9,
-                chunk_id="c1",
-                document_id="d1",
-                config_id="cfg",
-            ),
-        ])
+        retriever.retrieve = AsyncMock(
+            return_value=[
+                RetrievedChunk(
+                    content="Content",
+                    score=0.9,
+                    chunk_id="c1",
+                    document_id="d1",
+                    config_id="cfg",
+                ),
+            ]
+        )
         return retriever
 
     @pytest.fixture
     def mock_llm(self):
         """Create a mock LLM."""
         llm = AsyncMock()
-        llm.generate = AsyncMock(return_value=LLMResponse(
-            content="Answer",
-            model="test-model",
-            usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ))
+        llm.generate = AsyncMock(
+            return_value=LLMResponse(
+                content="Answer",
+                model="test-model",
+                usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+            )
+        )
         return llm
 
     @pytest.mark.asyncio

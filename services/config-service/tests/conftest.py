@@ -1,17 +1,16 @@
 """Pytest fixtures for Config Service tests."""
 
-import os
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.errors import ServerSelectionTimeoutError, OperationFailure
+from pymongo.errors import OperationFailure, ServerSelectionTimeoutError
 from rag_config_common.auth.hmac_verify import build_signed_headers
 
-from app.main import app
-from app.db.mongodb import mongodb
 from app.core.settings import settings
 from app.core.token_blacklist import token_blacklist
+from app.db.mongodb import mongodb
+from app.main import app
 
 # Check if MongoDB is available for testing
 MONGODB_AVAILABLE = False

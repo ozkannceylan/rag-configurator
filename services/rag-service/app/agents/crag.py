@@ -3,16 +3,17 @@
 import logging
 import re
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, TypedDict
+from enum import StrEnum
+from typing import Any, TypedDict
 
 from app.agents.base import (
-    BaseAgent,
     AgentConfig,
     AgentError,
     AgentResponse,
     AgentStep,
+    BaseAgent,
     StepType,
 )
 from app.llm.base import BaseLLM, Message
@@ -22,7 +23,7 @@ from app.retrieval.base import BaseRetriever, RetrievedChunk
 logger = logging.getLogger(__name__)
 
 
-class RelevanceGrade(str, Enum):
+class RelevanceGrade(StrEnum):
     """Relevance grade for retrieved documents."""
 
     HIGHLY_RELEVANT = "highly_relevant"
@@ -39,7 +40,7 @@ class RelevanceEvaluation:
     score: float  # 0-1
     reasoning: str
     needs_correction: bool
-    chunk_scores: Dict[str, float] = field(default_factory=dict)
+    chunk_scores: dict[str, float] = field(default_factory=dict)
 
 
 class CRAGState(TypedDict, total=False):
@@ -49,29 +50,29 @@ class CRAGState(TypedDict, total=False):
     query: str
     original_query: str
     config_id: str
-    conversation_history: List[Dict[str, str]]
+    conversation_history: list[dict[str, str]]
 
     # Retrieval
-    retrieved_chunks: List[RetrievedChunk]
+    retrieved_chunks: list[RetrievedChunk]
     context: str
 
     # Evaluation
-    evaluation: Optional[RelevanceEvaluation]
+    evaluation: RelevanceEvaluation | None
     relevance_score: float
 
     # Correction
     rewrite_count: int
     max_rewrites: int
-    rewritten_queries: List[str]
+    rewritten_queries: list[str]
 
     # Generation
     answer: str
-    sources: List[RetrievedChunk]
+    sources: list[RetrievedChunk]
 
     # Tracking
-    steps: List[AgentStep]
-    error: Optional[str]
-    metadata: Dict[str, Any]
+    steps: list[AgentStep]
+    error: str | None
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -95,7 +96,7 @@ class CRAGConfig(AgentConfig):
     expand_query: bool = True  # Expand query on rewrite
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "CRAGConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "CRAGConfig":
         """Create from dictionary."""
         base = AgentConfig.from_dict(data)
         return cls(
@@ -185,8 +186,8 @@ class CRAGAgent(BaseAgent):
         self,
         retriever: BaseRetriever,
         llm: BaseLLM,
-        prompt_manager: Optional[PromptManager] = None,
-        config: Optional[CRAGConfig] = None,
+        prompt_manager: PromptManager | None = None,
+        config: CRAGConfig | None = None,
     ):
         """
         Initialize CRAG agent.
@@ -212,7 +213,9 @@ class CRAGAgent(BaseAgent):
     def _init_langgraph(self) -> bool:
         """Initialize LangGraph if available."""
         try:
-            from langgraph.graph import StateGraph, END
+            # Availability probe: the import must stay so a missing LangGraph
+            # raises ImportError here rather than later at call time.
+            from langgraph.graph import END, StateGraph  # noqa: F401
 
             self._graph = self._build_graph()
             return True
@@ -222,7 +225,7 @@ class CRAGAgent(BaseAgent):
 
     def _build_graph(self):
         """Build the LangGraph state graph."""
-        from langgraph.graph import StateGraph, END
+        from langgraph.graph import END, StateGraph
 
         graph = StateGraph(CRAGState)
 
@@ -245,7 +248,7 @@ class CRAGAgent(BaseAgent):
             {
                 "relevant": "generate",
                 "irrelevant": "rewrite_query",
-            }
+            },
         )
 
         graph.add_edge("rewrite_query", "retrieve")
@@ -261,7 +264,9 @@ class CRAGAgent(BaseAgent):
 
         # If we've hit max rewrites, proceed to generate
         if rewrite_count >= max_rewrites:
-            logger.info(f"Max rewrites ({max_rewrites}) reached, proceeding to generate")
+            logger.info(
+                f"Max rewrites ({max_rewrites}) reached, proceeding to generate"
+            )
             return "relevant"
 
         # Check evaluation
@@ -310,7 +315,9 @@ class CRAGAgent(BaseAgent):
                 input={"query": query, "top_k": self.config.top_k},
                 output={
                     "chunk_count": len(chunks),
-                    "avg_score": sum(c.score for c in chunks) / len(chunks) if chunks else 0,
+                    "avg_score": (
+                        sum(c.score for c in chunks) / len(chunks) if chunks else 0
+                    ),
                 },
                 duration_ms=duration,
             )
@@ -396,7 +403,7 @@ class CRAGAgent(BaseAgent):
         self,
         query: str,
         context: str,
-        chunks: List[RetrievedChunk],
+        chunks: list[RetrievedChunk],
     ) -> RelevanceEvaluation:
         """Evaluate relevance using LLM and/or scores."""
         # Start with score-based evaluation
@@ -425,15 +432,25 @@ class CRAGAgent(BaseAgent):
                 max_tokens=500,
             )
 
+            # TODO: `needs_correction` (and `llm_grade`) are computed here and in
+            # the `else` branch below but never read -- RelevanceEvaluation is built
+            # at the end of this method from a plain threshold comparison, so the
+            # model's explicit NEEDS_CORRECTION verdict never reaches the correction
+            # branch. Suspected logic bug; behaviour left unchanged on purpose.
             llm_grade, llm_score, reasoning, needs_correction = self._parse_evaluation(
                 response.content
             )
         else:
-            needs_correction = score_based_score < self.crag_config.relevance_threshold
+            needs_correction = (  # noqa: F841
+                score_based_score < self.crag_config.relevance_threshold
+            )
             reasoning = f"Score-based evaluation: {score_based_score:.2f}"
 
         # Combine scores
-        if self.crag_config.use_llm_evaluation and self.crag_config.use_score_evaluation:
+        if (
+            self.crag_config.use_llm_evaluation
+            and self.crag_config.use_score_evaluation
+        ):
             final_score = (llm_score + score_based_score) / 2
         elif self.crag_config.use_llm_evaluation:
             final_score = llm_score
@@ -475,7 +492,7 @@ class CRAGAgent(BaseAgent):
         grade_match = re.search(
             r"GRADE:\s*(highly_relevant|relevant|partially_relevant|irrelevant)",
             response,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
         if grade_match:
             grade_str = grade_match.group(1).lower()
@@ -494,17 +511,24 @@ class CRAGAgent(BaseAgent):
                 pass
 
         # Parse reasoning
-        reasoning_match = re.search(r"REASONING:\s*(.+?)(?=NEEDS_CORRECTION:|$)", response, re.DOTALL)
+        reasoning_match = re.search(
+            r"REASONING:\s*(.+?)(?=NEEDS_CORRECTION:|$)", response, re.DOTALL
+        )
         if reasoning_match:
             reasoning = reasoning_match.group(1).strip()
 
         # Parse needs_correction
-        correction_match = re.search(r"NEEDS_CORRECTION:\s*(yes|no)", response, re.IGNORECASE)
+        correction_match = re.search(
+            r"NEEDS_CORRECTION:\s*(yes|no)", response, re.IGNORECASE
+        )
         if correction_match:
             needs_correction = correction_match.group(1).lower() == "yes"
         else:
             # Infer from grade/score
-            needs_correction = grade in [RelevanceGrade.IRRELEVANT, RelevanceGrade.PARTIALLY_RELEVANT]
+            needs_correction = grade in [
+                RelevanceGrade.IRRELEVANT,
+                RelevanceGrade.PARTIALLY_RELEVANT,
+            ]
 
         return grade, score, reasoning, needs_correction
 
@@ -531,7 +555,8 @@ class CRAGAgent(BaseAgent):
 
             prompt = QUERY_REWRITE_PROMPT.format(
                 query=query,
-                previous_queries="\n".join(f"- {q}" for q in previous_queries) or "None",
+                previous_queries="\n".join(f"- {q}" for q in previous_queries)
+                or "None",
                 context=context[:1500],
                 evaluation=evaluation_text,
                 expand_instruction=expand_instruction,
@@ -550,10 +575,10 @@ class CRAGAgent(BaseAgent):
             # Clean up common prefixes
             for prefix in ["Rewritten Query:", "Query:", "New Query:"]:
                 if rewritten_query.startswith(prefix):
-                    rewritten_query = rewritten_query[len(prefix):].strip()
+                    rewritten_query = rewritten_query[len(prefix) :].strip()
 
             # Remove quotes if present
-            rewritten_query = rewritten_query.strip('"\'')
+            rewritten_query = rewritten_query.strip("\"'")
 
             duration = (time.time() - start_time) * 1000
 
@@ -585,7 +610,8 @@ class CRAGAgent(BaseAgent):
             logger.error(f"Query rewrite failed: {e}")
             return {
                 **state,
-                "rewrite_count": rewrite_count + 1,  # Increment to prevent infinite loop
+                "rewrite_count": rewrite_count
+                + 1,  # Increment to prevent infinite loop
             }
 
     async def _generate_node(self, state: CRAGState) -> CRAGState:
@@ -634,8 +660,12 @@ class CRAGAgent(BaseAgent):
                 },
                 duration_ms=duration,
                 metadata={
-                    "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-                    "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+                    "prompt_tokens": (
+                        response.usage.prompt_tokens if response.usage else 0
+                    ),
+                    "completion_tokens": (
+                        response.usage.completion_tokens if response.usage else 0
+                    ),
                 },
             )
 
@@ -674,7 +704,7 @@ class CRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """
@@ -728,11 +758,27 @@ class CRAGAgent(BaseAgent):
                     "rewrite_count": final_state.get("rewrite_count", 0),
                     "rewritten_queries": final_state.get("rewritten_queries", []),
                     "final_relevance_score": final_state.get("relevance_score", 0),
-                    "evaluation": {
-                        "grade": final_state["evaluation"].grade.value if final_state.get("evaluation") else None,
-                        "score": final_state["evaluation"].score if final_state.get("evaluation") else None,
-                        "reasoning": final_state["evaluation"].reasoning if final_state.get("evaluation") else None,
-                    } if final_state.get("evaluation") else None,
+                    "evaluation": (
+                        {
+                            "grade": (
+                                final_state["evaluation"].grade.value
+                                if final_state.get("evaluation")
+                                else None
+                            ),
+                            "score": (
+                                final_state["evaluation"].score
+                                if final_state.get("evaluation")
+                                else None
+                            ),
+                            "reasoning": (
+                                final_state["evaluation"].reasoning
+                                if final_state.get("evaluation")
+                                else None
+                            ),
+                        }
+                        if final_state.get("evaluation")
+                        else None
+                    ),
                     **final_state.get("metadata", {}),
                 },
             )
@@ -779,7 +825,7 @@ class CRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """

@@ -1,6 +1,7 @@
 """MongoDB connection handler."""
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+
 from app.core.settings import settings
 
 

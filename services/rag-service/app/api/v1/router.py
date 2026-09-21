@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import query, chat, stream, evaluation, lineage
+from app.api.v1 import chat, evaluation, lineage, query, stream
 
 router = APIRouter()
 
@@ -37,53 +37,65 @@ async def list_providers():
 
     # OpenAI
     if settings.openai_api_key:
-        providers.append({
-            "id": "openai",
-            "name": "OpenAI",
-            "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
-            "available": True,
-        })
+        providers.append(
+            {
+                "id": "openai",
+                "name": "OpenAI",
+                "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
+                "available": True,
+            }
+        )
     else:
-        providers.append({
-            "id": "openai",
-            "name": "OpenAI",
-            "available": False,
-            "reason": "API key not configured",
-        })
+        providers.append(
+            {
+                "id": "openai",
+                "name": "OpenAI",
+                "available": False,
+                "reason": "API key not configured",
+            }
+        )
 
     # Anthropic
     if settings.anthropic_api_key:
-        providers.append({
-            "id": "anthropic",
-            "name": "Anthropic",
-            "models": ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"],
-            "available": True,
-        })
+        providers.append(
+            {
+                "id": "anthropic",
+                "name": "Anthropic",
+                "models": ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"],
+                "available": True,
+            }
+        )
     else:
-        providers.append({
-            "id": "anthropic",
-            "name": "Anthropic",
-            "available": False,
-            "reason": "API key not configured",
-        })
+        providers.append(
+            {
+                "id": "anthropic",
+                "name": "Anthropic",
+                "available": False,
+                "reason": "API key not configured",
+            }
+        )
 
     # Ollama (always available if URL is set)
-    providers.append({
-        "id": "ollama",
-        "name": "Ollama (Local)",
-        "base_url": settings.ollama_base_url,
-        "default_model": settings.ollama_default_model,
-        "available": True,
-    })
+    providers.append(
+        {
+            "id": "ollama",
+            "name": "Ollama (Local)",
+            "base_url": settings.ollama_base_url,
+            "default_model": settings.ollama_default_model,
+            "available": True,
+        }
+    )
 
     # vLLM
     if settings.vllm_base_url:
-        providers.append({
-            "id": "vllm",
-            "name": "vLLM (Self-hosted)",
-            "base_url": settings.vllm_base_url,
-            "available": True,
-        })
+        providers.append(
+            {
+                "id": "vllm",
+                "name": "vLLM (Self-hosted)",
+                "base_url": settings.vllm_base_url,
+                "available": True,
+            }
+        )
 
     return {
         "providers": providers,

@@ -1,7 +1,8 @@
 """OpenAI LLM implementation."""
 
 import logging
-from typing import Any, AsyncIterator, List, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from app.llm.base import BaseLLM, LLMConfig, LLMResponse, LLMUsage, Message
 from app.llm.exceptions import (
@@ -29,7 +30,7 @@ class OpenAILLM(BaseLLM):
         "o1-mini",
     ]
 
-    def __init__(self, config: Optional[LLMConfig] = None):
+    def __init__(self, config: LLMConfig | None = None):
         """
         Initialize OpenAI LLM.
 
@@ -68,9 +69,9 @@ class OpenAILLM(BaseLLM):
 
     async def generate(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """
@@ -139,9 +140,9 @@ class OpenAILLM(BaseLLM):
 
     async def stream(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """
@@ -188,12 +189,12 @@ class OpenAILLM(BaseLLM):
         """Handle OpenAI API errors."""
         try:
             from openai import (
-                APIError,
                 APIConnectionError,
+                APIError,
                 APITimeoutError,
                 AuthenticationError,
-                RateLimitError,
                 BadRequestError,
+                RateLimitError,
             )
 
             if isinstance(error, AuthenticationError):
@@ -213,7 +214,10 @@ class OpenAILLM(BaseLLM):
                 )
             elif isinstance(error, BadRequestError):
                 error_msg = str(error).lower()
-                if "context_length" in error_msg or "maximum context length" in error_msg:
+                if (
+                    "context_length" in error_msg
+                    or "maximum context length" in error_msg
+                ):
                     raise LLMContextLengthError(
                         message=str(error),
                         provider=self.provider,

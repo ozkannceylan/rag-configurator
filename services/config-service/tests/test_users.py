@@ -20,7 +20,9 @@ async def test_user_update_and_delete_write_audit_logs(client, auth_headers, tes
     assert delete_response.status_code == 200
 
     actions = []
-    async for entry in test_db["audit_logs"].find({"resource_type": "user"}).sort("created_at", 1):
+    async for entry in (
+        test_db["audit_logs"].find({"resource_type": "user"}).sort("created_at", 1)
+    ):
         actions.append(entry["action"])
 
     assert "user.update" in actions

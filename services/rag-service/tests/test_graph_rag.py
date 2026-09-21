@@ -1,12 +1,12 @@
 """Tests for GraphRAG agent."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.agents.base import AgentConfig, AgentResponse, AgentStep, StepType
+from app.agents.base import AgentResponse
 from app.agents.graph_rag import GraphRAGAgent, GraphRAGConfig
-from app.llm.base import LLMResponse, LLMUsage, Message
+from app.llm.base import LLMResponse, LLMUsage
 from app.retrieval.base import RetrievedChunk, SourceType
 
 
@@ -221,11 +221,13 @@ async def test_run_includes_steps(graph_rag_agent, mock_llm):
 
 async def test_graphrag_config_from_dict():
     """Test GraphRAGConfig.from_dict."""
-    config = GraphRAGConfig.from_dict({
-        "top_k": 10,
-        "temperature": 0.5,
-        "max_community_summaries": 20,
-    })
+    config = GraphRAGConfig.from_dict(
+        {
+            "top_k": 10,
+            "temperature": 0.5,
+            "max_community_summaries": 20,
+        }
+    )
     assert config.top_k == 10
     assert config.temperature == 0.5
     assert config.max_community_summaries == 20
@@ -265,7 +267,10 @@ async def test_no_community_summaries(mock_retriever, mock_llm):
     )
 
     response = await agent.run(query="What are the main themes?", config_id="cfg-1")
-    assert "no community summaries" in response.answer.lower() or "indexing" in response.answer.lower()
+    assert (
+        "no community summaries" in response.answer.lower()
+        or "indexing" in response.answer.lower()
+    )
 
 
 async def test_agent_factory_creates_graph_rag():

@@ -2,14 +2,15 @@
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class MessageRole(str, Enum):
+class MessageRole(StrEnum):
     """Message role types."""
 
     SYSTEM = "system"
@@ -23,10 +24,10 @@ class Message:
 
     role: str  # "system", "user", "assistant"
     content: str
-    name: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    name: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         result = {"role": self.role, "content": self.content}
         if self.name:
@@ -57,7 +58,7 @@ class LLMUsage:
     completion_tokens: int = 0
     total_tokens: int = 0
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         """Convert to dictionary."""
         return {
             "prompt_tokens": self.prompt_tokens,
@@ -72,11 +73,11 @@ class LLMResponse:
 
     content: str
     model: str
-    usage: Optional[LLMUsage] = None
-    finish_reason: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    usage: LLMUsage | None = None
+    finish_reason: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "content": self.content,
@@ -99,9 +100,9 @@ class LLMConfig:
     presence_penalty: float = 0.0
 
     # Provider settings
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    organization: Optional[str] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    organization: str | None = None
 
     # Timeout and retry
     timeout_seconds: float = 60.0
@@ -111,7 +112,7 @@ class LLMConfig:
     stream: bool = False
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "LLMConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "LLMConfig":
         """Create from dictionary."""
         return cls(
             model=data.get("model", "gpt-4o-mini"),
@@ -146,7 +147,7 @@ class LLMRateLimitError(LLMError):
         self,
         message: str = "Rate limit exceeded",
         provider: str = "unknown",
-        retry_after: Optional[float] = None,
+        retry_after: float | None = None,
         **kwargs,
     ):
         self.retry_after = retry_after
@@ -172,7 +173,7 @@ class LLMContextLengthError(LLMError):
         self,
         message: str = "Context length exceeded",
         provider: str = "unknown",
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
         **kwargs,
     ):
         self.max_tokens = max_tokens
@@ -182,7 +183,7 @@ class LLMContextLengthError(LLMError):
 class BaseLLM(ABC):
     """Abstract base class for LLM providers."""
 
-    def __init__(self, config: Optional[LLMConfig] = None):
+    def __init__(self, config: LLMConfig | None = None):
         """
         Initialize LLM.
 
@@ -205,9 +206,9 @@ class BaseLLM(ABC):
     @abstractmethod
     async def generate(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """
@@ -227,9 +228,9 @@ class BaseLLM(ABC):
     @abstractmethod
     async def stream(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """
@@ -249,9 +250,9 @@ class BaseLLM(ABC):
     async def generate_text(
         self,
         prompt: str,
-        system_prompt: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        system_prompt: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> str:
         """
@@ -284,14 +285,14 @@ class BaseLLM(ABC):
         """Clean up resources."""
         pass
 
-    def _get_temperature(self, temperature: Optional[float]) -> float:
+    def _get_temperature(self, temperature: float | None) -> float:
         """Get temperature, using override or config default."""
         return temperature if temperature is not None else self.config.temperature
 
-    def _get_max_tokens(self, max_tokens: Optional[int]) -> int:
+    def _get_max_tokens(self, max_tokens: int | None) -> int:
         """Get max tokens, using override or config default."""
         return max_tokens if max_tokens is not None else self.config.max_tokens
 
-    def _format_messages(self, messages: List[Message]) -> List[Dict[str, str]]:
+    def _format_messages(self, messages: list[Message]) -> list[dict[str, str]]:
         """Format messages for API call."""
         return [msg.to_dict() for msg in messages]

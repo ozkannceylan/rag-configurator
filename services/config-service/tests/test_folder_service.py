@@ -1,13 +1,13 @@
 """Tests for folder scanning service (no MongoDB required)."""
 
-import os
 import tempfile
-import pytest
 from pathlib import Path
 
-from app.services.folder_service import FolderService, EXTENSION_MAP, MULTIMODAL_TYPES
+import pytest
+from rag_config_common.models.enums import DataSourceType, DataType
+
 from app.schemas.folder import FolderScanRequest
-from rag_config_common.models.enums import DataType, DataSourceType
+from app.services.folder_service import EXTENSION_MAP, MULTIMODAL_TYPES, FolderService
 
 
 class TestFolderService:
@@ -63,9 +63,7 @@ class TestFolderService:
         result = folder_service.scan(request)
 
         # Find the documents folder
-        docs_folder = next(
-            (f for f in result.folders if f.name == "documents"), None
-        )
+        docs_folder = next((f for f in result.folders if f.name == "documents"), None)
         assert docs_folder is not None
 
         detected = set(docs_folder.detected_types)
@@ -82,9 +80,7 @@ class TestFolderService:
         result = folder_service.scan(request)
 
         # Find the images folder
-        images_folder = next(
-            (f for f in result.folders if f.name == "images"), None
-        )
+        images_folder = next((f for f in result.folders if f.name == "images"), None)
         assert images_folder is not None
         assert DataType.IMAGE in images_folder.detected_types
 
@@ -108,9 +104,7 @@ class TestFolderService:
         result = folder_service.scan(request)
 
         # Find the nested folder
-        nested_folder = next(
-            (f for f in result.folders if f.name == "nested"), None
-        )
+        nested_folder = next((f for f in result.folders if f.name == "nested"), None)
         assert nested_folder is not None
         assert len(nested_folder.children) > 0
 
@@ -123,7 +117,9 @@ class TestFolderService:
         with pytest.raises(ValueError, match="does not exist"):
             folder_service.scan(request)
 
-    def test_scan_file_instead_of_directory_raises_error(self, folder_service, temp_dir):
+    def test_scan_file_instead_of_directory_raises_error(
+        self, folder_service, temp_dir
+    ):
         """Test that scanning a file instead of directory raises ValueError."""
         # Create a file to scan
         file_path = Path(temp_dir) / "test.txt"
@@ -154,9 +150,7 @@ class TestFolderService:
         result = folder_service.scan(request)
 
         # Find the documents folder (should have 3 files, not counting hidden)
-        docs_folder = next(
-            (f for f in result.folders if f.name == "documents"), None
-        )
+        docs_folder = next((f for f in result.folders if f.name == "documents"), None)
         assert docs_folder is not None
         assert docs_folder.file_count == 3
 
@@ -169,9 +163,7 @@ class TestFolderService:
         result = folder_service.scan(request)
 
         # Documents folder should only count visible files
-        docs_folder = next(
-            (f for f in result.folders if f.name == "documents"), None
-        )
+        docs_folder = next((f for f in result.folders if f.name == "documents"), None)
         # We created 3 visible files + 1 hidden, count should be 3
         assert docs_folder.file_count == 3
 

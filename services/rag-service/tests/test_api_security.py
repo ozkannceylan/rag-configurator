@@ -59,10 +59,11 @@ async def test_query_returns_503_on_llm_provider_failure(client, mock_mongodb):
         side_effect=LLMError("upstream unavailable", provider="openai")
     )
 
-    with patch("app.api.v1.query.get_retriever_from_config", return_value=MagicMock()), patch(
-        "app.api.v1.query.get_llm_from_config", return_value=MagicMock()
-    ), patch("app.api.v1.query.PromptManager", return_value=MagicMock()), patch(
-        "app.api.v1.query.get_agent", return_value=fake_agent
+    with (
+        patch("app.api.v1.query.get_retriever_from_config", return_value=MagicMock()),
+        patch("app.api.v1.query.get_llm_from_config", return_value=MagicMock()),
+        patch("app.api.v1.query.PromptManager", return_value=MagicMock()),
+        patch("app.api.v1.query.get_agent", return_value=fake_agent),
     ):
         response = await client.post(
             "/api/v1/query/",

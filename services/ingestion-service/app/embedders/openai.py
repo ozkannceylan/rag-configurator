@@ -3,14 +3,13 @@
 import asyncio
 import logging
 import time
-from typing import Dict, List, Optional
 
 from app.embedders.base import BaseEmbedder, EmbeddingConfig, EmbeddingResult
 
 logger = logging.getLogger(__name__)
 
 # Model dimension mappings
-OPENAI_MODEL_DIMENSIONS: Dict[str, int] = {
+OPENAI_MODEL_DIMENSIONS: dict[str, int] = {
     "text-embedding-3-small": 1536,
     "text-embedding-3-large": 3072,
     "text-embedding-ada-002": 1536,
@@ -28,7 +27,7 @@ class OpenAIEmbedder(BaseEmbedder):
     text-embedding-3-small and text-embedding-3-large.
     """
 
-    def __init__(self, config: Optional[EmbeddingConfig] = None):
+    def __init__(self, config: EmbeddingConfig | None = None):
         """
         Initialize OpenAI embedder.
 
@@ -46,17 +45,17 @@ class OpenAIEmbedder(BaseEmbedder):
             self.config.batch_size = MAX_BATCH_SIZE
 
         self._client = None
-        self._dimensions: Optional[int] = None
+        self._dimensions: int | None = None
 
     def _get_client(self):
         """Get or create OpenAI client."""
         if self._client is None:
             try:
                 from openai import AsyncOpenAI
-            except ImportError:
+            except ImportError as err:
                 raise ImportError(
                     "OpenAI SDK not installed. Install with: pip install openai"
-                )
+                ) from err
 
             # Get API key from config or environment
             api_key = self.config.api_key
@@ -103,7 +102,7 @@ class OpenAIEmbedder(BaseEmbedder):
         return self.config.model
 
     async def embed(
-        self, texts: List[str], config: Optional[EmbeddingConfig] = None
+        self, texts: list[str], config: EmbeddingConfig | None = None
     ) -> EmbeddingResult:
         """
         Generate embeddings using OpenAI API.
@@ -181,7 +180,7 @@ class OpenAIEmbedder(BaseEmbedder):
                         raise RuntimeError(
                             f"Failed to generate embeddings after {cfg.max_retries} "
                             f"attempts: {e}"
-                        )
+                        ) from e
 
         processing_time = (time.time() - start_time) * 1000
 

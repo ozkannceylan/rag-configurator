@@ -1,7 +1,5 @@
 """Tests for RAPTOR hierarchical chunker."""
 
-from unittest.mock import AsyncMock
-
 import pytest
 
 from app.chunkers.base import Chunk, ChunkingConfig
@@ -98,6 +96,7 @@ def test_chunk_with_custom_metadata(raptor, sample_text):
 
 async def test_chunk_async_builds_tree(sample_text):
     """Test async RAPTOR tree building with mock LLM."""
+
     async def mock_llm_generate(prompt: str) -> str:
         return "This is a summary of the cluster about programming languages."
 
@@ -113,7 +112,7 @@ async def test_chunk_async_builds_tree(sample_text):
     assert len(chunks) > 0
 
     # Should have multiple levels
-    levels = set(c.metadata.get("tree_level", 0) for c in chunks)
+    levels = {c.metadata.get("tree_level", 0) for c in chunks}
     assert 0 in levels  # leaf level always present
     # With enough text and cluster_size=2, should produce at least level 1
     if len([c for c in chunks if c.metadata.get("tree_level") == 0]) > 1:
@@ -133,16 +132,15 @@ async def test_chunk_async_without_llm_falls_back(sample_text):
 
 async def test_chunk_async_with_embeddings(sample_text):
     """Test RAPTOR with embedding-based clustering."""
+
     async def mock_llm_generate(prompt: str) -> str:
         return "Summary of programming concepts."
 
     async def mock_embed_texts(texts):
         # Return simple mock embeddings (2D for simplicity)
         import math
-        return [
-            [math.sin(i * 0.5), math.cos(i * 0.5)]
-            for i in range(len(texts))
-        ]
+
+        return [[math.sin(i * 0.5), math.cos(i * 0.5)] for i in range(len(texts))]
 
     config = ChunkingConfig(chunk_size=200, chunk_overlap=0, min_chunk_size=10)
     raptor = RAPTORChunker(
@@ -166,6 +164,7 @@ async def test_chunk_async_empty_text():
 
 async def test_chunk_async_single_chunk():
     """Test async chunk when text fits in a single chunk."""
+
     async def mock_llm_generate(prompt: str) -> str:
         return "Short summary."
 
@@ -223,7 +222,7 @@ def test_cluster_sequential(raptor, sample_text):
 
 def test_raptor_in_factory():
     """Test that RAPTOR is registered in the chunker factory."""
-    from app.chunkers.factory import get_chunker, ChunkingStrategy
+    from app.chunkers.factory import ChunkingStrategy, get_chunker
 
     chunker = get_chunker(ChunkingStrategy.RAPTOR)
     assert isinstance(chunker, RAPTORChunker)

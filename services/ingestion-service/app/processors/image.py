@@ -4,7 +4,7 @@ import base64
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.processors.base import (
     BaseProcessor,
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class ImageProcessor(BaseProcessor):
     """Processor for image files using OCR or Vision LLM."""
 
-    supported_extensions: List[str] = [
+    supported_extensions: list[str] = [
         ".png",
         ".jpg",
         ".jpeg",
@@ -30,7 +30,7 @@ class ImageProcessor(BaseProcessor):
     ]
 
     async def process(
-        self, file_path: Path, config: Optional[DocumentProcessingConfig] = None
+        self, file_path: Path, config: DocumentProcessingConfig | None = None
     ) -> ProcessedDocument:
         """
         Process an image file and extract text.
@@ -46,8 +46,8 @@ class ImageProcessor(BaseProcessor):
         """
         cfg = config or self.config
         start_time = time.time()
-        errors: List[str] = []
-        warnings: List[str] = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         # Validate file
         try:
@@ -111,7 +111,7 @@ class ImageProcessor(BaseProcessor):
             warnings=warnings,
         )
 
-    def _get_image_dimensions(self, file_path: Path) -> Dict[str, Any]:
+    def _get_image_dimensions(self, file_path: Path) -> dict[str, Any]:
         """Get image dimensions using PIL."""
         try:
             from PIL import Image
@@ -123,8 +123,8 @@ class ImageProcessor(BaseProcessor):
                     "format": img.format,
                     "mode": img.mode,
                 }
-        except ImportError:
-            raise ImportError("Pillow not installed")
+        except ImportError as err:
+            raise ImportError("Pillow not installed") from err
 
     async def _process_with_vision_llm(
         self, file_path: Path, config: DocumentProcessingConfig
@@ -132,8 +132,8 @@ class ImageProcessor(BaseProcessor):
         """Process image using Vision LLM (OpenAI GPT-4 Vision)."""
         try:
             from openai import AsyncOpenAI
-        except ImportError:
-            raise ImportError("OpenAI SDK not installed")
+        except ImportError as err:
+            raise ImportError("OpenAI SDK not installed") from err
 
         from app.core.settings import settings
 
@@ -197,8 +197,8 @@ class ImageProcessor(BaseProcessor):
         try:
             import pytesseract
             from PIL import Image
-        except ImportError:
-            raise ImportError("pytesseract or Pillow not installed")
+        except ImportError as err:
+            raise ImportError("pytesseract or Pillow not installed") from err
 
         # Open image with PIL
         with Image.open(file_path) as img:

@@ -3,15 +3,14 @@
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from enum import StrEnum
+from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.retrieval.base import (
     BaseRetriever,
     RetrievalConfig,
-    RetrievalResult,
     RetrievedChunk,
     SourceType,
 )
@@ -19,7 +18,7 @@ from app.retrieval.base import (
 logger = logging.getLogger(__name__)
 
 
-class FusionMethod(str, Enum):
+class FusionMethod(StrEnum):
     """Score fusion methods."""
 
     RRF = "rrf"  # Reciprocal Rank Fusion
@@ -57,7 +56,7 @@ class HybridConfig:
     graph_top_k: int = 10
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "HybridConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "HybridConfig":
         """Create from dictionary."""
         fusion_method = data.get("fusion_method", "rrf")
         if isinstance(fusion_method, str):
@@ -85,13 +84,13 @@ class HybridConfig:
 class HybridRetrievalResult:
     """Result of hybrid retrieval."""
 
-    chunks: List[RetrievedChunk]
-    source_results: Dict[str, List[RetrievedChunk]] = field(default_factory=dict)
-    fusion_scores: Dict[str, float] = field(default_factory=dict)
+    chunks: list[RetrievedChunk]
+    source_results: dict[str, list[RetrievedChunk]] = field(default_factory=dict)
+    fusion_scores: dict[str, float] = field(default_factory=dict)
     retrieval_time_ms: float = 0.0
-    source_counts: Dict[str, int] = field(default_factory=dict)
+    source_counts: dict[str, int] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "chunks": [c.to_dict() for c in self.chunks],
@@ -120,8 +119,8 @@ class HybridRetriever(BaseRetriever):
     def __init__(
         self,
         db: AsyncIOMotorDatabase,
-        config: Optional[RetrievalConfig] = None,
-        hybrid_config: Optional[HybridConfig] = None,
+        config: RetrievalConfig | None = None,
+        hybrid_config: HybridConfig | None = None,
     ):
         """
         Initialize hybrid retriever.
@@ -186,9 +185,9 @@ class HybridRetriever(BaseRetriever):
         self,
         query: str,
         config_id: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> List[RetrievedChunk]:
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
+    ) -> list[RetrievedChunk]:
         """
         Retrieve relevant chunks using multiple methods.
 
@@ -213,8 +212,8 @@ class HybridRetriever(BaseRetriever):
         self,
         query: str,
         config_id: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
     ) -> HybridRetrievalResult:
         """
         Retrieve with full details about source contributions.
@@ -279,8 +278,8 @@ class HybridRetriever(BaseRetriever):
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Collect results by source
-        source_results: Dict[str, List[RetrievedChunk]] = {}
-        source_counts: Dict[str, int] = {}
+        source_results: dict[str, list[RetrievedChunk]] = {}
+        source_counts: dict[str, int] = {}
 
         for name, result in zip(retriever_names, results):
             if isinstance(result, Exception):
@@ -297,7 +296,8 @@ class HybridRetriever(BaseRetriever):
         # Apply score threshold
         if self.hybrid_config.min_score > 0:
             fused_chunks = [
-                c for c in fused_chunks
+                c
+                for c in fused_chunks
                 if fusion_scores.get(c.chunk_id, 0) >= self.hybrid_config.min_score
             ]
 
@@ -316,8 +316,8 @@ class HybridRetriever(BaseRetriever):
 
     def _fuse_results(
         self,
-        source_results: Dict[str, List[RetrievedChunk]],
-    ) -> tuple[List[RetrievedChunk], Dict[str, float]]:
+        source_results: dict[str, list[RetrievedChunk]],
+    ) -> tuple[list[RetrievedChunk], dict[str, float]]:
         """
         Fuse results from multiple retrievers.
 
@@ -340,16 +340,16 @@ class HybridRetriever(BaseRetriever):
 
     def _rrf_fusion(
         self,
-        source_results: Dict[str, List[RetrievedChunk]],
-    ) -> tuple[List[RetrievedChunk], Dict[str, float]]:
+        source_results: dict[str, list[RetrievedChunk]],
+    ) -> tuple[list[RetrievedChunk], dict[str, float]]:
         """
         Apply Reciprocal Rank Fusion.
 
         RRF formula: score = sum(1 / (k + rank + 1)) for each ranking
         """
         k = self.hybrid_config.rrf_k
-        scores: Dict[str, float] = defaultdict(float)
-        chunks_by_id: Dict[str, RetrievedChunk] = {}
+        scores: dict[str, float] = defaultdict(float)
+        chunks_by_id: dict[str, RetrievedChunk] = {}
 
         for source, chunks in source_results.items():
             for rank, chunk in enumerate(chunks):
@@ -357,7 +357,10 @@ class HybridRetriever(BaseRetriever):
                 scores[chunk_id] += 1.0 / (k + rank + 1)
 
                 # Keep the chunk with highest original score
-                if chunk_id not in chunks_by_id or chunk.score > chunks_by_id[chunk_id].score:
+                if (
+                    chunk_id not in chunks_by_id
+                    or chunk.score > chunks_by_id[chunk_id].score
+                ):
                     chunks_by_id[chunk_id] = chunk
 
         # Sort by fused score
@@ -376,8 +379,8 @@ class HybridRetriever(BaseRetriever):
 
     def _linear_fusion(
         self,
-        source_results: Dict[str, List[RetrievedChunk]],
-    ) -> tuple[List[RetrievedChunk], Dict[str, float]]:
+        source_results: dict[str, list[RetrievedChunk]],
+    ) -> tuple[list[RetrievedChunk], dict[str, float]]:
         """
         Apply weighted linear combination.
 
@@ -389,8 +392,8 @@ class HybridRetriever(BaseRetriever):
             "graph": self.hybrid_config.graph_weight,
         }
 
-        scores: Dict[str, float] = defaultdict(float)
-        chunks_by_id: Dict[str, RetrievedChunk] = {}
+        scores: dict[str, float] = defaultdict(float)
+        chunks_by_id: dict[str, RetrievedChunk] = {}
 
         for source, chunks in source_results.items():
             weight = weights.get(source, 0.0)
@@ -407,7 +410,10 @@ class HybridRetriever(BaseRetriever):
                 normalized_score = chunk.score / max_score
                 scores[chunk_id] += weight * normalized_score
 
-                if chunk_id not in chunks_by_id or chunk.score > chunks_by_id[chunk_id].score:
+                if (
+                    chunk_id not in chunks_by_id
+                    or chunk.score > chunks_by_id[chunk_id].score
+                ):
                     chunks_by_id[chunk_id] = chunk
 
         # Sort by fused score
@@ -424,13 +430,13 @@ class HybridRetriever(BaseRetriever):
 
     def _max_fusion(
         self,
-        source_results: Dict[str, List[RetrievedChunk]],
-    ) -> tuple[List[RetrievedChunk], Dict[str, float]]:
+        source_results: dict[str, list[RetrievedChunk]],
+    ) -> tuple[list[RetrievedChunk], dict[str, float]]:
         """
         Use maximum score across all retrievers.
         """
-        scores: Dict[str, float] = {}
-        chunks_by_id: Dict[str, RetrievedChunk] = {}
+        scores: dict[str, float] = {}
+        chunks_by_id: dict[str, RetrievedChunk] = {}
 
         for source, chunks in source_results.items():
             for chunk in chunks:
@@ -454,20 +460,23 @@ class HybridRetriever(BaseRetriever):
 
     def _sum_fusion(
         self,
-        source_results: Dict[str, List[RetrievedChunk]],
-    ) -> tuple[List[RetrievedChunk], Dict[str, float]]:
+        source_results: dict[str, list[RetrievedChunk]],
+    ) -> tuple[list[RetrievedChunk], dict[str, float]]:
         """
         Sum scores across all retrievers.
         """
-        scores: Dict[str, float] = defaultdict(float)
-        chunks_by_id: Dict[str, RetrievedChunk] = {}
+        scores: dict[str, float] = defaultdict(float)
+        chunks_by_id: dict[str, RetrievedChunk] = {}
 
         for source, chunks in source_results.items():
             for chunk in chunks:
                 chunk_id = chunk.chunk_id
                 scores[chunk_id] += chunk.score
 
-                if chunk_id not in chunks_by_id or chunk.score > chunks_by_id[chunk_id].score:
+                if (
+                    chunk_id not in chunks_by_id
+                    or chunk.score > chunks_by_id[chunk_id].score
+                ):
                     chunks_by_id[chunk_id] = chunk
 
         # Sort by score
@@ -484,9 +493,9 @@ class HybridRetriever(BaseRetriever):
 
 
 def reciprocal_rank_fusion(
-    rankings: List[List[str]],
+    rankings: list[list[str]],
     k: int = 60,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Standalone RRF function for external use.
 
@@ -497,7 +506,7 @@ def reciprocal_rank_fusion(
     Returns:
         Dictionary mapping doc_id to fused score
     """
-    scores: Dict[str, float] = defaultdict(float)
+    scores: dict[str, float] = defaultdict(float)
     for ranking in rankings:
         for rank, doc_id in enumerate(ranking):
             scores[doc_id] += 1.0 / (k + rank + 1)

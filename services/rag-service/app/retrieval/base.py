@@ -4,13 +4,13 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class SourceType(str, Enum):
+class SourceType(StrEnum):
     """Type of retrieval source."""
 
     VECTOR = "vector"
@@ -36,9 +36,9 @@ class RetrievedChunk:
     source_type: SourceType = SourceType.VECTOR
 
     # Document metadata
-    file_name: Optional[str] = None
-    file_path: Optional[str] = None
-    file_type: Optional[str] = None
+    file_name: str | None = None
+    file_path: str | None = None
+    file_type: str | None = None
 
     # Position within document
     chunk_index: int = 0
@@ -46,16 +46,16 @@ class RetrievedChunk:
     end_char: int = 0
 
     # RBAC metadata
-    folder_path: Optional[str] = None
-    access_tags: List[str] = field(default_factory=list)
+    folder_path: str | None = None
+    access_tags: list[str] = field(default_factory=list)
 
     # Additional metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     # Timestamps
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "content": self.content,
@@ -75,7 +75,7 @@ class RetrievedChunk:
     @classmethod
     def from_mongo_doc(
         cls,
-        doc: Dict[str, Any],
+        doc: dict[str, Any],
         score: float,
         source_type: SourceType = SourceType.VECTOR,
     ) -> "RetrievedChunk":
@@ -113,9 +113,9 @@ class RetrievalConfig:
     embedding_model: str = "text-embedding-3-small"
 
     # Filter settings
-    folder_paths: Optional[List[str]] = None
-    access_tags: Optional[List[str]] = None
-    file_types: Optional[List[str]] = None
+    folder_paths: list[str] | None = None
+    access_tags: list[str] | None = None
+    file_types: list[str] | None = None
 
     # Search settings
     use_reranking: bool = False
@@ -126,7 +126,7 @@ class RetrievalConfig:
     num_candidates: int = 100  # Number of candidates for ANN search
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "RetrievalConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "RetrievalConfig":
         """Create from dictionary."""
         return cls(
             top_k=data.get("top_k", 5),
@@ -147,7 +147,7 @@ class RetrievalConfig:
 class RetrievalResult:
     """Result of a retrieval operation."""
 
-    chunks: List[RetrievedChunk]
+    chunks: list[RetrievedChunk]
     query: str
     config_id: str
 
@@ -156,9 +156,9 @@ class RetrievalResult:
     retrieval_time_ms: float = 0.0
 
     # Source breakdown
-    source_counts: Dict[str, int] = field(default_factory=dict)
+    source_counts: dict[str, int] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "chunks": [c.to_dict() for c in self.chunks],
@@ -173,7 +173,7 @@ class RetrievalResult:
 class BaseRetriever(ABC):
     """Abstract base class for retrievers."""
 
-    def __init__(self, config: Optional[RetrievalConfig] = None):
+    def __init__(self, config: RetrievalConfig | None = None):
         """
         Initialize retriever.
 
@@ -187,9 +187,9 @@ class BaseRetriever(ABC):
         self,
         query: str,
         config_id: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> List[RetrievedChunk]:
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
+    ) -> list[RetrievedChunk]:
         """
         Retrieve relevant chunks for a query.
 
@@ -208,8 +208,8 @@ class BaseRetriever(ABC):
         self,
         query: str,
         config_id: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
     ) -> RetrievalResult:
         """
         Retrieve with full statistics.
@@ -237,7 +237,7 @@ class BaseRetriever(ABC):
         retrieval_time = (time.time() - start_time) * 1000
 
         # Count by source type
-        source_counts: Dict[str, int] = {}
+        source_counts: dict[str, int] = {}
         for chunk in chunks:
             source = chunk.source_type.value
             source_counts[source] = source_counts.get(source, 0) + 1
@@ -252,8 +252,8 @@ class BaseRetriever(ABC):
         )
 
     def _apply_score_threshold(
-        self, chunks: List[RetrievedChunk], min_score: Optional[float] = None
-    ) -> List[RetrievedChunk]:
+        self, chunks: list[RetrievedChunk], min_score: float | None = None
+    ) -> list[RetrievedChunk]:
         """Filter chunks by minimum score."""
         threshold = min_score if min_score is not None else self.config.min_score
         return [c for c in chunks if c.score >= threshold]

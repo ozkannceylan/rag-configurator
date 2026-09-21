@@ -2,8 +2,8 @@
 
 import hashlib
 import logging
-import math
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from app.chunkers.base import BaseChunker, Chunk, ChunkingConfig
 
@@ -37,11 +37,11 @@ class RAPTORChunker(BaseChunker):
 
     def __init__(
         self,
-        config: Optional[ChunkingConfig] = None,
+        config: ChunkingConfig | None = None,
         max_tree_levels: int = 3,
         cluster_size: int = 5,
-        llm_generate: Optional[Callable[..., Any]] = None,
-        embed_texts: Optional[Callable[..., Any]] = None,
+        llm_generate: Callable[..., Any] | None = None,
+        embed_texts: Callable[..., Any] | None = None,
     ) -> None:
         """
         Initialize RAPTOR chunker.
@@ -67,9 +67,9 @@ class RAPTORChunker(BaseChunker):
     def chunk(
         self,
         text: str,
-        config: Optional[ChunkingConfig] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[Chunk]:
+        config: ChunkingConfig | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[Chunk]:
         """
         Split text into leaf-level chunks.
 
@@ -96,9 +96,9 @@ class RAPTORChunker(BaseChunker):
     async def chunk_async(
         self,
         text: str,
-        config: Optional[ChunkingConfig] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[Chunk]:
+        config: ChunkingConfig | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[Chunk]:
         """
         Build the full RAPTOR tree asynchronously.
 
@@ -123,7 +123,7 @@ class RAPTORChunker(BaseChunker):
         )
         leaf_chunks = self._filter_chunks(leaf_chunks)
 
-        all_chunks: List[Chunk] = list(leaf_chunks)
+        all_chunks: list[Chunk] = list(leaf_chunks)
         current_level_chunks = leaf_chunks
 
         # Steps 2-4: Iteratively cluster and summarize
@@ -143,9 +143,11 @@ class RAPTORChunker(BaseChunker):
         logger.info(
             "RAPTOR tree built: %d total chunks across %d levels",
             len(all_chunks),
-            (max(c.metadata.get("tree_level", 0) for c in all_chunks) + 1)
-            if all_chunks
-            else 0,
+            (
+                (max(c.metadata.get("tree_level", 0) for c in all_chunks) + 1)
+                if all_chunks
+                else 0
+            ),
         )
 
         return all_chunks
@@ -158,13 +160,13 @@ class RAPTORChunker(BaseChunker):
         self,
         text: str,
         config: ChunkingConfig,
-        base_metadata: Dict[str, Any],
-    ) -> List[Chunk]:
+        base_metadata: dict[str, Any],
+    ) -> list[Chunk]:
         """Split text into leaf-level chunks using recursive character splitting."""
         separators = ["\n\n", "\n", ". ", " "]
         segments = self._recursive_split(text, separators, config.chunk_size)
 
-        chunks: List[Chunk] = []
+        chunks: list[Chunk] = []
         position = 0
 
         for i, segment in enumerate(segments):
@@ -186,8 +188,8 @@ class RAPTORChunker(BaseChunker):
         return chunks
 
     def _recursive_split(
-        self, text: str, separators: List[str], max_size: int
-    ) -> List[str]:
+        self, text: str, separators: list[str], max_size: int
+    ) -> list[str]:
         """Recursively split text on separators until under max_size."""
         if len(text) <= max_size:
             return [text] if text.strip() else []
@@ -195,7 +197,7 @@ class RAPTORChunker(BaseChunker):
         for sep in separators:
             if sep in text:
                 parts = text.split(sep)
-                segments: List[str] = []
+                segments: list[str] = []
                 current = ""
                 for part in parts:
                     candidate = current + sep + part if current else part
@@ -214,13 +216,13 @@ class RAPTORChunker(BaseChunker):
 
     async def _build_next_level(
         self,
-        chunks: List[Chunk],
+        chunks: list[Chunk],
         level: int,
-        base_metadata: Dict[str, Any],
-    ) -> List[Chunk]:
+        base_metadata: dict[str, Any],
+    ) -> list[Chunk]:
         """Cluster current-level chunks and summarize each cluster."""
         clusters = await self._cluster_chunks(chunks)
-        parent_chunks: List[Chunk] = []
+        parent_chunks: list[Chunk] = []
 
         for cluster_idx, cluster in enumerate(clusters):
             if not cluster:
@@ -234,13 +236,13 @@ class RAPTORChunker(BaseChunker):
                 summary = await self.llm_generate(prompt)
                 summary = summary.strip()
             except Exception as e:
-                logger.warning("Summarization failed for cluster %d: %s", cluster_idx, e)
+                logger.warning(
+                    "Summarization failed for cluster %d: %s", cluster_idx, e
+                )
                 continue
 
             child_hashes = [c.content_hash for c in cluster]
-            parent_id = hashlib.md5(
-                "|".join(child_hashes).encode()
-            ).hexdigest()
+            parent_id = hashlib.md5("|".join(child_hashes).encode()).hexdigest()
 
             meta = {
                 **base_metadata,
@@ -264,9 +266,7 @@ class RAPTORChunker(BaseChunker):
 
         return parent_chunks
 
-    async def _cluster_chunks(
-        self, chunks: List[Chunk]
-    ) -> List[List[Chunk]]:
+    async def _cluster_chunks(self, chunks: list[Chunk]) -> list[list[Chunk]]:
         """
         Cluster chunks by embedding similarity (k-means style) or simple
         sequential grouping if embeddings are unavailable.
@@ -275,16 +275,14 @@ class RAPTORChunker(BaseChunker):
             return await self._cluster_by_similarity(chunks)
         return self._cluster_sequential(chunks)
 
-    def _cluster_sequential(self, chunks: List[Chunk]) -> List[List[Chunk]]:
+    def _cluster_sequential(self, chunks: list[Chunk]) -> list[list[Chunk]]:
         """Simple sequential grouping as fallback."""
-        clusters: List[List[Chunk]] = []
+        clusters: list[list[Chunk]] = []
         for i in range(0, len(chunks), self.cluster_size):
             clusters.append(chunks[i : i + self.cluster_size])
         return clusters
 
-    async def _cluster_by_similarity(
-        self, chunks: List[Chunk]
-    ) -> List[List[Chunk]]:
+    async def _cluster_by_similarity(self, chunks: list[Chunk]) -> list[list[Chunk]]:
         """Cluster chunks using embeddings and simple k-means."""
         texts = [c.content for c in chunks]
 
@@ -297,7 +295,7 @@ class RAPTORChunker(BaseChunker):
         n_clusters = max(1, len(chunks) // self.cluster_size)
         assignments = self._simple_kmeans(embeddings, n_clusters)
 
-        clusters: Dict[int, List[Chunk]] = {}
+        clusters: dict[int, list[Chunk]] = {}
         for idx, cluster_id in enumerate(assignments):
             clusters.setdefault(cluster_id, []).append(chunks[idx])
 
@@ -305,8 +303,8 @@ class RAPTORChunker(BaseChunker):
 
     @staticmethod
     def _simple_kmeans(
-        vectors: List[List[float]], k: int, max_iter: int = 20
-    ) -> List[int]:
+        vectors: list[list[float]], k: int, max_iter: int = 20
+    ) -> list[int]:
         """Minimal k-means implementation without numpy dependency."""
         n = len(vectors)
         if n == 0 or k <= 0:
@@ -327,7 +325,9 @@ class RAPTORChunker(BaseChunker):
                 best = 0
                 best_dist = float("inf")
                 for ci, centroid in enumerate(centroids):
-                    dist = sum((a - b) ** 2 for a, b in zip(vec, centroid))
+                    dist = sum(
+                        (a - b) ** 2 for a, b in zip(vec, centroid, strict=False)
+                    )
                     if dist < best_dist:
                         best_dist = dist
                         best = ci

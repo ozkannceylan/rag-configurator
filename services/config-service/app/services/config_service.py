@@ -1,29 +1,28 @@
 """Configuration service with business logic."""
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
-
-from rag_config_common.models.enums import IngestionStatus
 from rag_config_common.models.config import (
-    RBACConfig,
-    ChunkingConfig,
-    GuardrailsConfig,
-    EvaluationConfig,
     CacheConfig,
+    ChunkingConfig,
+    EvaluationConfig,
+    GuardrailsConfig,
+    RBACConfig,
 )
+from rag_config_common.models.enums import IngestionStatus
 
+from app.core.audit import AuditLogger
 from app.core.exceptions import (
-    NotFoundException,
     AlreadyExistsException,
     ForbiddenException,
+    NotFoundException,
 )
-from app.core.audit import AuditLogger
 from app.db.repositories.config_repo import ConfigRepository
 from app.schemas.config import (
     ConfigCreate,
-    ConfigUpdate,
+    ConfigListResponse,
     ConfigResponse,
     ConfigSummary,
-    ConfigListResponse,
+    ConfigUpdate,
 )
 
 
@@ -111,9 +110,7 @@ class ConfigService:
         configs = await self.config_repo.find_by_user(user_id, skip, page_size)
         total = await self.config_repo.count_by_user(user_id)
 
-        items = [
-            ConfigSummary(**ConfigRepository.serialize_doc(c)) for c in configs
-        ]
+        items = [ConfigSummary(**ConfigRepository.serialize_doc(c)) for c in configs]
 
         return ConfigListResponse(
             items=items,

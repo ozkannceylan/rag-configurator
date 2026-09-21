@@ -1,27 +1,25 @@
 """Tests for ingestion API endpoints."""
 
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 from bson import ObjectId
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
-from app.storage.models import IngestionRecord, IngestionStatus
 
 
 def build_authorized_mock_db(
     config_id: str,
     *,
     owner_id: str = "test-user-id",
-    config_doc: Dict[str, Any] | None = None,
-    latest_ingestion: Dict[str, Any] | None = None,
-    running_ingestion: Dict[str, Any] | None = None,
-    history_items: list[Dict[str, Any]] | None = None,
-    document_stats: list[Dict[str, Any]] | None = None,
+    config_doc: dict[str, Any] | None = None,
+    latest_ingestion: dict[str, Any] | None = None,
+    running_ingestion: dict[str, Any] | None = None,
+    history_items: list[dict[str, Any]] | None = None,
+    document_stats: list[dict[str, Any]] | None = None,
     graph_nodes_count: int = 0,
     graph_edges_count: int = 0,
 ):
@@ -39,15 +37,15 @@ def build_authorized_mock_db(
 
     mock_ingestions = AsyncMock()
     mock_ingestions.find_one = AsyncMock(
-        return_value=running_ingestion if running_ingestion is not None else latest_ingestion
+        return_value=(
+            running_ingestion if running_ingestion is not None else latest_ingestion
+        )
     )
     mock_ingestions.update_one = AsyncMock()
     mock_ingestions.insert_one = AsyncMock(
         return_value=MagicMock(inserted_id="new-ing-id")
     )
-    mock_ingestions.count_documents = AsyncMock(
-        return_value=len(history_items or [])
-    )
+    mock_ingestions.count_documents = AsyncMock(return_value=len(history_items or []))
     mock_ingestions.find = MagicMock(return_value=AsyncIterator(history_items or []))
 
     mock_documents = MagicMock()
@@ -120,7 +118,7 @@ class TestStartIngestion:
     async def test_start_ingestion_requires_user_header(
         self,
         signed_client_without_user: AsyncClient,
-        sample_config: Dict[str, Any],
+        sample_config: dict[str, Any],
     ):
         """Test starting ingestion without X-User-ID is rejected."""
         mock_db = MagicMock()
@@ -136,7 +134,9 @@ class TestStartIngestion:
         assert response.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_start_ingestion_requires_hmac_signature(self, sample_config: Dict[str, Any]):
+    async def test_start_ingestion_requires_hmac_signature(
+        self, sample_config: dict[str, Any]
+    ):
         """Test unsigned ingestion requests are rejected by service auth middleware."""
         mock_db = MagicMock()
         mock_configs = AsyncMock()
@@ -158,7 +158,7 @@ class TestStartIngestion:
     async def test_start_ingestion_forbidden_for_non_owner(
         self,
         async_client: AsyncClient,
-        sample_config: Dict[str, Any],
+        sample_config: dict[str, Any],
     ):
         """Test starting ingestion for someone else's config is rejected."""
         other_user_config = {
@@ -173,7 +173,9 @@ class TestStartIngestion:
         mock_db.__getitem__ = MagicMock(return_value=mock_configs)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
-            response = await async_client.post(f"/api/v1/ingest/{sample_config['_id']}/start")
+            response = await async_client.post(
+                f"/api/v1/ingest/{sample_config['_id']}/start"
+            )
 
         assert response.status_code == 403
 
@@ -188,8 +190,10 @@ class TestStartIngestion:
         mock_configs.find_one = AsyncMock(return_value=None)
         mock_db.__getitem__ = MagicMock(return_value=mock_configs)
 
-        with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db), \
-             patch("app.api.v1.ingest.get_database", return_value=mock_db):
+        with (
+            patch("app.db.mongodb.mongodb.get_database", return_value=mock_db),
+            patch("app.api.v1.ingest.get_database", return_value=mock_db),
+        ):
 
             response = await async_client.post(f"/api/v1/ingest/{fake_config_id}/start")
             assert response.status_code == 404
@@ -198,7 +202,7 @@ class TestStartIngestion:
     async def test_start_ingestion_already_running(
         self,
         async_client: AsyncClient,
-        sample_config: Dict[str, Any],
+        sample_config: dict[str, Any],
     ):
         """Test duplicate starts return the existing ingestion job."""
         config_id = sample_config["_id"]
@@ -207,10 +211,10 @@ class TestStartIngestion:
         mock_db = MagicMock()
         mock_configs = AsyncMock()
         mock_ingestions = AsyncMock()
-        
+
         # Config exists
         mock_configs.find_one = AsyncMock(return_value=sample_config)
-        
+
         # Running ingestion exists
         running_ingestion = {
             "_id": "running-ingestion-id",
@@ -219,14 +223,14 @@ class TestStartIngestion:
             "celery_task_id": "task-123",
         }
         mock_ingestions.find_one = AsyncMock(return_value=running_ingestion)
-        
+
         def get_collection(name):
             if name == "configs":
                 return mock_configs
             if name in {"ingestion_jobs", "ingestions"}:
                 return mock_ingestions
             return mock_ingestions
-        
+
         mock_db.__getitem__ = MagicMock(side_effect=get_collection)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
@@ -238,10 +242,10 @@ class TestStartIngestion:
     async def test_start_ingestion_success(
         self,
         async_client: AsyncClient,
-        sample_config: Dict[str, Any],
+        sample_config: dict[str, Any],
     ):
         """Test successfully starting ingestion.
-        
+
         Note: This test uses the ImportError fallback path in the actual code
         since Celery workers aren't running during tests. The mock-task ID
         generated confirms the endpoint logic works correctly.
@@ -252,25 +256,27 @@ class TestStartIngestion:
         mock_db = MagicMock()
         mock_configs = AsyncMock()
         mock_ingestions = AsyncMock()
-        
+
         mock_configs.find_one = AsyncMock(return_value=sample_config)
         mock_ingestions.find_one = AsyncMock(return_value=None)  # No running ingestion
-        mock_ingestions.insert_one = AsyncMock(return_value=MagicMock(inserted_id="new-ing-id"))
+        mock_ingestions.insert_one = AsyncMock(
+            return_value=MagicMock(inserted_id="new-ing-id")
+        )
         mock_ingestions.update_one = AsyncMock()
-        
+
         def get_collection(name):
             if name == "configs":
                 return mock_configs
             if name in {"ingestion_jobs", "ingestions"}:
                 return mock_ingestions
             return mock_ingestions
-        
+
         mock_db.__getitem__ = MagicMock(side_effect=get_collection)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/start")
             assert response.status_code == 202
-            
+
             data = response.json()
             assert "task_id" in data
             assert data["config_id"] == config_id
@@ -414,7 +420,7 @@ class TestCancelIngestion:
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.post(f"/api/v1/ingest/{config_id}/cancel")
             assert response.status_code == 200
-            
+
             data = response.json()
             assert data["success"] is True
 
@@ -453,7 +459,7 @@ class TestRetryIngestion:
     async def test_retry_failed_ingestion(
         self,
         async_client: AsyncClient,
-        sample_config: Dict[str, Any],
+        sample_config: dict[str, Any],
     ):
         """Test successfully retrying a failed ingestion."""
         config_id = sample_config["_id"]
@@ -468,14 +474,16 @@ class TestRetryIngestion:
         mock_ingestions = AsyncMock()
         mock_chunks = AsyncMock()
         mock_documents = AsyncMock()
-        
+
         mock_configs.find_one = AsyncMock(return_value=sample_config)
         mock_ingestions.find_one = AsyncMock(return_value=failed_ingestion)
-        mock_ingestions.insert_one = AsyncMock(return_value=MagicMock(inserted_id="new-ing-id"))
+        mock_ingestions.insert_one = AsyncMock(
+            return_value=MagicMock(inserted_id="new-ing-id")
+        )
         mock_ingestions.update_one = AsyncMock()
         mock_chunks.delete_many = AsyncMock()
         mock_documents.delete_many = AsyncMock()
-        
+
         def get_collection(name):
             if name == "configs":
                 return mock_configs
@@ -486,7 +494,7 @@ class TestRetryIngestion:
             elif name == "documents":
                 return mock_documents
             return mock_ingestions
-        
+
         mock_db.__getitem__ = MagicMock(side_effect=get_collection)
 
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
@@ -584,7 +592,7 @@ class TestGetIngestionStats:
         with patch("app.db.mongodb.mongodb.get_database", return_value=mock_db):
             response = await async_client.get(f"/api/v1/ingest/{config_id}/stats")
             assert response.status_code == 200
-            
+
             data = response.json()
             assert "total_files" in data
             assert "processed_files" in data
@@ -646,26 +654,26 @@ class TestAPIResponseFormats:
 # Helper class for async iteration in tests
 class AsyncIterator:
     """Helper class for mocking async iterators."""
-    
+
     def __init__(self, items):
         self.items = list(items)
         self.index = 0
-    
+
     def __aiter__(self):
         return self
-    
+
     async def __anext__(self):
         if self.index >= len(self.items):
             raise StopAsyncIteration
         item = self.items[self.index]
         self.index += 1
         return item
-    
+
     def skip(self, n):
         return self
-    
+
     def limit(self, n):
         return self
-    
+
     def sort(self, *args, **kwargs):
         return self

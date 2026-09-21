@@ -1,17 +1,17 @@
 """Configuration CRUD endpoints."""
 
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.db.mongodb import get_db
 from app.api.deps import CurrentUser
+from app.db.mongodb import get_db
+from app.schemas.auth import MessageResponse
 from app.schemas.config import (
     ConfigCreate,
-    ConfigUpdate,
-    ConfigResponse,
     ConfigListResponse,
+    ConfigResponse,
+    ConfigUpdate,
 )
-from app.schemas.auth import MessageResponse
 from app.services.config_service import ConfigService
 
 router = APIRouter(prefix="/configs", tags=["configurations"])

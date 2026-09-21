@@ -2,8 +2,8 @@
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -24,9 +24,9 @@ router = APIRouter(prefix="/lineage", tags=["lineage"])
 class SourceFileLineage(BaseModel):
     """Lineage information for a source file."""
 
-    file_name: Optional[str] = None
-    file_path: Optional[str] = None
-    file_type: Optional[str] = None
+    file_name: str | None = None
+    file_path: str | None = None
+    file_type: str | None = None
     document_id: str = ""
 
 
@@ -38,7 +38,7 @@ class ChunkLineage(BaseModel):
         default="", description="First 200 chars of chunk content"
     )
     score: float = 0.0
-    source_file: Optional[SourceFileLineage] = None
+    source_file: SourceFileLineage | None = None
     chunk_index: int = 0
     used_in_generation: bool = True
 
@@ -50,16 +50,14 @@ class QueryLineage(BaseModel):
     config_id: str
     user_id: str
     query: str
-    answer_preview: str = Field(
-        default="", description="First 500 chars of the answer"
-    )
+    answer_preview: str = Field(default="", description="First 500 chars of the answer")
     agent_type: str = ""
     query_type: str = ""
-    chunks: List[ChunkLineage] = Field(default_factory=list)
-    steps: List[Dict[str, Any]] = Field(default_factory=list)
+    chunks: list[ChunkLineage] = Field(default_factory=list)
+    steps: list[dict[str, Any]] = Field(default_factory=list)
     total_duration_ms: float = 0.0
-    created_at: Optional[datetime] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 # ------------------------------------------------------------------
@@ -74,10 +72,10 @@ async def store_query_lineage(
     user_id: str,
     query: str,
     answer: str,
-    sources: List[Any],
-    steps: List[Any],
+    sources: list[Any],
+    steps: list[Any],
     total_duration_ms: float,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> str:
     """
     Store query lineage in MongoDB.
@@ -108,19 +106,21 @@ async def store_query_lineage(
         else:
             continue
 
-        chunks.append({
-            "chunk_id": s.get("chunk_id", ""),
-            "content_preview": s.get("content", "")[:200],
-            "score": s.get("score", 0.0),
-            "source_file": {
-                "file_name": s.get("file_name"),
-                "file_path": s.get("file_path"),
-                "file_type": s.get("file_type"),
-                "document_id": s.get("document_id", ""),
-            },
-            "chunk_index": s.get("chunk_index", 0),
-            "used_in_generation": True,
-        })
+        chunks.append(
+            {
+                "chunk_id": s.get("chunk_id", ""),
+                "content_preview": s.get("content", "")[:200],
+                "score": s.get("score", 0.0),
+                "source_file": {
+                    "file_name": s.get("file_name"),
+                    "file_path": s.get("file_path"),
+                    "file_type": s.get("file_type"),
+                    "document_id": s.get("document_id", ""),
+                },
+                "chunk_index": s.get("chunk_index", 0),
+                "used_in_generation": True,
+            }
+        )
 
     step_dicts = []
     for step in steps:
@@ -140,7 +140,7 @@ async def store_query_lineage(
         "chunks": chunks,
         "steps": step_dicts,
         "total_duration_ms": total_duration_ms,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
         "metadata": metadata or {},
     }
 
@@ -200,9 +200,11 @@ async def get_lineage(query_id: str, http_request: Request):
                 chunk_id=c.get("chunk_id", ""),
                 content_preview=c.get("content_preview", ""),
                 score=c.get("score", 0.0),
-                source_file=SourceFileLineage(**c["source_file"])
-                if c.get("source_file")
-                else None,
+                source_file=(
+                    SourceFileLineage(**c["source_file"])
+                    if c.get("source_file")
+                    else None
+                ),
                 chunk_index=c.get("chunk_index", 0),
                 used_in_generation=c.get("used_in_generation", True),
             )
@@ -215,7 +217,7 @@ async def get_lineage(query_id: str, http_request: Request):
     )
 
 
-@router.get("/config/{config_id}", response_model=List[QueryLineage])
+@router.get("/config/{config_id}", response_model=list[QueryLineage])
 async def list_lineage_by_config(
     config_id: str,
     http_request: Request,

@@ -2,21 +2,21 @@
 
 import logging
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any
 
 from app.agents.base import (
     AgentConfig,
     AgentError,
     AgentResponse,
-    AgentState,
     AgentStep,
     BaseAgent,
     StepType,
 )
 from app.llm.base import BaseLLM, Message
 from app.prompts.manager import PromptManager
-from app.retrieval.base import BaseRetriever, RetrievedChunk
+from app.retrieval.base import BaseRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class GraphRAGConfig(AgentConfig):
     max_community_summaries: int = 10
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "GraphRAGConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "GraphRAGConfig":
         """Create from dictionary."""
         return cls(
             top_k=data.get("top_k", 5),
@@ -81,9 +81,9 @@ class GraphRAGAgent(BaseAgent):
         self,
         retriever: BaseRetriever,
         llm: BaseLLM,
-        prompt_manager: Optional[PromptManager] = None,
-        config: Optional[GraphRAGConfig] = None,
-        db: Optional[Any] = None,
+        prompt_manager: PromptManager | None = None,
+        config: GraphRAGConfig | None = None,
+        db: Any | None = None,
     ):
         """
         Initialize GraphRAG agent.
@@ -126,16 +126,20 @@ class GraphRAGAgent(BaseAgent):
 
     async def _retrieve_community_summaries(
         self, config_id: str, limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Retrieve community summaries from MongoDB."""
         if self.db is None:
             return []
 
         collection = self.db["community_summaries"]
-        cursor = collection.find(
-            {"config_id": config_id},
-            {"summary": 1, "entities": 1, "community_id": 1, "level": 1},
-        ).sort("level", -1).limit(limit)
+        cursor = (
+            collection.find(
+                {"config_id": config_id},
+                {"summary": 1, "entities": 1, "community_id": 1, "level": 1},
+            )
+            .sort("level", -1)
+            .limit(limit)
+        )
 
         summaries = []
         async for doc in cursor:
@@ -146,8 +150,8 @@ class GraphRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        steps: List[AgentStep],
-    ) -> Dict[str, Any]:
+        steps: list[AgentStep],
+    ) -> dict[str, Any]:
         """Generate answer from community summaries (global path)."""
         start = time.time()
 
@@ -228,9 +232,9 @@ class GraphRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]],
-        steps: List[AgentStep],
-    ) -> Dict[str, Any]:
+        conversation_history: list[dict[str, str]] | None,
+        steps: list[AgentStep],
+    ) -> dict[str, Any]:
         """Generate answer from vector-retrieved chunks (local path)."""
         # Retrieve
         start = time.time()
@@ -307,7 +311,7 @@ class GraphRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """
@@ -316,7 +320,7 @@ class GraphRAGAgent(BaseAgent):
         Classifies the query as global/local, then routes accordingly.
         """
         total_start = time.time()
-        steps: List[AgentStep] = []
+        steps: list[AgentStep] = []
 
         try:
             # Step 1: Classify query
@@ -364,7 +368,7 @@ class GraphRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """

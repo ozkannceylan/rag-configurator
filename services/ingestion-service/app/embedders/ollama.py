@@ -2,7 +2,6 @@
 
 import logging
 import time
-from typing import Dict, List, Optional
 
 import httpx
 
@@ -15,7 +14,7 @@ DEFAULT_OLLAMA_URL = "http://localhost:11434"
 DEFAULT_OLLAMA_MODEL = "nomic-embed-text"
 
 # Known model dimensions
-OLLAMA_MODEL_DIMENSIONS: Dict[str, int] = {
+OLLAMA_MODEL_DIMENSIONS: dict[str, int] = {
     "nomic-embed-text": 768,
     "mxbai-embed-large": 1024,
     "all-minilm": 384,
@@ -31,7 +30,7 @@ class OllamaEmbedder(BaseEmbedder):
     nomic-embed-text running locally.
     """
 
-    def __init__(self, config: Optional[EmbeddingConfig] = None):
+    def __init__(self, config: EmbeddingConfig | None = None):
         """
         Initialize Ollama embedder.
 
@@ -46,7 +45,7 @@ class OllamaEmbedder(BaseEmbedder):
         if not self.config.base_url:
             self.config.base_url = DEFAULT_OLLAMA_URL
 
-        self._dimensions: Optional[int] = None
+        self._dimensions: int | None = None
 
     @property
     def dimensions(self) -> int:
@@ -71,7 +70,7 @@ class OllamaEmbedder(BaseEmbedder):
         return self.config.model
 
     async def embed(
-        self, texts: List[str], config: Optional[EmbeddingConfig] = None
+        self, texts: list[str], config: EmbeddingConfig | None = None
     ) -> EmbeddingResult:
         """
         Generate embeddings using Ollama API.
@@ -146,13 +145,13 @@ class OllamaEmbedder(BaseEmbedder):
                         else:
                             raise RuntimeError(
                                 f"Ollama API error: {e.response.status_code}"
-                            )
+                            ) from e
 
-                    except httpx.ConnectError:
+                    except httpx.ConnectError as e:
                         raise RuntimeError(
                             f"Cannot connect to Ollama at {cfg.base_url}. "
                             "Make sure Ollama is running."
-                        )
+                        ) from e
 
                     except Exception as e:
                         self.logger.warning(

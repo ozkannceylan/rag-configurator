@@ -8,12 +8,28 @@ import bcrypt
 from jose import jwt
 from rag_config_common.auth.jwt_utils import (
     decode_token as shared_decode_token,
+)
+from rag_config_common.auth.jwt_utils import (
     extract_bearer_token,
     get_token_jti,
     get_token_ttl_seconds,
 )
 
 from app.core.settings import settings
+
+# Re-exported from rag_config_common so the rest of this service imports auth
+# helpers from one stable local path. Nothing in this module uses them
+# directly, so __all__ is what tells ruff (and readers) they are public.
+__all__ = [
+    "create_access_token",
+    "create_refresh_token",
+    "decode_token",
+    "extract_bearer_token",
+    "get_password_hash",
+    "get_token_jti",
+    "get_token_ttl_seconds",
+    "verify_password",
+]
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

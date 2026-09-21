@@ -4,7 +4,6 @@ import asyncio
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional
 
 from app.embedders.base import BaseEmbedder, EmbeddingConfig, EmbeddingResult
 
@@ -14,7 +13,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_HF_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # Known model dimensions
-HF_MODEL_DIMENSIONS: Dict[str, int] = {
+HF_MODEL_DIMENSIONS: dict[str, int] = {
     "sentence-transformers/all-MiniLM-L6-v2": 384,
     "sentence-transformers/all-mpnet-base-v2": 768,
     "sentence-transformers/paraphrase-MiniLM-L6-v2": 384,
@@ -36,7 +35,7 @@ class HuggingFaceEmbedder(BaseEmbedder):
     with models like all-MiniLM-L6-v2.
     """
 
-    def __init__(self, config: Optional[EmbeddingConfig] = None):
+    def __init__(self, config: EmbeddingConfig | None = None):
         """
         Initialize HuggingFace embedder.
 
@@ -50,7 +49,7 @@ class HuggingFaceEmbedder(BaseEmbedder):
             self.config.model = DEFAULT_HF_MODEL
 
         self._model = None
-        self._dimensions: Optional[int] = None
+        self._dimensions: int | None = None
         self._executor = ThreadPoolExecutor(max_workers=1)
 
     def _get_model(self):
@@ -58,20 +57,18 @@ class HuggingFaceEmbedder(BaseEmbedder):
         if self._model is None:
             try:
                 from sentence_transformers import SentenceTransformer
-            except ImportError:
+            except ImportError as err:
                 raise ImportError(
                     "sentence-transformers not installed. "
                     "Install with: pip install sentence-transformers"
-                )
+                ) from err
 
             self.logger.info(f"Loading model: {self.config.model}")
             self._model = SentenceTransformer(self.config.model)
 
             # Get actual dimensions from model
             self._dimensions = self._model.get_sentence_embedding_dimension()
-            self.logger.info(
-                f"Model loaded with {self._dimensions} dimensions"
-            )
+            self.logger.info(f"Model loaded with {self._dimensions} dimensions")
 
         return self._model
 
@@ -98,7 +95,7 @@ class HuggingFaceEmbedder(BaseEmbedder):
         return self.config.model
 
     async def embed(
-        self, texts: List[str], config: Optional[EmbeddingConfig] = None
+        self, texts: list[str], config: EmbeddingConfig | None = None
     ) -> EmbeddingResult:
         """
         Generate embeddings using sentence-transformers.
@@ -145,8 +142,8 @@ class HuggingFaceEmbedder(BaseEmbedder):
         )
 
     def _embed_sync(
-        self, texts: List[str], config: EmbeddingConfig
-    ) -> List[List[float]]:
+        self, texts: list[str], config: EmbeddingConfig
+    ) -> list[list[float]]:
         """
         Synchronous embedding generation.
 
@@ -204,7 +201,7 @@ class HuggingFaceAPIEmbedder(BaseEmbedder):
 
     HF_API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction"
 
-    def __init__(self, config: Optional[EmbeddingConfig] = None):
+    def __init__(self, config: EmbeddingConfig | None = None):
         """
         Initialize HuggingFace API embedder.
 
@@ -216,7 +213,7 @@ class HuggingFaceAPIEmbedder(BaseEmbedder):
         if not self.config.model:
             self.config.model = DEFAULT_HF_MODEL
 
-        self._dimensions: Optional[int] = None
+        self._dimensions: int | None = None
 
     @property
     def dimensions(self) -> int:
@@ -236,7 +233,7 @@ class HuggingFaceAPIEmbedder(BaseEmbedder):
         return self.config.model
 
     async def embed(
-        self, texts: List[str], config: Optional[EmbeddingConfig] = None
+        self, texts: list[str], config: EmbeddingConfig | None = None
     ) -> EmbeddingResult:
         """
         Generate embeddings using HuggingFace Inference API.
@@ -310,7 +307,7 @@ class HuggingFaceAPIEmbedder(BaseEmbedder):
                         if attempt < cfg.max_retries - 1:
                             await asyncio.sleep(cfg.retry_delay)
                         else:
-                            raise RuntimeError(f"HuggingFace API error: {e}")
+                            raise RuntimeError(f"HuggingFace API error: {e}") from e
 
         processing_time = (time.time() - start_time) * 1000
 

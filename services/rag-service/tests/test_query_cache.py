@@ -2,10 +2,9 @@
 
 import hashlib
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from rag_config_common.cache.query_cache import QueryCache
 
 
@@ -31,7 +30,7 @@ class TestCacheKey:
     """Test cache key generation."""
 
     def test_cache_key_format(self, cache):
-        query_hash = hashlib.sha256("test query".encode("utf-8")).hexdigest()
+        query_hash = hashlib.sha256(b"test query").hexdigest()
         key = cache._cache_key("config-123", "test query")
         assert key == f"test_qcache:config-123:{query_hash}"
 

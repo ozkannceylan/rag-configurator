@@ -1,22 +1,23 @@
 """Tests for hybrid retrieval and factory modules."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
-from app.retrieval.hybrid import (
-    HybridRetriever,
-    HybridConfig,
-    FusionMethod,
-    HybridRetrievalResult,
-    reciprocal_rank_fusion,
-)
+import pytest
+
+from app.retrieval.base import RetrievedChunk
 from app.retrieval.factory import (
-    get_retriever,
-    get_retriever_from_config,
     RetrievalMethod,
     create_retrieval_config,
+    get_retriever,
+    get_retriever_from_config,
 )
-from app.retrieval.base import RetrievedChunk, RetrievalConfig, SourceType
+from app.retrieval.hybrid import (
+    FusionMethod,
+    HybridConfig,
+    HybridRetrievalResult,
+    HybridRetriever,
+    reciprocal_rank_fusion,
+)
 
 
 class TestFusionMethod:
@@ -183,22 +184,34 @@ class TestHybridRetriever:
         source_results = {
             "vector": [
                 RetrievedChunk(
-                    content="A", score=0.9, chunk_id="1",
-                    document_id="d1", config_id="c"
+                    content="A",
+                    score=0.9,
+                    chunk_id="1",
+                    document_id="d1",
+                    config_id="c",
                 ),
                 RetrievedChunk(
-                    content="B", score=0.8, chunk_id="2",
-                    document_id="d1", config_id="c"
+                    content="B",
+                    score=0.8,
+                    chunk_id="2",
+                    document_id="d1",
+                    config_id="c",
                 ),
             ],
             "keyword": [
                 RetrievedChunk(
-                    content="B", score=0.95, chunk_id="2",
-                    document_id="d1", config_id="c"
+                    content="B",
+                    score=0.95,
+                    chunk_id="2",
+                    document_id="d1",
+                    config_id="c",
                 ),
                 RetrievedChunk(
-                    content="C", score=0.7, chunk_id="3",
-                    document_id="d1", config_id="c"
+                    content="C",
+                    score=0.7,
+                    chunk_id="3",
+                    document_id="d1",
+                    config_id="c",
                 ),
             ],
         }
@@ -222,14 +235,20 @@ class TestHybridRetriever:
         source_results = {
             "vector": [
                 RetrievedChunk(
-                    content="A", score=1.0, chunk_id="1",
-                    document_id="d1", config_id="c"
+                    content="A",
+                    score=1.0,
+                    chunk_id="1",
+                    document_id="d1",
+                    config_id="c",
                 ),
             ],
             "keyword": [
                 RetrievedChunk(
-                    content="A", score=0.5, chunk_id="1",
-                    document_id="d1", config_id="c"
+                    content="A",
+                    score=0.5,
+                    chunk_id="1",
+                    document_id="d1",
+                    config_id="c",
                 ),
             ],
         }
@@ -249,14 +268,20 @@ class TestHybridRetriever:
         source_results = {
             "vector": [
                 RetrievedChunk(
-                    content="A", score=0.7, chunk_id="1",
-                    document_id="d1", config_id="c"
+                    content="A",
+                    score=0.7,
+                    chunk_id="1",
+                    document_id="d1",
+                    config_id="c",
                 ),
             ],
             "keyword": [
                 RetrievedChunk(
-                    content="A", score=0.9, chunk_id="1",
-                    document_id="d1", config_id="c"
+                    content="A",
+                    score=0.9,
+                    chunk_id="1",
+                    document_id="d1",
+                    config_id="c",
                 ),
             ],
         }
@@ -273,14 +298,20 @@ class TestHybridRetriever:
         source_results = {
             "vector": [
                 RetrievedChunk(
-                    content="A", score=0.5, chunk_id="1",
-                    document_id="d1", config_id="c"
+                    content="A",
+                    score=0.5,
+                    chunk_id="1",
+                    document_id="d1",
+                    config_id="c",
                 ),
             ],
             "keyword": [
                 RetrievedChunk(
-                    content="A", score=0.4, chunk_id="1",
-                    document_id="d1", config_id="c"
+                    content="A",
+                    score=0.4,
+                    chunk_id="1",
+                    document_id="d1",
+                    config_id="c",
                 ),
             ],
         }
@@ -401,7 +432,7 @@ class TestGetRetrieverFromConfig:
         """Test creating retriever from empty config defaults to naive."""
         from app.retrieval.vector import VectorRetriever
 
-        config: Dict = {}
+        config: dict = {}
         retriever = get_retriever_from_config(mock_db, config)
         assert isinstance(retriever, VectorRetriever)
 

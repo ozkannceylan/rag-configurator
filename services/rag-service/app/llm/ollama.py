@@ -1,7 +1,8 @@
 """Ollama LLM implementation for local models."""
 
 import logging
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 
@@ -30,7 +31,7 @@ class OllamaLLM(BaseLLM):
 
     DEFAULT_BASE_URL = "http://localhost:11434"
 
-    def __init__(self, config: Optional[LLMConfig] = None):
+    def __init__(self, config: LLMConfig | None = None):
         """
         Initialize Ollama LLM.
 
@@ -49,6 +50,7 @@ class OllamaLLM(BaseLLM):
         if not self.config.base_url:
             try:
                 from app.core.settings import settings
+
                 self.config.base_url = settings.ollama_base_url
             except Exception:
                 self.config.base_url = self.DEFAULT_BASE_URL
@@ -64,9 +66,9 @@ class OllamaLLM(BaseLLM):
 
     async def generate(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """
@@ -128,7 +130,9 @@ class OllamaLLM(BaseLLM):
                 content=content,
                 model=data.get("model", self.config.model),
                 usage=usage,
-                finish_reason=data.get("done_reason", "stop" if data.get("done") else None),
+                finish_reason=data.get(
+                    "done_reason", "stop" if data.get("done") else None
+                ),
                 metadata={
                     "total_duration": data.get("total_duration"),
                     "load_duration": data.get("load_duration"),
@@ -151,9 +155,9 @@ class OllamaLLM(BaseLLM):
 
     async def stream(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """
@@ -195,6 +199,7 @@ class OllamaLLM(BaseLLM):
                 async for line in response.aiter_lines():
                     if line:
                         import json
+
                         try:
                             data = json.loads(line)
                             if "message" in data and "content" in data["message"]:
@@ -219,7 +224,7 @@ class OllamaLLM(BaseLLM):
                 provider=self.provider,
             )
 
-    async def list_models(self) -> List[Dict[str, Any]]:
+    async def list_models(self) -> list[dict[str, Any]]:
         """
         List available models in Ollama.
 

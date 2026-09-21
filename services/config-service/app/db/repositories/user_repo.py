@@ -1,6 +1,7 @@
 """User repository for database operations."""
 
 from typing import Optional
+
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.db.repositories.base import BaseRepository

@@ -1,7 +1,7 @@
 """Document-level chunker that returns the entire document as one chunk."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.chunkers.base import BaseChunker, Chunk, ChunkingConfig
 
@@ -21,9 +21,9 @@ class DocumentChunker(BaseChunker):
     def chunk(
         self,
         text: str,
-        config: Optional[ChunkingConfig] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[Chunk]:
+        config: ChunkingConfig | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[Chunk]:
         """
         Return the entire document as a single chunk.
 
@@ -72,9 +72,9 @@ class ParagraphChunker(BaseChunker):
     def chunk(
         self,
         text: str,
-        config: Optional[ChunkingConfig] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[Chunk]:
+        config: ChunkingConfig | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[Chunk]:
         """
         Split document into paragraphs.
 
@@ -100,7 +100,7 @@ class ParagraphChunker(BaseChunker):
         chunks = []
         current_position = 0
 
-        for i, paragraph in enumerate(paragraphs):
+        for _i, paragraph in enumerate(paragraphs):
             paragraph = paragraph.strip()
             if not paragraph:
                 continue
@@ -142,9 +142,9 @@ class FixedSizeChunker(BaseChunker):
     def chunk(
         self,
         text: str,
-        config: Optional[ChunkingConfig] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[Chunk]:
+        config: ChunkingConfig | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[Chunk]:
         """
         Split text into fixed-size chunks.
 

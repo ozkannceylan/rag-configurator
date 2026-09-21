@@ -1,11 +1,31 @@
 """Retrieval module for RAG pipelines."""
 
-from app.retrieval.base import BaseRetriever, RetrievedChunk, RetrievalConfig, SourceType
+from app.retrieval.base import (
+    BaseRetriever,
+    RetrievalConfig,
+    RetrievedChunk,
+    SourceType,
+)
+from app.retrieval.factory import (
+    RetrievalMethod,
+    get_retriever,
+    get_retriever_from_config,
+)
+from app.retrieval.graph import (
+    GraphConfig,
+    GraphContext,
+    GraphEdge,
+    GraphNode,
+    GraphRetriever,
+)
+from app.retrieval.hybrid import (
+    FusionMethod,
+    HybridConfig,
+    HybridRetriever,
+    reciprocal_rank_fusion,
+)
+from app.retrieval.keyword import KeywordConfig, KeywordRetriever
 from app.retrieval.vector import VectorRetriever
-from app.retrieval.keyword import KeywordRetriever, KeywordConfig
-from app.retrieval.graph import GraphRetriever, GraphConfig, GraphContext, GraphNode, GraphEdge
-from app.retrieval.hybrid import HybridRetriever, HybridConfig, FusionMethod, reciprocal_rank_fusion
-from app.retrieval.factory import get_retriever, get_retriever_from_config, RetrievalMethod
 
 __all__ = [
     # Base

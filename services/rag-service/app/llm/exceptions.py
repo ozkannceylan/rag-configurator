@@ -4,6 +4,8 @@ from app.llm.base import (
     LLMAuthenticationError,
     LLMContextLengthError,
     LLMError,
+)
+from app.llm.base import (
     LLMRateLimitError as BaseLLMRateLimitError,
 )
 

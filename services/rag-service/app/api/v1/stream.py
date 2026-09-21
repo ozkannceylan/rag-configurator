@@ -3,7 +3,8 @@
 import asyncio
 import json
 import logging
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -11,6 +12,7 @@ from pydantic import BaseModel, Field
 
 try:
     from sse_starlette.sse import EventSourceResponse
+
     SSE_AVAILABLE = True
 except ImportError:
     SSE_AVAILABLE = False
@@ -22,15 +24,15 @@ from app.core.auth import get_authenticated_user_id, require_config_access
 from app.core.settings import settings
 from app.db.mongodb import mongodb
 from app.llm.base import LLMContextLengthError, LLMError
-from app.retrieval.factory import get_retriever_from_config
 from app.prompts.manager import PromptManager
+from app.retrieval.factory import get_retriever_from_config
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/stream", tags=["stream"])
 
 
-def _resolve_base_url(provider: str, config_url: Optional[str]) -> Optional[str]:
+def _resolve_base_url(provider: str, config_url: str | None) -> str | None:
     """Resolve base URL, preferring OLLAMA_BASE_URL env var for ollama providers.
 
     When running in Docker, configs may store localhost URLs that don't work
@@ -44,7 +46,7 @@ def _resolve_base_url(provider: str, config_url: Optional[str]) -> Optional[str]
     return config_url
 
 
-def build_pipeline_config(config_doc: Dict[str, Any]) -> Dict[str, Any]:
+def build_pipeline_config(config_doc: dict[str, Any]) -> dict[str, Any]:
     """
     Build a pipeline_config dict from the actual MongoDB config structure.
 
@@ -85,7 +87,8 @@ def build_pipeline_config(config_doc: Dict[str, Any]) -> Dict[str, Any]:
             "top_k": retrieval_data.get("vector", {}).get("top_k", 5),
             "min_score": retrieval_data.get("vector", {}).get("score_threshold", 0.0),
             "embedding_provider": embedding_data.get("provider", "openai"),
-            "embedding_model": embedding_data.get("model_name") or embedding_data.get("model"),
+            "embedding_model": embedding_data.get("model_name")
+            or embedding_data.get("model"),
             "keyword": retrieval_data.get("keyword", {}),
             "graph": retrieval_data.get("graph", {}),
         },
@@ -102,8 +105,8 @@ class StreamRequest(BaseModel):
 
     query: str = Field(..., description="User query text", max_length=10000)
     config_id: str = Field(..., description="RAG pipeline configuration ID")
-    user_role: Optional[str] = Field(None, description="User role for RBAC")
-    conversation_history: Optional[List[Dict[str, str]]] = Field(
+    user_role: str | None = Field(None, description="User role for RBAC")
+    conversation_history: list[dict[str, str]] | None = Field(
         None, description="Previous conversation messages"
     )
 
@@ -112,8 +115,8 @@ async def build_stream_events(
     query: str,
     config_id: str,
     user_id: str,
-    conversation_history: Optional[List[Dict[str, str]]] = None,
-) -> List[str]:
+    conversation_history: list[dict[str, str]] | None = None,
+) -> list[str]:
     """
     Build SSE payloads for a streaming response.
     """
@@ -199,7 +202,7 @@ async def build_stream_events(
     return events
 
 
-async def stream_response_generator(events: List[str]) -> AsyncIterator[str]:
+async def stream_response_generator(events: list[str]) -> AsyncIterator[str]:
     """Yield prebuilt SSE events."""
     for event in events:
         yield event
@@ -210,7 +213,7 @@ async def stream_get(
     http_request: Request,
     query: str = Query(..., description="User query text", max_length=10000),
     config_id: str = Query(..., description="RAG pipeline configuration ID"),
-    user_role: Optional[str] = Query(None, description="User role for RBAC"),
+    user_role: str | None = Query(None, description="User role for RBAC"),
 ):
     """
     Stream a RAG response via Server-Sent Events.
@@ -247,7 +250,7 @@ async def stream_get(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"LLM provider failure: {str(e)}",
         )
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Streaming request timed out after 120 seconds",
@@ -297,7 +300,7 @@ async def stream_post(request: StreamRequest, http_request: Request):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"LLM provider failure: {str(e)}",
         )
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Streaming request timed out after 120 seconds",

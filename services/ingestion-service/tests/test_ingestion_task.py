@@ -2,13 +2,13 @@
 
 import os
 import tempfile
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.tasks.utils import (
+    SUPPORTED_EXTENSIONS,
     ProgressTracker,
     compute_content_hash,
     compute_file_hash,
@@ -20,12 +20,12 @@ from app.tasks.utils import (
     get_relative_path,
     is_supported_file,
     scan_directory,
-    SUPPORTED_EXTENSIONS,
 )
 
 # Import IngestionPipeline only if Celery is available
 try:
     from app.tasks.ingestion_task import IngestionPipeline, compute_retry_countdown
+
     CELERY_AVAILABLE = True
 except ImportError:
     CELERY_AVAILABLE = False
@@ -215,9 +215,7 @@ class TestGetFileMetadata:
 
     def test_get_file_metadata(self):
         """Test getting file metadata."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False, suffix=".txt"
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
             f.write("Test content")
             temp_path = f.name
 

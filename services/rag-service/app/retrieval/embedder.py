@@ -1,7 +1,6 @@
 """Embedding utilities for retrieval."""
 
 import logging
-from typing import Any, List, Optional
 
 import httpx
 
@@ -17,8 +16,8 @@ class QueryEmbedder:
         self,
         provider: str = "openai",
         model: str = "text-embedding-3-small",
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ):
         """
         Initialize query embedder.
@@ -33,7 +32,7 @@ class QueryEmbedder:
         self.model = model
         self.api_key = api_key
         self.base_url = base_url
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
@@ -47,7 +46,7 @@ class QueryEmbedder:
             await self._client.aclose()
             self._client = None
 
-    async def embed_query(self, query: str) -> List[float]:
+    async def embed_query(self, query: str) -> list[float]:
         """
         Generate embedding for a query.
 
@@ -71,7 +70,7 @@ class QueryEmbedder:
         else:
             raise ValueError(f"Unsupported embedding provider: {self.provider}")
 
-    async def embed_batch(self, texts: List[str]) -> List[List[float]]:
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """
         Generate embeddings for multiple texts.
 
@@ -94,7 +93,7 @@ class QueryEmbedder:
                 results.append(embedding)
             return results
 
-    async def _embed_openai(self, text: str) -> List[float]:
+    async def _embed_openai(self, text: str) -> list[float]:
         """Generate embedding using OpenAI API."""
         client = await self._get_client()
 
@@ -102,7 +101,9 @@ class QueryEmbedder:
         if not api_key:
             raise ValueError("OpenAI API key not configured")
 
-        base_url = self.base_url or settings.openai_base_url or "https://api.openai.com/v1"
+        base_url = (
+            self.base_url or settings.openai_base_url or "https://api.openai.com/v1"
+        )
         url = f"{base_url}/embeddings"
 
         headers = {
@@ -123,7 +124,7 @@ class QueryEmbedder:
             logger.error(f"OpenAI embedding error: {e}")
             return []
 
-    async def _embed_openai_batch(self, texts: List[str]) -> List[List[float]]:
+    async def _embed_openai_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts using OpenAI API."""
         client = await self._get_client()
 
@@ -131,7 +132,9 @@ class QueryEmbedder:
         if not api_key:
             raise ValueError("OpenAI API key not configured")
 
-        base_url = self.base_url or settings.openai_base_url or "https://api.openai.com/v1"
+        base_url = (
+            self.base_url or settings.openai_base_url or "https://api.openai.com/v1"
+        )
         url = f"{base_url}/embeddings"
 
         headers = {
@@ -155,7 +158,7 @@ class QueryEmbedder:
             logger.error(f"OpenAI batch embedding error: {e}")
             return [[] for _ in texts]
 
-    async def _embed_ollama(self, text: str) -> List[float]:
+    async def _embed_ollama(self, text: str) -> list[float]:
         """Generate embedding using Ollama API."""
         client = await self._get_client()
 
@@ -178,9 +181,9 @@ class QueryEmbedder:
 
 
 async def get_embedder(
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
-    api_key: Optional[str] = None,
+    provider: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
 ) -> QueryEmbedder:
     """
     Get an embedder instance.

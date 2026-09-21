@@ -3,7 +3,6 @@
 import logging
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from app.processors.base import (
     BaseProcessor,
@@ -17,13 +16,13 @@ logger = logging.getLogger(__name__)
 class TextProcessor(BaseProcessor):
     """Processor for plain text and markdown files."""
 
-    supported_extensions: List[str] = [".txt", ".md", ".markdown", ".rst", ".text"]
+    supported_extensions: list[str] = [".txt", ".md", ".markdown", ".rst", ".text"]
 
     # Common encodings to try
     ENCODINGS = ["utf-8", "utf-8-sig", "latin-1", "cp1252", "iso-8859-1"]
 
     async def process(
-        self, file_path: Path, config: Optional[DocumentProcessingConfig] = None
+        self, file_path: Path, config: DocumentProcessingConfig | None = None
     ) -> ProcessedDocument:
         """
         Process a text file and extract content.
@@ -35,10 +34,9 @@ class TextProcessor(BaseProcessor):
         Returns:
             ProcessedDocument with text content and metadata
         """
-        cfg = config or self.config
         start_time = time.time()
-        errors: List[str] = []
-        warnings: List[str] = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         # Validate file
         try:
@@ -104,7 +102,7 @@ class TextProcessor(BaseProcessor):
             warnings=warnings,
         )
 
-    def _extract_markdown_sections(self, content: str) -> List[dict]:
+    def _extract_markdown_sections(self, content: str) -> list[dict]:
         """Extract section headers from markdown content."""
         sections = []
         lines = content.split("\n")

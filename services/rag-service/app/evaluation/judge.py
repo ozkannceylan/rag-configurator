@@ -8,7 +8,6 @@ accuracy.
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
 
 from app.evaluation.base import BaseEvaluator
 from app.evaluation.models import EvaluationResult, MetricResult
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Default rubric definitions
 # ---------------------------------------------------------------------------
 
-DEFAULT_RUBRICS: Dict[str, Dict[str, str]] = {
+DEFAULT_RUBRICS: dict[str, dict[str, str]] = {
     "relevance": {
         "description": "How relevant is the answer to the user's query?",
         "criteria": (
@@ -89,7 +88,7 @@ Respond ONLY with valid JSON in this format (no markdown):
 """
 
 
-def _parse_judge_response(raw: str, rubric_names: List[str]) -> List[MetricResult]:
+def _parse_judge_response(raw: str, rubric_names: list[str]) -> list[MetricResult]:
     """Parse the structured JSON from the judge LLM."""
     text = raw.strip()
     # Strip markdown code fences if present
@@ -98,7 +97,7 @@ def _parse_judge_response(raw: str, rubric_names: List[str]) -> List[MetricResul
         text = re.sub(r"\s*```$", "", text)
     try:
         data = json.loads(text)
-        results: List[MetricResult] = []
+        results: list[MetricResult] = []
         rubric_items = data.get("rubrics", [])
         seen_names = set()
         for item in rubric_items:
@@ -106,7 +105,9 @@ def _parse_judge_response(raw: str, rubric_names: List[str]) -> List[MetricResul
             score = float(item.get("score", 0.0))
             score = max(0.0, min(1.0, score))
             explanation = str(item.get("explanation", ""))
-            results.append(MetricResult(name=name, score=score, explanation=explanation))
+            results.append(
+                MetricResult(name=name, score=score, explanation=explanation)
+            )
             seen_names.add(name)
         # Fill any rubrics the LLM missed
         for rn in rubric_names:
@@ -136,7 +137,7 @@ class JudgeEvaluator(BaseEvaluator):
     def __init__(
         self,
         llm: BaseLLM,
-        rubrics: Optional[Dict[str, Dict[str, str]]] = None,
+        rubrics: dict[str, dict[str, str]] | None = None,
     ) -> None:
         self.llm = llm
         self.rubrics = rubrics or dict(DEFAULT_RUBRICS)
@@ -145,8 +146,8 @@ class JudgeEvaluator(BaseEvaluator):
         self,
         query: str,
         answer: str,
-        contexts: List[str],
-        ground_truth: Optional[str] = None,
+        contexts: list[str],
+        ground_truth: str | None = None,
     ) -> EvaluationResult:
         """Run the judge evaluation and return an ``EvaluationResult``."""
         # Build rubrics text

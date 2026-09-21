@@ -1,13 +1,12 @@
 """Tests for configuration endpoints."""
 
 import pytest
-
 from rag_config_common.models.enums import (
-    DataSourceType,
-    LLMProvider,
-    EmbeddingProvider,
-    RetrievalMethod,
     AgentTemplate,
+    DataSourceType,
+    EmbeddingProvider,
+    LLMProvider,
+    RetrievalMethod,
 )
 
 
@@ -159,7 +158,9 @@ async def test_delete_config(client, auth_headers, sample_config):
 
 
 @pytest.mark.asyncio
-async def test_config_crud_writes_audit_logs(client, auth_headers, sample_config, test_db):
+async def test_config_crud_writes_audit_logs(
+    client, auth_headers, sample_config, test_db
+):
     """Test config create/update/delete flows create audit log entries."""
     create_response = await client.post(
         "/api/v1/configs/",
@@ -183,7 +184,9 @@ async def test_config_crud_writes_audit_logs(client, auth_headers, sample_config
     assert delete_response.status_code == 200
 
     actions = []
-    async for entry in test_db["audit_logs"].find({"resource_type": "config"}).sort("created_at", 1):
+    async for entry in (
+        test_db["audit_logs"].find({"resource_type": "config"}).sort("created_at", 1)
+    ):
         actions.append(entry["action"])
 
     assert actions == ["config.create", "config.update", "config.delete"]

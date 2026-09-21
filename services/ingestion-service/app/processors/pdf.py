@@ -3,7 +3,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.processors.base import (
     BaseProcessor,
@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 class PDFProcessor(BaseProcessor):
     """Processor for PDF files using Docling with PyMuPDF fallback."""
 
-    supported_extensions: List[str] = [".pdf"]
+    supported_extensions: list[str] = [".pdf"]
 
     async def process(
-        self, file_path: Path, config: Optional[DocumentProcessingConfig] = None
+        self, file_path: Path, config: DocumentProcessingConfig | None = None
     ) -> ProcessedDocument:
         """
         Process a PDF file and extract content.
@@ -37,8 +37,8 @@ class PDFProcessor(BaseProcessor):
         """
         cfg = config or self.config
         start_time = time.time()
-        errors: List[str] = []
-        warnings: List[str] = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         # Validate file
         try:
@@ -56,8 +56,8 @@ class PDFProcessor(BaseProcessor):
         # Try Docling first for better structure extraction
         content = ""
         pages = 0
-        tables: List[Dict[str, Any]] = []
-        sections: List[Dict[str, Any]] = []
+        tables: list[dict[str, Any]] = []
+        sections: list[dict[str, Any]] = []
 
         try:
             result = await self._process_with_docling(file_path, cfg)
@@ -107,14 +107,13 @@ class PDFProcessor(BaseProcessor):
 
     async def _process_with_docling(
         self, file_path: Path, config: DocumentProcessingConfig
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process PDF using Docling for structure extraction."""
         try:
-            from docling.document_converter import DocumentConverter
-            from docling.datamodel.base_models import InputFormat
             from docling.datamodel.pipeline_options import PdfPipelineOptions
-        except ImportError:
-            raise ImportError("Docling not installed")
+            from docling.document_converter import DocumentConverter
+        except ImportError as err:
+            raise ImportError("Docling not installed") from err
 
         # Configure Docling pipeline
         pipeline_options = PdfPipelineOptions()
@@ -164,12 +163,12 @@ class PDFProcessor(BaseProcessor):
 
     async def _process_with_pymupdf(
         self, file_path: Path, config: DocumentProcessingConfig
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Process PDF using PyMuPDF as fallback."""
         try:
             import fitz  # PyMuPDF
-        except ImportError:
-            raise ImportError("PyMuPDF (fitz) not installed")
+        except ImportError as err:
+            raise ImportError("PyMuPDF (fitz) not installed") from err
 
         doc = fitz.open(str(file_path))
         content_parts = []

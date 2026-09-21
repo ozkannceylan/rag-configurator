@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from app.embedders.base import BaseEmbedder, EmbeddingConfig, EmbeddingResult
+from app.embedders.base import EmbeddingConfig, EmbeddingResult
 from app.embedders.factory import (
     EmbeddingProvider,
     get_available_providers,
@@ -169,7 +169,7 @@ class TestOpenAIEmbedder:
 
     def test_batch_size_limit(self):
         """Test batch size is limited to API maximum."""
-        from app.embedders.openai import OpenAIEmbedder, MAX_BATCH_SIZE
+        from app.embedders.openai import MAX_BATCH_SIZE, OpenAIEmbedder
 
         config = EmbeddingConfig(batch_size=5000)
         embedder = OpenAIEmbedder(config)

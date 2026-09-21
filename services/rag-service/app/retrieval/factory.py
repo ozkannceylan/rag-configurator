@@ -1,8 +1,8 @@
 """Factory functions for creating retrievers."""
 
 import logging
-from enum import Enum
-from typing import Any, Dict, Optional
+from enum import StrEnum
+from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -11,7 +11,7 @@ from app.retrieval.base import BaseRetriever, RetrievalConfig
 logger = logging.getLogger(__name__)
 
 
-class RetrievalMethod(str, Enum):
+class RetrievalMethod(StrEnum):
     """Available retrieval methods."""
 
     NAIVE = "naive"  # Vector only (simple RAG)
@@ -25,7 +25,7 @@ class RetrievalMethod(str, Enum):
 def get_retriever(
     method: RetrievalMethod,
     db: AsyncIOMotorDatabase,
-    config: Optional[RetrievalConfig] = None,
+    config: RetrievalConfig | None = None,
     **kwargs: Any,
 ) -> BaseRetriever:
     """
@@ -50,7 +50,7 @@ def get_retriever(
         )
 
     elif method == RetrievalMethod.KEYWORD:
-        from app.retrieval.keyword import KeywordRetriever, KeywordConfig
+        from app.retrieval.keyword import KeywordConfig, KeywordRetriever
 
         keyword_config = kwargs.get("keyword_config")
         if keyword_config is None and "keyword_config_dict" in kwargs:
@@ -63,7 +63,7 @@ def get_retriever(
         )
 
     elif method == RetrievalMethod.GRAPH:
-        from app.retrieval.graph import GraphRetriever, GraphConfig
+        from app.retrieval.graph import GraphConfig, GraphRetriever
 
         graph_config = kwargs.get("graph_config")
         if graph_config is None and "graph_config_dict" in kwargs:
@@ -77,7 +77,7 @@ def get_retriever(
         )
 
     elif method == RetrievalMethod.HYBRID:
-        from app.retrieval.hybrid import HybridRetriever, HybridConfig
+        from app.retrieval.hybrid import HybridConfig, HybridRetriever
 
         hybrid_config = kwargs.get("hybrid_config")
         if hybrid_config is None and "hybrid_config_dict" in kwargs:
@@ -90,7 +90,7 @@ def get_retriever(
         )
 
     elif method == RetrievalMethod.ADVANCED:
-        from app.retrieval.hybrid import HybridRetriever, HybridConfig
+        from app.retrieval.hybrid import HybridConfig, HybridRetriever
 
         # Advanced mode: enable all retrievers
         hybrid_config = kwargs.get("hybrid_config")
@@ -119,7 +119,7 @@ def get_retriever(
 
 def get_retriever_from_config(
     db: AsyncIOMotorDatabase,
-    pipeline_config: Dict[str, Any],
+    pipeline_config: dict[str, Any],
 ) -> BaseRetriever:
     """
     Create retriever from pipeline configuration.
@@ -146,13 +146,15 @@ def get_retriever_from_config(
         top_k=retrieval_config.get("top_k", 5),
         min_score=retrieval_config.get("min_score", 0.0),
         embedding_provider=retrieval_config.get("embedding_provider", "openai"),
-        embedding_model=retrieval_config.get("embedding_model", "text-embedding-3-small"),
+        embedding_model=retrieval_config.get(
+            "embedding_model", "text-embedding-3-small"
+        ),
         folder_paths=retrieval_config.get("folder_paths"),
         access_tags=retrieval_config.get("access_tags"),
     )
 
     # Build method-specific configs
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
 
     if method == RetrievalMethod.KEYWORD:
         kwargs["keyword_config_dict"] = retrieval_config.get("keyword", {})
@@ -176,8 +178,8 @@ def create_retrieval_config(
     min_score: float = 0.0,
     embedding_provider: str = "openai",
     embedding_model: str = "text-embedding-3-small",
-    folder_paths: Optional[list] = None,
-    access_tags: Optional[list] = None,
+    folder_paths: list | None = None,
+    access_tags: list | None = None,
     **kwargs: Any,
 ) -> RetrievalConfig:
     """

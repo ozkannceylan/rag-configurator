@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, users, configs, folders, export, templates
+from app.api.v1 import auth, configs, export, folders, templates, users
 
 api_router = APIRouter()
 

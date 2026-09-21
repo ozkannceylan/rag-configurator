@@ -2,8 +2,6 @@
 
 from datetime import datetime
 
-import pytest
-
 from app.storage.models import (
     ChunkRecord,
     DocumentRecord,

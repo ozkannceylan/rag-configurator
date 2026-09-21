@@ -1,7 +1,8 @@
 """Anthropic LLM implementation."""
 
 import logging
-from typing import Any, AsyncIterator, List, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from app.llm.base import BaseLLM, LLMConfig, LLMResponse, LLMUsage, Message
 from app.llm.exceptions import (
@@ -30,7 +31,7 @@ class AnthropicLLM(BaseLLM):
     # Default max tokens for Claude models
     DEFAULT_MAX_TOKENS = 4096
 
-    def __init__(self, config: Optional[LLMConfig] = None):
+    def __init__(self, config: LLMConfig | None = None):
         """
         Initialize Anthropic LLM.
 
@@ -70,9 +71,9 @@ class AnthropicLLM(BaseLLM):
 
     async def generate(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """
@@ -124,7 +125,8 @@ class AnthropicLLM(BaseLLM):
                 usage = LLMUsage(
                     prompt_tokens=response.usage.input_tokens,
                     completion_tokens=response.usage.output_tokens,
-                    total_tokens=response.usage.input_tokens + response.usage.output_tokens,
+                    total_tokens=response.usage.input_tokens
+                    + response.usage.output_tokens,
                 )
 
             # Get content from response
@@ -147,9 +149,9 @@ class AnthropicLLM(BaseLLM):
 
     async def stream(
         self,
-        messages: List[Message],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """
@@ -194,8 +196,8 @@ class AnthropicLLM(BaseLLM):
             self._handle_error(e)
 
     def _prepare_messages(
-        self, messages: List[Message]
-    ) -> tuple[Optional[str], List[dict]]:
+        self, messages: list[Message]
+    ) -> tuple[str | None, list[dict]]:
         """
         Prepare messages for Anthropic API.
 
@@ -215,10 +217,12 @@ class AnthropicLLM(BaseLLM):
                 # Anthropic uses separate system parameter
                 system_content = msg.content
             else:
-                conversation.append({
-                    "role": msg.role,
-                    "content": msg.content,
-                })
+                conversation.append(
+                    {
+                        "role": msg.role,
+                        "content": msg.content,
+                    }
+                )
 
         return system_content, conversation
 
@@ -226,12 +230,12 @@ class AnthropicLLM(BaseLLM):
         """Handle Anthropic API errors."""
         try:
             from anthropic import (
-                APIError,
                 APIConnectionError,
+                APIError,
                 APITimeoutError,
                 AuthenticationError,
-                RateLimitError,
                 BadRequestError,
+                RateLimitError,
             )
 
             if isinstance(error, AuthenticationError):

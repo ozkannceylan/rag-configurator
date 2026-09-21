@@ -5,8 +5,7 @@ from typing import List, Set
 
 from rag_config_common.models.enums import DataType
 
-from app.schemas.folder import FolderInfo, FolderScanResponse, FolderScanRequest
-
+from app.schemas.folder import FolderInfo, FolderScanRequest, FolderScanResponse
 
 # File extension to DataType mapping
 EXTENSION_MAP = {

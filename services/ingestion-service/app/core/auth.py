@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from bson import ObjectId
 from fastapi import HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from rag_config_common.auth.middleware import get_authenticated_user_id
 
+# get_authenticated_user_id is re-exported from rag_config_common so API
+# modules import every auth helper from this one local path. It is unused
+# inside this module, so __all__ is what marks it public.
+__all__ = [
+    "get_authenticated_user_id",
+    "get_config_by_id",
+    "get_config_owner",
+    "require_config_access",
+]
+
 
 async def get_config_by_id(
     db: AsyncIOMotorDatabase,
     config_id: str,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Load a configuration by ObjectId, string _id, or id field."""
     configs = db["configs"]
 
@@ -38,7 +48,7 @@ async def get_config_by_id(
     return None
 
 
-def get_config_owner(config: Dict[str, Any]) -> Optional[str]:
+def get_config_owner(config: dict[str, Any]) -> str | None:
     """Return the config owner field used by the current document."""
     return config.get("created_by") or config.get("user_id")
 
@@ -47,7 +57,7 @@ async def require_config_access(
     db: AsyncIOMotorDatabase,
     config_id: str,
     user_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Require that the user owns the target configuration."""
     config = await get_config_by_id(db, config_id)
     if not config:

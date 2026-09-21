@@ -6,12 +6,11 @@ Run with: pytest tests/test_integration.py -v
 Skip with: pytest tests/ --ignore=tests/test_integration.py
 """
 
-import asyncio
 import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -115,7 +114,7 @@ class TestFullIngestionPipeline:
     """Integration tests for the complete ingestion pipeline."""
 
     @pytest_asyncio.fixture
-    async def test_config(self, integration_db, integration_files) -> Dict[str, Any]:
+    async def test_config(self, integration_db, integration_files) -> dict[str, Any]:
         """Create a test configuration in the database."""
         config_id = str(ObjectId())
         user_id = str(ObjectId())
@@ -154,8 +153,8 @@ class TestFullIngestionPipeline:
         self, integration_db, test_config, integration_files
     ):
         """Test storing and retrieving documents."""
-        from app.storage.vector_store import VectorStore
         from app.storage.models import DocumentRecord
+        from app.storage.vector_store import VectorStore
 
         store = VectorStore(integration_db)
         await store.initialize_indexes()
@@ -185,8 +184,8 @@ class TestFullIngestionPipeline:
     @pytest.mark.asyncio
     async def test_store_and_retrieve_chunks(self, integration_db, test_config):
         """Test storing and retrieving chunks with embeddings."""
-        from app.storage.vector_store import VectorStore
         from app.storage.models import ChunkRecord
+        from app.storage.vector_store import VectorStore
 
         store = VectorStore(integration_db)
         await store.initialize_indexes()
@@ -222,8 +221,8 @@ class TestFullIngestionPipeline:
     @pytest.mark.asyncio
     async def test_delete_by_config(self, integration_db, test_config):
         """Test deleting all data for a config."""
+        from app.storage.models import ChunkRecord, DocumentRecord
         from app.storage.vector_store import VectorStore
-        from app.storage.models import DocumentRecord, ChunkRecord
 
         store = VectorStore(integration_db)
         await store.initialize_indexes()
@@ -265,8 +264,8 @@ class TestFullIngestionPipeline:
     @pytest.mark.asyncio
     async def test_stats_return_correct_counts(self, integration_db, test_config):
         """Test that stats return correct counts."""
-        from app.storage.vector_store import VectorStore
         from app.storage.models import IngestionRecord, IngestionStatus
+        from app.storage.vector_store import VectorStore
 
         store = VectorStore(integration_db)
         await store.initialize_indexes()
@@ -319,8 +318,8 @@ class TestChunkerIntegration:
 
     def test_recursive_chunker_pipeline(self, integration_files):
         """Test recursive chunker with real content."""
-        from app.chunkers.recursive import RecursiveChunker
         from app.chunkers.base import ChunkingConfig
+        from app.chunkers.recursive import RecursiveChunker
 
         config = ChunkingConfig(chunk_size=200, chunk_overlap=20)
         chunker = RecursiveChunker(config)
@@ -343,8 +342,8 @@ class TestEmbedderIntegration:
 
     def test_huggingface_embedder_loads(self):
         """Test HuggingFace embedder can be instantiated."""
-        from app.embedders.huggingface import HuggingFaceEmbedder
         from app.embedders.base import EmbeddingConfig
+        from app.embedders.huggingface import HuggingFaceEmbedder
 
         config = EmbeddingConfig(model="sentence-transformers/all-MiniLM-L6-v2")
         embedder = HuggingFaceEmbedder(config)
@@ -357,8 +356,8 @@ class TestEmbedderIntegration:
         """Test HuggingFace embedder can embed texts (requires model download)."""
         pytest.importorskip("sentence_transformers")
 
-        from app.embedders.huggingface import HuggingFaceEmbedder
         from app.embedders.base import EmbeddingConfig
+        from app.embedders.huggingface import HuggingFaceEmbedder
 
         config = EmbeddingConfig(model="sentence-transformers/all-MiniLM-L6-v2")
         embedder = HuggingFaceEmbedder(config)
@@ -399,7 +398,7 @@ class TestGraphIntegration:
         extractor = EntityExtractor()
 
         # Mock LLM response
-        response = '''
+        response = """
         {
             "entities": [
                 {"name": "John", "type": "person", "confidence": 0.9}
@@ -408,7 +407,7 @@ class TestGraphIntegration:
                 {"source": "John", "target": "Acme", "type": "works_for", "confidence": 0.85}
             ]
         }
-        '''
+        """
 
         entities, relations = extractor._parse_response(response)
         assert len(entities) > 0
@@ -479,12 +478,15 @@ class TestReIngestion:
     """Tests for re-ingestion scenarios."""
 
     @pytest.mark.asyncio
-    async def test_reingestion_clears_old_data(
-        self, integration_db, integration_files
-    ):
+    async def test_reingestion_clears_old_data(self, integration_db, integration_files):
         """Test that re-ingestion clears old data."""
+        from app.storage.models import (
+            ChunkRecord,
+            DocumentRecord,
+            IngestionRecord,
+            IngestionStatus,
+        )
         from app.storage.vector_store import VectorStore
-        from app.storage.models import DocumentRecord, ChunkRecord, IngestionRecord, IngestionStatus
 
         store = VectorStore(integration_db)
         await store.initialize_indexes()
@@ -568,15 +570,14 @@ class TestAPIIntegration:
         return config
 
     @pytest.mark.asyncio
-    async def test_start_and_check_status(
-        self, integration_db, test_config_in_db
-    ):
+    async def test_start_and_check_status(self, integration_db, test_config_in_db):
         """Test starting ingestion and checking status."""
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
         from rag_config_common.auth.hmac_verify import build_signed_headers
-        from app.main import app
+
         from app.core.settings import settings
         from app.db.mongodb import mongodb
+        from app.main import app
 
         # Connect the app's mongodb singleton to the integration DB's client
         mongodb.client = integration_db.client

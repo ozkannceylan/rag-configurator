@@ -2,15 +2,16 @@
 
 import logging
 import time
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from app.agents.base import (
-    BaseAgent,
     AgentConfig,
     AgentError,
     AgentResponse,
     AgentState,
     AgentStep,
+    BaseAgent,
     StepType,
 )
 from app.llm.base import BaseLLM, Message
@@ -35,8 +36,8 @@ class NaiveRAGAgent(BaseAgent):
         self,
         retriever: BaseRetriever,
         llm: BaseLLM,
-        prompt_manager: Optional[PromptManager] = None,
-        config: Optional[AgentConfig] = None,
+        prompt_manager: PromptManager | None = None,
+        config: AgentConfig | None = None,
     ):
         """
         Initialize Naive RAG agent.
@@ -61,7 +62,9 @@ class NaiveRAGAgent(BaseAgent):
     def _init_langgraph(self) -> bool:
         """Initialize LangGraph if available."""
         try:
-            from langgraph.graph import StateGraph, END
+            # Availability probe: the import must stay so a missing LangGraph
+            # raises ImportError here rather than later at call time.
+            from langgraph.graph import END, StateGraph  # noqa: F401
 
             self._graph = self._build_graph()
             return True
@@ -71,7 +74,7 @@ class NaiveRAGAgent(BaseAgent):
 
     def _build_graph(self):
         """Build the LangGraph state graph."""
-        from langgraph.graph import StateGraph, END
+        from langgraph.graph import END, StateGraph
 
         # Create graph with AgentState
         graph = StateGraph(AgentState)
@@ -200,8 +203,12 @@ class NaiveRAGAgent(BaseAgent):
                 },
                 duration_ms=duration,
                 metadata={
-                    "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-                    "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+                    "prompt_tokens": (
+                        response.usage.prompt_tokens if response.usage else 0
+                    ),
+                    "completion_tokens": (
+                        response.usage.completion_tokens if response.usage else 0
+                    ),
                 },
             )
 
@@ -239,7 +246,7 @@ class NaiveRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """
@@ -319,7 +326,7 @@ class NaiveRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """
@@ -385,9 +392,9 @@ class NaiveRAGAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
-    ) -> tuple[str, List[RetrievedChunk]]:
+    ) -> tuple[str, list[RetrievedChunk]]:
         """
         Run agent and return answer with sources separately.
 
@@ -420,7 +427,7 @@ class NaiveRAGAgentFactory:
         db,
         llm_provider: str = "openai",
         retrieval_method: str = "vector",
-        config: Optional[AgentConfig] = None,
+        config: AgentConfig | None = None,
         **kwargs: Any,
     ) -> NaiveRAGAgent:
         """
@@ -436,8 +443,8 @@ class NaiveRAGAgentFactory:
         Returns:
             Configured NaiveRAGAgent
         """
-        from app.llm.factory import get_llm, LLMProvider
-        from app.retrieval.factory import get_retriever, RetrievalMethod
+        from app.llm.factory import LLMProvider, get_llm
+        from app.retrieval.factory import RetrievalMethod, get_retriever
 
         # Create retriever
         try:

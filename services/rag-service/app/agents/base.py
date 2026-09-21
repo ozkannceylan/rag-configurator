@@ -2,17 +2,18 @@
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, TypedDict
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any, TypedDict
 
 from app.retrieval.base import RetrievedChunk
 
 logger = logging.getLogger(__name__)
 
 
-class StepType(str, Enum):
+class StepType(StrEnum):
     """Types of agent steps."""
 
     RETRIEVE = "retrieve"
@@ -31,17 +32,17 @@ class AgentStep:
 
     step_type: StepType
     name: str
-    input: Optional[Dict[str, Any]] = None
-    output: Optional[Dict[str, Any]] = None
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
     duration_ms: float = 0.0
-    timestamp: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    timestamp: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if self.timestamp is None:
-            self.timestamp = datetime.now(timezone.utc).isoformat()
+            self.timestamp = datetime.now(UTC).isoformat()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "step_type": self.step_type.value,
@@ -59,17 +60,17 @@ class AgentResponse:
     """Response from agent execution."""
 
     answer: str
-    sources: List[RetrievedChunk] = field(default_factory=list)
-    steps: List[AgentStep] = field(default_factory=list)
+    sources: list[RetrievedChunk] = field(default_factory=list)
+    steps: list[AgentStep] = field(default_factory=list)
     total_duration_ms: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     # Token usage tracking
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "answer": self.answer,
@@ -101,22 +102,22 @@ class AgentState(TypedDict, total=False):
     # Input
     query: str
     config_id: str
-    conversation_history: List[Dict[str, str]]
+    conversation_history: list[dict[str, str]]
 
     # Retrieval
-    retrieved_chunks: List[RetrievedChunk]
+    retrieved_chunks: list[RetrievedChunk]
     context: str
 
     # Generation
     answer: str
-    sources: List[RetrievedChunk]
+    sources: list[RetrievedChunk]
 
     # Tracking
-    steps: List[AgentStep]
-    error: Optional[str]
+    steps: list[AgentStep]
+    error: str | None
 
     # Metadata
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -144,7 +145,7 @@ class AgentConfig:
     timeout_seconds: float = 60.0
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AgentConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "AgentConfig":
         """Create from dictionary."""
         return cls(
             top_k=data.get("top_k", 5),
@@ -166,8 +167,8 @@ class AgentError(Exception):
     def __init__(
         self,
         message: str,
-        step: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        step: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         self.message = message
         self.step = step
@@ -180,7 +181,7 @@ class BaseAgent(ABC):
 
     def __init__(
         self,
-        config: Optional[AgentConfig] = None,
+        config: AgentConfig | None = None,
     ):
         """
         Initialize base agent.
@@ -201,7 +202,7 @@ class BaseAgent(ABC):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """
@@ -223,7 +224,7 @@ class BaseAgent(ABC):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """
@@ -248,8 +249,8 @@ class BaseAgent(ABC):
         self,
         step_type: StepType,
         name: str,
-        input_data: Optional[Dict[str, Any]] = None,
-        output_data: Optional[Dict[str, Any]] = None,
+        input_data: dict[str, Any] | None = None,
+        output_data: dict[str, Any] | None = None,
         duration_ms: float = 0.0,
         **metadata: Any,
     ) -> AgentStep:
@@ -265,9 +266,9 @@ class BaseAgent(ABC):
 
     def _format_sources(
         self,
-        chunks: List[RetrievedChunk],
+        chunks: list[RetrievedChunk],
         max_sources: int = 10,
-    ) -> List[RetrievedChunk]:
+    ) -> list[RetrievedChunk]:
         """Format and limit sources."""
         # Sort by score descending
         sorted_chunks = sorted(chunks, key=lambda x: x.score, reverse=True)

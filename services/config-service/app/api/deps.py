@@ -1,13 +1,14 @@
 """API dependencies for dependency injection."""
 
 from typing import Annotated
+
 from fastapi import Depends, Header
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.core.exceptions import UnauthorizedException
+from app.core.security import decode_token
 from app.db.mongodb import get_db
 from app.db.repositories.user_repo import UserRepository
-from app.core.security import decode_token
-from app.core.exceptions import UnauthorizedException
 from app.schemas.user import UserResponse
 
 

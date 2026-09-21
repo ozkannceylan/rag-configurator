@@ -1,20 +1,19 @@
 """Factory for creating text chunkers."""
 
 import logging
-from enum import Enum
-from typing import Optional, Type
+from enum import StrEnum
 
 from app.chunkers.base import BaseChunker, ChunkingConfig
 from app.chunkers.document import DocumentChunker, FixedSizeChunker, ParagraphChunker
+from app.chunkers.late_chunking import LateChunker
+from app.chunkers.raptor import RAPTORChunker
 from app.chunkers.recursive import RecursiveChunker
 from app.chunkers.semantic import SemanticChunker
-from app.chunkers.raptor import RAPTORChunker
-from app.chunkers.late_chunking import LateChunker
 
 logger = logging.getLogger(__name__)
 
 
-class ChunkingStrategy(str, Enum):
+class ChunkingStrategy(StrEnum):
     """Available chunking strategies."""
 
     RECURSIVE = "recursive"
@@ -27,7 +26,7 @@ class ChunkingStrategy(str, Enum):
 
 
 # Registry of chunkers by strategy
-CHUNKER_REGISTRY: dict[ChunkingStrategy, Type[BaseChunker]] = {
+CHUNKER_REGISTRY: dict[ChunkingStrategy, type[BaseChunker]] = {
     ChunkingStrategy.RECURSIVE: RecursiveChunker,
     ChunkingStrategy.SEMANTIC: SemanticChunker,
     ChunkingStrategy.DOCUMENT: DocumentChunker,
@@ -40,7 +39,7 @@ CHUNKER_REGISTRY: dict[ChunkingStrategy, Type[BaseChunker]] = {
 
 def get_chunker(
     strategy: ChunkingStrategy | str = ChunkingStrategy.RECURSIVE,
-    config: Optional[ChunkingConfig] = None,
+    config: ChunkingConfig | None = None,
 ) -> BaseChunker:
     """
     Get a chunker instance for the specified strategy.
@@ -64,7 +63,7 @@ def get_chunker(
             raise ValueError(
                 f"Unknown chunking strategy: '{strategy}'. "
                 f"Valid strategies: {valid_strategies}"
-            )
+            ) from None
 
     chunker_class = CHUNKER_REGISTRY.get(strategy)
     if chunker_class is None:

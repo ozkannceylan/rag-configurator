@@ -1,9 +1,9 @@
 """Folder scanning schemas."""
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
 
-from rag_config_common.models.enums import DataType, DataSourceType
+from pydantic import BaseModel, Field
+from rag_config_common.models.enums import DataSourceType, DataType
 
 
 class FolderScanRequest(BaseModel):

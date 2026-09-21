@@ -1,6 +1,7 @@
 """Template repository for database operations."""
 
-from typing import Optional, List
+from typing import List, Optional
+
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.db.repositories.base import BaseRepository

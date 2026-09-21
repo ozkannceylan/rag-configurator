@@ -3,7 +3,7 @@
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.audit import AuditLogger
-from app.core.exceptions import NotFoundException, AlreadyExistsException
+from app.core.exceptions import AlreadyExistsException, NotFoundException
 from app.db.repositories.user_repo import UserRepository
 from app.schemas.user import UserResponse, UserUpdate
 

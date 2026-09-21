@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.evaluation.judge import DEFAULT_RUBRICS, JudgeEvaluator, _parse_judge_response
 from app.evaluation.models import (
     EvaluationResult,
     EvaluationRun,
@@ -17,9 +18,7 @@ from app.evaluation.ragas_eval import (
     RagasEvaluator,
     _parse_score_response,
 )
-from app.evaluation.judge import JudgeEvaluator, DEFAULT_RUBRICS, _parse_judge_response
-from app.llm.base import BaseLLM, LLMConfig, LLMResponse, LLMUsage, Message
-
+from app.llm.base import BaseLLM, LLMConfig, LLMResponse, LLMUsage
 
 # =========================================================================
 # Helpers
@@ -58,7 +57,9 @@ class MockLLM(BaseLLM):
 
 class TestModels:
     def test_metric_result_creation(self):
-        mr = MetricResult(name="faithfulness", score=0.85, explanation="Mostly supported")
+        mr = MetricResult(
+            name="faithfulness", score=0.85, explanation="Mostly supported"
+        )
         assert mr.name == "faithfulness"
         assert mr.score == 0.85
         assert mr.explanation == "Mostly supported"
@@ -125,9 +126,11 @@ class TestRagasEvaluator:
             RagasEvaluator(llm=llm, metrics=["nonexistent_metric"])
 
     async def test_faithfulness_metric(self):
-        llm = MockLLM(responses=[
-            '{"score": 0.9, "explanation": "Answer is well supported by context."}'
-        ])
+        llm = MockLLM(
+            responses=[
+                '{"score": 0.9, "explanation": "Answer is well supported by context."}'
+            ]
+        )
         evaluator = RagasEvaluator(llm=llm, metrics=["faithfulness"])
         result = await evaluator.evaluate(
             query="What is Python?",
@@ -139,9 +142,11 @@ class TestRagasEvaluator:
         assert len(result.metric_results) == 1
 
     async def test_answer_relevancy_metric(self):
-        llm = MockLLM(responses=[
-            '{"score": 0.85, "explanation": "Directly addresses the query."}'
-        ])
+        llm = MockLLM(
+            responses=[
+                '{"score": 0.85, "explanation": "Directly addresses the query."}'
+            ]
+        )
         evaluator = RagasEvaluator(llm=llm, metrics=["answer_relevancy"])
         result = await evaluator.evaluate(
             query="What is Python?",
@@ -151,9 +156,9 @@ class TestRagasEvaluator:
         assert result.scores["answer_relevancy"] == 0.85
 
     async def test_context_precision_metric(self):
-        llm = MockLLM(responses=[
-            '{"score": 0.7, "explanation": "Most contexts are relevant."}'
-        ])
+        llm = MockLLM(
+            responses=['{"score": 0.7, "explanation": "Most contexts are relevant."}']
+        )
         evaluator = RagasEvaluator(llm=llm, metrics=["context_precision"])
         result = await evaluator.evaluate(
             query="What is Python?",
@@ -163,9 +168,11 @@ class TestRagasEvaluator:
         assert result.scores["context_precision"] == 0.7
 
     async def test_context_recall_with_ground_truth(self):
-        llm = MockLLM(responses=[
-            '{"score": 0.95, "explanation": "Contexts cover ground truth well."}'
-        ])
+        llm = MockLLM(
+            responses=[
+                '{"score": 0.95, "explanation": "Contexts cover ground truth well."}'
+            ]
+        )
         evaluator = RagasEvaluator(llm=llm, metrics=["context_recall"])
         result = await evaluator.evaluate(
             query="What is Python?",
@@ -188,12 +195,14 @@ class TestRagasEvaluator:
         assert "Skipped" in result.metric_results[0].explanation
 
     async def test_all_metrics(self):
-        llm = MockLLM(responses=[
-            '{"score": 0.9, "explanation": "faithful"}',
-            '{"score": 0.85, "explanation": "relevant"}',
-            '{"score": 0.7, "explanation": "precise"}',
-            '{"score": 0.8, "explanation": "good recall"}',
-        ])
+        llm = MockLLM(
+            responses=[
+                '{"score": 0.9, "explanation": "faithful"}',
+                '{"score": 0.85, "explanation": "relevant"}',
+                '{"score": 0.7, "explanation": "precise"}',
+                '{"score": 0.8, "explanation": "good recall"}',
+            ]
+        )
         evaluator = RagasEvaluator(llm=llm)
         result = await evaluator.evaluate(
             query="What is Python?",
@@ -210,9 +219,7 @@ class TestRagasEvaluator:
         # Override generate to raise
         llm.generate = AsyncMock(side_effect=RuntimeError("LLM down"))
         evaluator = RagasEvaluator(llm=llm, metrics=["faithfulness"])
-        result = await evaluator.evaluate(
-            query="q", answer="a", contexts=["c"]
-        )
+        result = await evaluator.evaluate(query="q", answer="a", contexts=["c"])
         assert result.scores["faithfulness"] == 0.0
         assert "error" in result.metric_results[0].explanation.lower()
 
@@ -257,7 +264,7 @@ class TestJudgeEvaluator:
             '{"name": "completeness", "score": 0.8, "explanation": "mostly complete"},'
             '{"name": "conciseness", "score": 0.7, "explanation": "a bit verbose"},'
             '{"name": "accuracy", "score": 0.95, "explanation": "accurate"}'
-            ']}'
+            "]}"
         )
         llm = MockLLM(responses=[response_json])
         evaluator = JudgeEvaluator(llm=llm)
@@ -280,9 +287,7 @@ class TestJudgeEvaluator:
         response_json = '{"rubrics": [{"name": "tone", "score": 0.8, "explanation": "professional"}]}'
         llm = MockLLM(responses=[response_json])
         evaluator = JudgeEvaluator(llm=llm, rubrics=custom_rubrics)
-        result = await evaluator.evaluate(
-            query="q", answer="a", contexts=["c"]
-        )
+        result = await evaluator.evaluate(query="q", answer="a", contexts=["c"])
         assert "tone" in result.scores
         assert len(result.scores) == 1
 
@@ -293,7 +298,7 @@ class TestJudgeEvaluator:
             '{"name": "completeness", "score": 0.85, "explanation": "ok"},'
             '{"name": "conciseness", "score": 0.8, "explanation": "ok"},'
             '{"name": "accuracy", "score": 0.95, "explanation": "ok"}'
-            ']}'
+            "]}"
         )
         llm = MockLLM(responses=[response_json])
         evaluator = JudgeEvaluator(llm=llm)
@@ -366,6 +371,7 @@ class TestEvaluationAPI:
 
     async def test_evaluate_endpoint(self, client, mock_mongodb, mock_eval_collection):
         """POST /api/v1/evaluation/evaluate should return evaluation results."""
+
         # Configure mock DB to return the evaluation collection and a config
         def getitem(name):
             if name == "evaluations":
@@ -381,13 +387,13 @@ class TestEvaluationAPI:
         # Mock the evaluator
         mock_result = EvaluationResult(
             scores={"faithfulness": 0.9},
-            metric_results=[MetricResult(name="faithfulness", score=0.9, explanation="good")],
+            metric_results=[
+                MetricResult(name="faithfulness", score=0.9, explanation="good")
+            ],
             metadata={"evaluator": "ragas"},
         )
 
-        with patch(
-            "app.api.v1.evaluation._build_evaluator"
-        ) as mock_build:
+        with patch("app.api.v1.evaluation._build_evaluator") as mock_build:
             mock_evaluator = AsyncMock()
             mock_evaluator.evaluate = AsyncMock(return_value=mock_result)
             mock_build.return_value = mock_evaluator
@@ -411,9 +417,10 @@ class TestEvaluationAPI:
     async def test_evaluate_endpoint_missing_auth(self, client, mock_mongodb):
         """Should reject requests without X-User-ID header."""
         # Remove the default header
-        from app.main import app
-        from app.db.mongodb import mongodb
         from httpx import ASGITransport, AsyncClient
+
+        from app.db.mongodb import mongodb
+        from app.main import app
 
         mongodb.database = mock_mongodb
         async with AsyncClient(
@@ -432,7 +439,9 @@ class TestEvaluationAPI:
             )
         assert response.status_code in (401, 403)
 
-    async def test_get_evaluation_history(self, client, mock_mongodb, mock_eval_collection):
+    async def test_get_evaluation_history(
+        self, client, mock_mongodb, mock_eval_collection
+    ):
         """GET /api/v1/evaluation/{config_id} should return evaluation runs."""
         mock_mongodb.__getitem__ = MagicMock(return_value=mock_eval_collection)
 
@@ -446,7 +455,9 @@ class TestEvaluationAPI:
         assert "data" in data
         assert "meta" in data
 
-    async def test_get_evaluation_summary(self, client, mock_mongodb, mock_eval_collection):
+    async def test_get_evaluation_summary(
+        self, client, mock_mongodb, mock_eval_collection
+    ):
         """GET /api/v1/evaluation/{config_id}/summary should return a summary."""
         mock_mongodb.__getitem__ = MagicMock(return_value=mock_eval_collection)
 

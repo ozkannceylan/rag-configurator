@@ -3,7 +3,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.processors.base import (
     BaseProcessor,
@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 class DocxProcessor(BaseProcessor):
     """Processor for Microsoft Word documents (.docx)."""
 
-    supported_extensions: List[str] = [".docx"]
+    supported_extensions: list[str] = [".docx"]
 
     async def process(
-        self, file_path: Path, config: Optional[DocumentProcessingConfig] = None
+        self, file_path: Path, config: DocumentProcessingConfig | None = None
     ) -> ProcessedDocument:
         """
         Process a Word document and extract content.
@@ -34,8 +34,8 @@ class DocxProcessor(BaseProcessor):
         """
         cfg = config or self.config
         start_time = time.time()
-        errors: List[str] = []
-        warnings: List[str] = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         # Validate file
         try:
@@ -51,8 +51,8 @@ class DocxProcessor(BaseProcessor):
         metadata = self.get_file_metadata(file_path)
 
         content = ""
-        tables: List[Dict[str, Any]] = []
-        sections: List[Dict[str, Any]] = []
+        tables: list[dict[str, Any]] = []
+        sections: list[dict[str, Any]] = []
 
         try:
             from docx import Document
@@ -172,7 +172,7 @@ class DocxProcessor(BaseProcessor):
             warnings=warnings,
         )
 
-    def _extract_table(self, table) -> List[List[str]]:
+    def _extract_table(self, table) -> list[list[str]]:
         """Extract table data as a 2D list."""
         data = []
         for row in table.rows:
@@ -182,7 +182,7 @@ class DocxProcessor(BaseProcessor):
             data.append(row_data)
         return data
 
-    def _table_to_text(self, table_data: List[List[str]]) -> str:
+    def _table_to_text(self, table_data: list[list[str]]) -> str:
         """Convert table data to text representation."""
         if not table_data:
             return ""

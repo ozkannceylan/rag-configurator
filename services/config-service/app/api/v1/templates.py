@@ -1,17 +1,17 @@
 """Template marketplace endpoints."""
 
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
 
-from app.db.mongodb import get_db
 from app.api.deps import CurrentUser
-from app.core.exceptions import NotFoundException, ForbiddenException
-from app.db.repositories.template_repo import TemplateRepository
+from app.core.exceptions import ForbiddenException, NotFoundException
+from app.db.mongodb import get_db
 from app.db.repositories.config_repo import ConfigRepository
+from app.db.repositories.template_repo import TemplateRepository
 
 router = APIRouter(prefix="/templates", tags=["templates"])
 

@@ -1,21 +1,21 @@
 """Tests for graph extraction, storage, community detection, and summarization."""
 
-import pytest
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from app.graph.builder import GraphBuildConfig, GraphBuilder, GraphBuildResult
+from app.graph.community import CommunityDetector
 from app.graph.extractor import (
     EntityExtractor,
-    ExtractionConfig,
     ExtractedEntity,
     ExtractedRelation,
+    ExtractionConfig,
     ExtractionResult,
 )
-from app.graph.builder import GraphBuilder, GraphBuildConfig, GraphBuildResult
-from app.graph.community import CommunityDetector
 from app.graph.models import Community, CommunitySummary, Entity, Relation
 from app.graph.summarizer import CommunitySummarizer
-from app.storage.graph_store import GraphStore, GraphNode, GraphEdge
+from app.storage.graph_store import GraphEdge, GraphNode, GraphStore
 
 
 class TestExtractionConfig:
@@ -147,7 +147,7 @@ class TestEntityExtractor:
         """Test parsing valid JSON response."""
         extractor = EntityExtractor()
 
-        response = '''
+        response = """
         {
             "entities": [
                 {"name": "John Doe", "type": "person", "confidence": 0.9},
@@ -157,7 +157,7 @@ class TestEntityExtractor:
                 {"source": "John Doe", "target": "Acme Corp", "type": "works_for", "confidence": 0.8}
             ]
         }
-        '''
+        """
 
         entities, relations = extractor._parse_response(response)
 
@@ -182,7 +182,7 @@ class TestEntityExtractor:
         config = ExtractionConfig(min_confidence=0.7)
         extractor = EntityExtractor(config)
 
-        response = '''
+        response = """
         {
             "entities": [
                 {"name": "High Conf", "type": "person", "confidence": 0.9},
@@ -190,7 +190,7 @@ class TestEntityExtractor:
             ],
             "relations": []
         }
-        '''
+        """
 
         entities, relations = extractor._parse_response(response)
 
@@ -202,7 +202,7 @@ class TestEntityExtractor:
         config = ExtractionConfig(max_entities_per_chunk=2)
         extractor = EntityExtractor(config)
 
-        response = '''
+        response = """
         {
             "entities": [
                 {"name": "Entity1", "type": "test", "confidence": 0.7},
@@ -212,7 +212,7 @@ class TestEntityExtractor:
             ],
             "relations": []
         }
-        '''
+        """
 
         entities, relations = extractor._parse_response(response)
 
@@ -438,14 +438,10 @@ class TestExtractionResult:
 
     def test_result_with_data(self):
         """Test extraction result with data."""
-        entities = [
-            ExtractedEntity(name="Test", entity_type="test")
-        ]
+        entities = [ExtractedEntity(name="Test", entity_type="test")]
         relations = [
             ExtractedRelation(
-                source_entity="A",
-                target_entity="B",
-                relation_type="related"
+                source_entity="A", target_entity="B", relation_type="related"
             )
         ]
 
@@ -470,7 +466,8 @@ class TestCommunityModels:
     def test_entity_to_dict(self):
         """Test Entity serialization."""
         e = Entity(
-            name="Python", type="Technology",
+            name="Python",
+            type="Technology",
             description="A programming language",
             chunk_ids=["c-1", "c-2"],
             properties={"version": "3.12"},
@@ -580,17 +577,19 @@ class TestCommunityDetector:
         detector = CommunityDetector()
 
         async def mock_llm(prompt):
-            return '''{
+            return """{
                 "entities": [
                     {"name": "Python", "type": "Language", "description": "A language"}
                 ],
                 "relations": [
                     {"source": "Python", "target": "Guido", "type": "CREATED_BY"}
                 ]
-            }'''
+            }"""
 
         chunks = [{"content": "Python was created by Guido.", "chunk_id": "c-1"}]
-        entities, relations = await detector.extract_entities_relations(chunks, mock_llm)
+        entities, relations = await detector.extract_entities_relations(
+            chunks, mock_llm
+        )
         assert len(entities) >= 1
         assert any(e.name == "Python" for e in entities)
 
@@ -610,7 +609,9 @@ class TestCommunityDetector:
 
     def test_parse_extraction_from_markdown(self):
         """Test JSON parsing from markdown code fences."""
-        raw = '```json\n{"entities": [{"name": "A", "type": "X"}], "relations": []}\n```'
+        raw = (
+            '```json\n{"entities": [{"name": "A", "type": "X"}], "relations": []}\n```'
+        )
         result = CommunityDetector._parse_extraction(raw)
         assert len(result["entities"]) == 1
 

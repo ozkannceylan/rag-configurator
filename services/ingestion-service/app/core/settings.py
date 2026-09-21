@@ -1,7 +1,6 @@
 """Application settings using Pydantic Settings."""
 
 from functools import lru_cache
-from typing import List, Optional, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -48,7 +47,7 @@ class Settings(BaseSettings):
     )
 
     # OpenTelemetry
-    otel_exporter_otlp_endpoint: Optional[str] = Field(
+    otel_exporter_otlp_endpoint: str | None = Field(
         default=None,
         alias="OTEL_EXPORTER_OTLP_ENDPOINT",
     )
@@ -58,8 +57,8 @@ class Settings(BaseSettings):
     )
 
     # Celery Configuration
-    celery_broker_url: Optional[str] = Field(default=None, alias="CELERY_BROKER_URL")
-    celery_result_backend: Optional[str] = Field(
+    celery_broker_url: str | None = Field(default=None, alias="CELERY_BROKER_URL")
+    celery_result_backend: str | None = Field(
         default=None, alias="CELERY_RESULT_BACKEND"
     )
     celery_task_default_queue: str = Field(
@@ -74,7 +73,7 @@ class Settings(BaseSettings):
     embedding_dimensions: int = Field(default=1536, alias="EMBEDDING_DIMENSIONS")
 
     # OpenAI Configuration
-    openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
 
     # Ollama Configuration
     ollama_base_url: str = Field(
@@ -97,7 +96,7 @@ class Settings(BaseSettings):
     )
 
     # CORS Configuration - use Union to prevent pydantic-settings from JSON parsing
-    cors_origins: Union[str, List[str]] = Field(
+    cors_origins: str | list[str] = Field(
         default=["http://localhost:3000", "http://localhost:5173"],
         alias="CORS_ORIGINS",
     )

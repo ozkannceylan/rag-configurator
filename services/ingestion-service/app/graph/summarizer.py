@@ -1,7 +1,8 @@
 """Community summarization using LLM for GraphRAG."""
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from app.graph.models import Community, CommunitySummary
 
@@ -26,11 +27,11 @@ class CommunitySummarizer:
 
     async def summarize_communities(
         self,
-        communities: List[Community],
+        communities: list[Community],
         llm_generate: Callable[..., Any],
         config_id: str,
-        db: Optional[Any] = None,
-    ) -> List[CommunitySummary]:
+        db: Any | None = None,
+    ) -> list[CommunitySummary]:
         """
         Generate summaries for each community using an LLM.
 
@@ -43,7 +44,7 @@ class CommunitySummarizer:
         Returns:
             List of community summaries.
         """
-        summaries: List[CommunitySummary] = []
+        summaries: list[CommunitySummary] = []
 
         for community in communities:
             if not community.entities:
@@ -63,9 +64,7 @@ class CommunitySummarizer:
                 summaries.append(cs)
 
             except Exception as e:
-                logger.warning(
-                    "Failed to summarize community %s: %s", community.id, e
-                )
+                logger.warning("Failed to summarize community %s: %s", community.id, e)
 
         # Persist to MongoDB if database is provided
         if db is not None and summaries:
@@ -105,7 +104,7 @@ class CommunitySummarizer:
     @staticmethod
     async def _store_summaries(
         db: Any,
-        summaries: List[CommunitySummary],
+        summaries: list[CommunitySummary],
     ) -> None:
         """Persist community summaries to MongoDB."""
         collection = db["community_summaries"]

@@ -1,7 +1,7 @@
 """Factory for creating guardrail instances."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from app.guardrails.base import BaseGuardrail
 from app.guardrails.llm_guard import LLMGuard
@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 def create_guardrail(
     guardrail_type: str = "llm",
-    llm: Optional[BaseLLM] = None,
-    config: Optional[Dict[str, Any]] = None,
+    llm: BaseLLM | None = None,
+    config: dict[str, Any] | None = None,
 ) -> BaseGuardrail:
     """
     Create a guardrail instance based on type.
@@ -37,6 +37,5 @@ def create_guardrail(
         return LLMGuard(llm=llm, config=config)
 
     raise ValueError(
-        f"Unknown guardrail type: '{guardrail_type}'. "
-        f"Available types: llm"
+        f"Unknown guardrail type: '{guardrail_type}'. " f"Available types: llm"
     )

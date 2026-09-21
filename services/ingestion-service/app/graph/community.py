@@ -3,9 +3,8 @@
 import json
 import logging
 import re
-import uuid
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from app.graph.models import Community, Entity, Relation
 
@@ -58,9 +57,9 @@ class CommunityDetector:
 
     async def extract_entities_relations(
         self,
-        chunks: List[Dict[str, Any]],
+        chunks: list[dict[str, Any]],
         llm_generate: Any,
-    ) -> Tuple[List[Entity], List[Relation]]:
+    ) -> tuple[list[Entity], list[Relation]]:
         """
         Extract entities and relations from text chunks using an LLM.
 
@@ -71,8 +70,8 @@ class CommunityDetector:
         Returns:
             Tuple of (entities, relations).
         """
-        entity_map: Dict[str, Entity] = {}
-        relations: List[Relation] = []
+        entity_map: dict[str, Entity] = {}
+        relations: list[Relation] = []
 
         for chunk in chunks:
             content = chunk.get("content", "")
@@ -127,9 +126,9 @@ class CommunityDetector:
 
     async def detect_communities(
         self,
-        entities: List[Entity],
-        relations: List[Relation],
-    ) -> List[Community]:
+        entities: list[Entity],
+        relations: list[Relation],
+    ) -> list[Community]:
         """
         Detect communities in the knowledge graph.
 
@@ -156,21 +155,21 @@ class CommunityDetector:
 
     def _detect_leiden(
         self,
-        entities: List[Entity],
-        relations: List[Relation],
-    ) -> List[Community]:
+        entities: list[Entity],
+        relations: list[Relation],
+    ) -> list[Community]:
         """Community detection via Leiden algorithm (igraph + leidenalg)."""
         import igraph as ig
         import leidenalg
 
         # Build name -> index mapping
-        name_to_idx: Dict[str, int] = {}
+        name_to_idx: dict[str, int] = {}
         for i, entity in enumerate(entities):
             name_to_idx[entity.name.lower()] = i
 
         # Build edge list
-        edges: List[Tuple[int, int]] = []
-        edge_relations: Dict[Tuple[int, int], List[Relation]] = defaultdict(list)
+        edges: list[tuple[int, int]] = []
+        edge_relations: dict[tuple[int, int], list[Relation]] = defaultdict(list)
         for rel in relations:
             src_idx = name_to_idx.get(rel.source.lower())
             tgt_idx = name_to_idx.get(rel.target.lower())
@@ -190,7 +189,7 @@ class CommunityDetector:
         )
 
         # Build communities from partition
-        communities: List[Community] = []
+        communities: list[Community] = []
         for comm_idx, member_indices in enumerate(partition):
             comm_entities = [entities[i] for i in member_indices]
             # Collect relations within this community
@@ -213,16 +212,16 @@ class CommunityDetector:
 
     def _detect_connected_components(
         self,
-        entities: List[Entity],
-        relations: List[Relation],
-    ) -> List[Community]:
+        entities: list[Entity],
+        relations: list[Relation],
+    ) -> list[Community]:
         """Fallback: group entities by connected components using union-find."""
-        name_to_entity: Dict[str, Entity] = {}
+        name_to_entity: dict[str, Entity] = {}
         for entity in entities:
             name_to_entity[entity.name.lower()] = entity
 
         # Union-Find
-        parent: Dict[str, str] = {e.name.lower(): e.name.lower() for e in entities}
+        parent: dict[str, str] = {e.name.lower(): e.name.lower() for e in entities}
 
         def find(x: str) -> str:
             while parent[x] != x:
@@ -242,12 +241,12 @@ class CommunityDetector:
                 union(src, tgt)
 
         # Group by root
-        groups: Dict[str, List[str]] = defaultdict(list)
+        groups: dict[str, list[str]] = defaultdict(list)
         for name in parent:
             groups[find(name)].append(name)
 
         # Build communities
-        communities: List[Community] = []
+        communities: list[Community] = []
         for comm_idx, (_, members) in enumerate(groups.items()):
             comm_entities = [name_to_entity[m] for m in members if m in name_to_entity]
             member_set = set(members)
@@ -268,7 +267,7 @@ class CommunityDetector:
         return communities
 
     @staticmethod
-    def _parse_extraction(raw_text: str) -> Dict[str, Any]:
+    def _parse_extraction(raw_text: str) -> dict[str, Any]:
         """Parse LLM extraction output as JSON, with fallback handling."""
         # Try to extract JSON from the response
         # Look for JSON block in markdown code fences

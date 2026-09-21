@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from app.retrieval.base import RetrievedChunk
 
@@ -18,7 +18,7 @@ class RBACConfig:
 
     # Role definitions: role -> list of allowed folder paths
     # Use "*" for wildcard (all folders)
-    role_permissions: Dict[str, List[str]] = field(default_factory=dict)
+    role_permissions: dict[str, list[str]] = field(default_factory=dict)
 
     # Whether to enforce RBAC at all
     enabled: bool = True
@@ -30,7 +30,7 @@ class RBACConfig:
     filter_post_retrieval: bool = True
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "RBACConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "RBACConfig":
         """Create from dictionary."""
         return cls(
             default_role=data.get("default_role", "user"),
@@ -59,7 +59,7 @@ class RBACEnforcer:
     users can only access documents from allowed folders.
     """
 
-    def __init__(self, rbac_config: Optional[RBACConfig] = None):
+    def __init__(self, rbac_config: RBACConfig | None = None):
         """
         Initialize RBAC enforcer.
 
@@ -69,7 +69,7 @@ class RBACEnforcer:
         self.config = rbac_config or RBACConfig()
         self._role_permissions = self.config.role_permissions
 
-    def get_allowed_folders(self, role: Optional[str] = None) -> List[str]:
+    def get_allowed_folders(self, role: str | None = None) -> list[str]:
         """
         Get list of allowed folder paths for a role.
 
@@ -95,7 +95,7 @@ class RBACEnforcer:
 
         return self._role_permissions.get(role, [])
 
-    def has_access(self, role: Optional[str], folder_path: Optional[str]) -> bool:
+    def has_access(self, role: str | None, folder_path: str | None) -> bool:
         """
         Check if a role has access to a specific folder.
 
@@ -122,7 +122,7 @@ class RBACEnforcer:
         # Check if folder is in allowed list
         return folder_path in allowed_folders
 
-    def build_filter(self, role: Optional[str]) -> Optional[Dict[str, Any]]:
+    def build_filter(self, role: str | None) -> dict[str, Any] | None:
         """
         Build MongoDB filter for allowed folders.
 
@@ -148,7 +148,7 @@ class RBACEnforcer:
         # Build filter
         return {"folder_path": {"$in": allowed_folders}}
 
-    def build_atlas_filter(self, role: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+    def build_atlas_filter(self, role: str | None) -> list[dict[str, Any]] | None:
         """
         Build Atlas Search filter clauses for allowed folders.
 
@@ -176,9 +176,9 @@ class RBACEnforcer:
 
     def filter_results(
         self,
-        results: List[RetrievedChunk],
-        role: Optional[str],
-    ) -> List[RetrievedChunk]:
+        results: list[RetrievedChunk],
+        role: str | None,
+    ) -> list[RetrievedChunk]:
         """
         Filter retrieval results based on role permissions.
 
@@ -212,14 +212,16 @@ class RBACEnforcer:
             if folder_path in allowed_folders:
                 filtered.append(chunk)
 
-        logger.debug(f"RBAC filtered {len(results)} -> {len(filtered)} results for role '{role}'")
+        logger.debug(
+            f"RBAC filtered {len(results)} -> {len(filtered)} results for role '{role}'"
+        )
         return filtered
 
     def filter_by_access_tags(
         self,
-        results: List[RetrievedChunk],
-        user_tags: List[str],
-    ) -> List[RetrievedChunk]:
+        results: list[RetrievedChunk],
+        user_tags: list[str],
+    ) -> list[RetrievedChunk]:
         """
         Filter results by access tags.
 
@@ -254,9 +256,9 @@ class RBACEnforcer:
 
     def get_accessible_chunk_ids(
         self,
-        role: Optional[str],
-        all_chunks: List[RetrievedChunk],
-    ) -> Set[str]:
+        role: str | None,
+        all_chunks: list[RetrievedChunk],
+    ) -> set[str]:
         """
         Get set of accessible chunk IDs for a role.
 
@@ -284,10 +286,10 @@ class RBACEnforcer:
 
     def can_access_document(
         self,
-        role: Optional[str],
-        folder_path: Optional[str],
-        access_tags: Optional[List[str]] = None,
-        user_tags: Optional[List[str]] = None,
+        role: str | None,
+        folder_path: str | None,
+        access_tags: list[str] | None = None,
+        user_tags: list[str] | None = None,
     ) -> bool:
         """
         Comprehensive access check including folder and tags.
@@ -315,7 +317,7 @@ class RBACEnforcer:
 
         return True
 
-    def add_role(self, role: str, allowed_folders: List[str]) -> None:
+    def add_role(self, role: str, allowed_folders: list[str]) -> None:
         """
         Add or update a role with allowed folders.
 
@@ -342,7 +344,7 @@ class RBACEnforcer:
             return True
         return False
 
-    def update_role_folders(self, role: str, allowed_folders: List[str]) -> bool:
+    def update_role_folders(self, role: str, allowed_folders: list[str]) -> bool:
         """
         Update allowed folders for a role.
 
@@ -359,7 +361,7 @@ class RBACEnforcer:
             return True
         return False
 
-    def list_roles(self) -> List[str]:
+    def list_roles(self) -> list[str]:
         """
         Get list of all defined roles.
 
@@ -368,7 +370,7 @@ class RBACEnforcer:
         """
         return list(self._role_permissions.keys())
 
-    def get_role_permissions(self) -> Dict[str, List[str]]:
+    def get_role_permissions(self) -> dict[str, list[str]]:
         """
         Get all role permissions.
 
@@ -377,7 +379,7 @@ class RBACEnforcer:
         """
         return self._role_permissions.copy()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "enabled": self.config.enabled,
@@ -404,9 +406,9 @@ class RBACMiddleware:
 
     def extract_role_from_request(
         self,
-        request_headers: Dict[str, str],
-        query_params: Optional[Dict[str, Any]] = None,
-    ) -> Optional[str]:
+        request_headers: dict[str, str],
+        query_params: dict[str, Any] | None = None,
+    ) -> str | None:
         """
         Extract user role from request.
 
@@ -432,9 +434,9 @@ class RBACMiddleware:
 
     def apply_rbac_to_query(
         self,
-        base_filter: Dict[str, Any],
-        role: Optional[str],
-    ) -> Dict[str, Any]:
+        base_filter: dict[str, Any],
+        role: str | None,
+    ) -> dict[str, Any]:
         """
         Apply RBAC filters to a MongoDB query.
 
@@ -462,7 +464,7 @@ class RBACMiddleware:
 # Convenience functions for common RBAC operations
 def create_rbac_enforcer(
     default_role: str = "user",
-    role_permissions: Optional[Dict[str, List[str]]] = None,
+    role_permissions: dict[str, list[str]] | None = None,
     enabled: bool = True,
 ) -> RBACEnforcer:
     """

@@ -1,7 +1,7 @@
 """Celery tasks for document ingestion."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from app.core.celery_app import celery_app
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, name="app.tasks.ingestion.process_ingestion")
-def process_ingestion(self, config_id: str, user_id: str) -> Dict[str, Any]:
+def process_ingestion(self, config_id: str, user_id: str) -> dict[str, Any]:
     """
     Main ingestion task that orchestrates the ingestion pipeline.
 
@@ -39,8 +39,8 @@ def process_ingestion(self, config_id: str, user_id: str) -> Dict[str, Any]:
 
 @celery_app.task(bind=True, name="app.tasks.ingestion.process_document")
 def process_document(
-    self, document_path: str, config_id: str, metadata: Dict[str, Any]
-) -> Dict[str, Any]:
+    self, document_path: str, config_id: str, metadata: dict[str, Any]
+) -> dict[str, Any]:
     """
     Process a single document.
 
@@ -70,7 +70,7 @@ def process_document(
 @celery_app.task(bind=True, name="app.tasks.ingestion.generate_embeddings")
 def generate_embeddings(
     self, chunks: list, config_id: str, batch_id: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generate embeddings for document chunks.
 

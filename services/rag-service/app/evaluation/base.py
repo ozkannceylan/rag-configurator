@@ -1,7 +1,6 @@
 """Abstract base class for evaluators."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from app.evaluation.models import EvaluationResult
 
@@ -14,8 +13,8 @@ class BaseEvaluator(ABC):
         self,
         query: str,
         answer: str,
-        contexts: List[str],
-        ground_truth: Optional[str] = None,
+        contexts: list[str],
+        ground_truth: str | None = None,
     ) -> EvaluationResult:
         """
         Evaluate a query/answer pair.

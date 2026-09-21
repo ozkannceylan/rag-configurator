@@ -5,9 +5,10 @@ import os
 import shutil
 import tempfile
 import uuid
+from collections.abc import AsyncGenerator, Generator
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, Generator, List
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,9 +18,9 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from rag_config_common.auth.hmac_verify import build_signed_headers
 
-from app.main import app
 from app.core.settings import settings
 from app.db.mongodb import mongodb
+from app.main import app
 from app.storage.models import (
     ChunkRecord,
     DocumentRecord,
@@ -84,8 +85,9 @@ def client(mock_mongodb: MagicMock) -> Generator[TestClient, None, None]:
     original_database = mongodb.database
     mongodb.database = mock_mongodb
 
-    with patch.object(mongodb, "connect", AsyncMock()), patch.object(
-        mongodb, "disconnect", AsyncMock()
+    with (
+        patch.object(mongodb, "connect", AsyncMock()),
+        patch.object(mongodb, "disconnect", AsyncMock()),
     ):
         with TestClient(app) as c:
             yield SignedTestClient(
@@ -205,7 +207,7 @@ def sample_user_id() -> str:
 
 
 @pytest.fixture
-def sample_config(sample_config_id: str, sample_user_id: str) -> Dict[str, Any]:
+def sample_config(sample_config_id: str, sample_user_id: str) -> dict[str, Any]:
     """Return a sample configuration."""
     return {
         "_id": sample_config_id,
@@ -293,16 +295,14 @@ def temp_text_file() -> Generator[Path, None, None]:
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".txt", delete=False, encoding="utf-8"
     ) as f:
-        f.write(
-            """This is a test document.
+        f.write("""This is a test document.
 It has multiple lines of content.
 The content is used for testing document processing.
 This paragraph has more text to ensure chunking works properly.
 
 Here is a second paragraph with additional content.
 It provides more text for the chunker to work with.
-"""
-        )
+""")
         path = Path(f.name)
 
     yield path
@@ -430,7 +430,14 @@ async def test_database() -> AsyncGenerator[Any, None]:
     yield db
 
     # Cleanup - drop test collections
-    collections = ["configs", "ingestions", "documents", "chunks", "graph_nodes", "graph_edges"]
+    collections = [
+        "configs",
+        "ingestions",
+        "documents",
+        "chunks",
+        "graph_nodes",
+        "graph_edges",
+    ]
     for collection in collections:
         await db[collection].delete_many({})
 
@@ -451,11 +458,10 @@ async def test_vector_store(test_database) -> AsyncGenerator[Any, None]:
 
 
 @pytest.fixture
-def integration_test_files(temp_directory: Path) -> Dict[str, Any]:
+def integration_test_files(temp_directory: Path) -> dict[str, Any]:
     """Prepare files for integration testing."""
     return {
         "directory": temp_directory,
         "files": list(temp_directory.rglob("*")),
         "expected_file_count": 3,
     }
-

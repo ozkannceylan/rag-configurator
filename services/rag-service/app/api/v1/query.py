@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -26,10 +26,10 @@ class QueryRequest(BaseModel):
 
     query: str = Field(..., description="User query text", max_length=10000)
     config_id: str = Field(..., description="RAG pipeline configuration ID")
-    user_role: Optional[str] = Field(None, description="User role for RBAC")
+    user_role: str | None = Field(None, description="User role for RBAC")
     include_sources: bool = Field(True, description="Include source chunks in response")
     include_debug: bool = Field(False, description="Include debug information")
-    conversation_history: Optional[List[Dict[str, str]]] = Field(
+    conversation_history: list[dict[str, str]] | None = Field(
         None, description="Previous conversation messages"
     )
 
@@ -39,7 +39,7 @@ class SourceResponse(BaseModel):
 
     content: str
     score: float
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     source_type: str
 
 
@@ -47,15 +47,15 @@ class QueryResponse(BaseModel):
     """Response model for query endpoint."""
 
     answer: str
-    sources: List[SourceResponse]
-    debug: Optional[Dict[str, Any]] = None
-    metadata: Dict[str, Any]
+    sources: list[SourceResponse]
+    debug: dict[str, Any] | None = None
+    metadata: dict[str, Any]
 
 
 class DebugInfo(BaseModel):
     """Debug information for query execution."""
 
-    steps: List[Dict[str, Any]]
+    steps: list[dict[str, Any]]
     retrieval_time_ms: int
     generation_time_ms: int
     total_time_ms: int
@@ -82,6 +82,7 @@ async def query(request: QueryRequest, http_request: Request):
 
         # Build pipeline config from actual config structure
         from app.api.v1.stream import build_pipeline_config
+
         pipeline_config = build_pipeline_config(config_doc)
 
         # Check query cache if caching is enabled
@@ -98,9 +99,7 @@ async def query(request: QueryRequest, http_request: Request):
                 cached_metadata["total_duration_ms"] = total_time
                 return QueryResponse(
                     answer=cached.get("answer", ""),
-                    sources=[
-                        SourceResponse(**s) for s in cached.get("sources", [])
-                    ],
+                    sources=[SourceResponse(**s) for s in cached.get("sources", [])],
                     debug=cached.get("debug"),
                     metadata=cached_metadata,
                 )
@@ -222,7 +221,7 @@ async def query_get(
     http_request: Request,
     query: str = Query(..., description="User query text", max_length=10000),
     config_id: str = Query(..., description="RAG pipeline configuration ID"),
-    user_role: Optional[str] = Query(None, description="User role for RBAC"),
+    user_role: str | None = Query(None, description="User role for RBAC"),
 ):
     """
     Execute a single RAG query via GET request.
@@ -238,7 +237,7 @@ async def query_get(
 
 
 # Helper function for creating LLM from config
-def get_llm_from_config(pipeline_config: Dict[str, Any]):
+def get_llm_from_config(pipeline_config: dict[str, Any]):
     """Create LLM instance from pipeline configuration."""
     from app.llm.base import LLMConfig
 
@@ -267,17 +266,17 @@ def get_agent(
     retriever,
     llm,
     prompt_manager,
-    config: Dict[str, Any],
+    config: dict[str, Any],
 ):
     """Create agent instance based on type."""
-    from app.agents.naive import NaiveRAGAgent
-    from app.agents.react import ReActAgent, ReActConfig
-    from app.agents.crag import CRAGAgent, CRAGConfig
-    from app.agents.self_rag import SelfRAGAgent, SelfRAGConfig
-    from app.agents.multi_query import MultiQueryAgent, MultiQueryConfig
-    from app.agents.plan_solve import PlanSolveAgent, PlanSolveConfig
-    from app.agents.graph_rag import GraphRAGAgent, GraphRAGConfig
     from app.agents.base import AgentConfig
+    from app.agents.crag import CRAGAgent, CRAGConfig
+    from app.agents.graph_rag import GraphRAGAgent, GraphRAGConfig
+    from app.agents.multi_query import MultiQueryAgent, MultiQueryConfig
+    from app.agents.naive import NaiveRAGAgent
+    from app.agents.plan_solve import PlanSolveAgent, PlanSolveConfig
+    from app.agents.react import ReActAgent, ReActConfig
+    from app.agents.self_rag import SelfRAGAgent, SelfRAGConfig
 
     agent_type_lower = agent_type.lower()
 

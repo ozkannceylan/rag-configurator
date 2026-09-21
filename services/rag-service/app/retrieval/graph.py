@@ -3,7 +3,7 @@
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -24,11 +24,11 @@ class GraphNode:
     node_id: str
     name: str
     node_type: str
-    properties: Dict[str, Any] = field(default_factory=dict)
+    properties: dict[str, Any] = field(default_factory=dict)
     score: float = 0.0  # Relevance score to query
     depth: int = 0  # Distance from query-matched nodes
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "node_id": self.node_id,
@@ -48,10 +48,10 @@ class GraphEdge:
     source_node: str
     target_node: str
     relation_type: str
-    properties: Dict[str, Any] = field(default_factory=dict)
+    properties: dict[str, Any] = field(default_factory=dict)
     weight: float = 1.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "edge_id": self.edge_id,
@@ -67,11 +67,11 @@ class GraphEdge:
 class GraphContext:
     """Context extracted from knowledge graph."""
 
-    nodes: List[GraphNode]
-    edges: List[GraphEdge]
-    query_entities: List[str]  # Entities mentioned in query
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+    query_entities: list[str]  # Entities mentioned in query
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "nodes": [n.to_dict() for n in self.nodes],
@@ -107,11 +107,11 @@ class GraphConfig:
     num_candidates: int = 50
 
     # Filters
-    node_types: Optional[List[str]] = None
-    relation_types: Optional[List[str]] = None
+    node_types: list[str] | None = None
+    relation_types: list[str] | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "GraphConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "GraphConfig":
         """Create from dictionary."""
         return cls(
             top_k_nodes=data.get("top_k_nodes", 5),
@@ -133,16 +133,18 @@ class GraphConfig:
 class GraphRetrievalResult:
     """Result of graph-based retrieval."""
 
-    chunks: List[RetrievedChunk]
-    graph_context: Optional[GraphContext] = None
-    query_entities: List[str] = field(default_factory=list)
+    chunks: list[RetrievedChunk]
+    graph_context: GraphContext | None = None
+    query_entities: list[str] = field(default_factory=list)
     retrieval_time_ms: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "chunks": [c.to_dict() for c in self.chunks],
-            "graph_context": self.graph_context.to_dict() if self.graph_context else None,
+            "graph_context": (
+                self.graph_context.to_dict() if self.graph_context else None
+            ),
             "query_entities": self.query_entities,
             "retrieval_time_ms": self.retrieval_time_ms,
         }
@@ -166,9 +168,9 @@ class GraphRetriever(BaseRetriever):
     def __init__(
         self,
         db: AsyncIOMotorDatabase,
-        config: Optional[RetrievalConfig] = None,
-        graph_config: Optional[GraphConfig] = None,
-        embedder: Optional[Any] = None,
+        config: RetrievalConfig | None = None,
+        graph_config: GraphConfig | None = None,
+        embedder: Any | None = None,
     ):
         """
         Initialize graph retriever.
@@ -186,7 +188,7 @@ class GraphRetriever(BaseRetriever):
         self.chunks = db[self.CHUNKS_COLLECTION]
         self.graph_config = graph_config or GraphConfig()
         self._embedder = embedder
-        self._use_vector_search: Optional[bool] = None
+        self._use_vector_search: bool | None = None
 
     async def _get_embedder(self):
         """Get or create embedder instance."""
@@ -236,9 +238,9 @@ class GraphRetriever(BaseRetriever):
         self,
         query: str,
         config_id: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> List[RetrievedChunk]:
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
+    ) -> list[RetrievedChunk]:
         """
         Retrieve relevant chunks using knowledge graph traversal.
 
@@ -263,8 +265,8 @@ class GraphRetriever(BaseRetriever):
         self,
         query: str,
         config_id: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
     ) -> GraphRetrievalResult:
         """
         Retrieve chunks with full graph context.
@@ -331,8 +333,8 @@ class GraphRetriever(BaseRetriever):
         self,
         query: str,
         config_id: str,
-        filters: Dict[str, Any],
-    ) -> List[GraphNode]:
+        filters: dict[str, Any],
+    ) -> list[GraphNode]:
         """Find nodes matching the query using semantic search."""
         # Generate query embedding
         embedder = await self._get_embedder()
@@ -358,13 +360,13 @@ class GraphRetriever(BaseRetriever):
 
     async def _find_nodes_with_vector_search(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         config_id: str,
-        filters: Dict[str, Any],
-    ) -> List[GraphNode]:
+        filters: dict[str, Any],
+    ) -> list[GraphNode]:
         """Find nodes using MongoDB Atlas Vector Search."""
         # Build filter
-        vector_filter: Dict[str, Any] = {"config_id": config_id}
+        vector_filter: dict[str, Any] = {"config_id": config_id}
 
         if self.graph_config.node_types:
             vector_filter["node_type"] = {"$in": self.graph_config.node_types}
@@ -414,13 +416,13 @@ class GraphRetriever(BaseRetriever):
 
     async def _find_nodes_with_cosine(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         config_id: str,
-        filters: Dict[str, Any],
-    ) -> List[GraphNode]:
+        filters: dict[str, Any],
+    ) -> list[GraphNode]:
         """Find nodes using in-memory cosine similarity."""
         # Build query filter
-        query_filter: Dict[str, Any] = {
+        query_filter: dict[str, Any] = {
             "config_id": config_id,
             "embedding": {"$exists": True, "$ne": []},
         }
@@ -459,7 +461,7 @@ class GraphRetriever(BaseRetriever):
         scored_nodes.sort(key=lambda x: x.score, reverse=True)
         return scored_nodes[: self.graph_config.top_k_nodes]
 
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+    def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """Calculate cosine similarity between two vectors."""
         if len(vec1) != len(vec2):
             return 0.0
@@ -475,27 +477,27 @@ class GraphRetriever(BaseRetriever):
 
     async def _traverse_graph(
         self,
-        starting_nodes: List[GraphNode],
+        starting_nodes: list[GraphNode],
         config_id: str,
         max_depth: int,
-        filters: Dict[str, Any],
-    ) -> Tuple[List[GraphNode], List[GraphEdge]]:
+        filters: dict[str, Any],
+    ) -> tuple[list[GraphNode], list[GraphEdge]]:
         """
         Traverse graph starting from matched nodes.
 
         Uses BFS to traverse up to max_depth levels.
         """
-        all_nodes: Dict[str, GraphNode] = {n.node_id: n for n in starting_nodes}
-        all_edges: Dict[str, GraphEdge] = {}
+        all_nodes: dict[str, GraphNode] = {n.node_id: n for n in starting_nodes}
+        all_edges: dict[str, GraphEdge] = {}
 
-        current_level_ids: Set[str] = {n.node_id for n in starting_nodes}
+        current_level_ids: set[str] = {n.node_id for n in starting_nodes}
 
         for depth in range(1, max_depth + 1):
             if not current_level_ids:
                 break
 
             # Find edges connected to current level nodes
-            edge_query: Dict[str, Any] = {
+            edge_query: dict[str, Any] = {
                 "config_id": config_id,
                 "$or": [
                     {"source_node": {"$in": list(current_level_ids)}},
@@ -510,7 +512,7 @@ class GraphRetriever(BaseRetriever):
             cursor = self.edges.find(edge_query)
             edge_docs = await cursor.to_list(length=1000)
 
-            next_level_ids: Set[str] = set()
+            next_level_ids: set[str] = set()
 
             for edge_doc in edge_docs:
                 edge_id = str(edge_doc.get("_id"))
@@ -534,7 +536,9 @@ class GraphRetriever(BaseRetriever):
 
             # Limit nodes per level
             if len(next_level_ids) > self.graph_config.max_nodes_per_level:
-                next_level_ids = set(list(next_level_ids)[: self.graph_config.max_nodes_per_level])
+                next_level_ids = set(
+                    list(next_level_ids)[: self.graph_config.max_nodes_per_level]
+                )
 
             # Fetch node details for new nodes
             if next_level_ids:
@@ -559,14 +563,14 @@ class GraphRetriever(BaseRetriever):
 
     async def _get_chunks_from_nodes(
         self,
-        nodes: List[GraphNode],
+        nodes: list[GraphNode],
         config_id: str,
         top_k: int,
-    ) -> List[RetrievedChunk]:
+    ) -> list[RetrievedChunk]:
         """Get chunks linked to the discovered nodes."""
         # Collect all source chunk IDs from nodes
-        chunk_ids: Set[str] = set()
-        node_chunk_map: Dict[str, List[str]] = {}  # chunk_id -> node_ids
+        chunk_ids: set[str] = set()
+        node_chunk_map: dict[str, list[str]] = {}  # chunk_id -> node_ids
 
         for node in nodes:
             # Get source chunks from node properties or look up
@@ -646,8 +650,8 @@ class GraphRetriever(BaseRetriever):
         return chunks[:top_k]
 
     async def _get_document_metadata(
-        self, document_id: Optional[str]
-    ) -> Optional[Dict[str, Any]]:
+        self, document_id: str | None
+    ) -> dict[str, Any] | None:
         """Get document metadata for enrichment."""
         if not document_id:
             return None
@@ -663,7 +667,7 @@ class GraphRetriever(BaseRetriever):
 
     async def get_entity_subgraph(
         self,
-        entity_names: List[str],
+        entity_names: list[str],
         config_id: str,
         max_depth: int = 2,
     ) -> GraphContext:
@@ -681,13 +685,15 @@ class GraphRetriever(BaseRetriever):
             GraphContext with nodes and edges
         """
         # Find nodes by name
-        starting_nodes: List[GraphNode] = []
+        starting_nodes: list[GraphNode] = []
 
         for name in entity_names:
-            node_doc = await self.nodes.find_one({
-                "config_id": config_id,
-                "name_normalized": name.lower().strip(),
-            })
+            node_doc = await self.nodes.find_one(
+                {
+                    "config_id": config_id,
+                    "name_normalized": name.lower().strip(),
+                }
+            )
 
             if node_doc:
                 node = GraphNode(
@@ -723,7 +729,7 @@ class GraphRetriever(BaseRetriever):
         target_entity: str,
         config_id: str,
         max_depth: int = 5,
-    ) -> Optional[List[GraphEdge]]:
+    ) -> list[GraphEdge] | None:
         """
         Find shortest path between two entities.
 
@@ -737,18 +743,22 @@ class GraphRetriever(BaseRetriever):
             List of edges in the path, or None if no path found
         """
         # Find source node
-        source_doc = await self.nodes.find_one({
-            "config_id": config_id,
-            "name_normalized": source_entity.lower().strip(),
-        })
+        source_doc = await self.nodes.find_one(
+            {
+                "config_id": config_id,
+                "name_normalized": source_entity.lower().strip(),
+            }
+        )
         if not source_doc:
             return None
 
         # Find target node
-        target_doc = await self.nodes.find_one({
-            "config_id": config_id,
-            "name_normalized": target_entity.lower().strip(),
-        })
+        target_doc = await self.nodes.find_one(
+            {
+                "config_id": config_id,
+                "name_normalized": target_entity.lower().strip(),
+            }
+        )
         if not target_doc:
             return None
 
@@ -759,24 +769,26 @@ class GraphRetriever(BaseRetriever):
             return []
 
         # BFS to find shortest path
-        visited: Set[str] = {source_id}
-        queue: List[Tuple[str, List[GraphEdge]]] = [(source_id, [])]
+        visited: set[str] = {source_id}
+        queue: list[tuple[str, list[GraphEdge]]] = [(source_id, [])]
 
         for _ in range(max_depth):
             if not queue:
                 break
 
-            next_queue: List[Tuple[str, List[GraphEdge]]] = []
+            next_queue: list[tuple[str, list[GraphEdge]]] = []
 
             for current_id, path in queue:
                 # Get edges from current node
-                cursor = self.edges.find({
-                    "config_id": config_id,
-                    "$or": [
-                        {"source_node": current_id},
-                        {"target_node": current_id},
-                    ],
-                })
+                cursor = self.edges.find(
+                    {
+                        "config_id": config_id,
+                        "$or": [
+                            {"source_node": current_id},
+                            {"target_node": current_id},
+                        ],
+                    }
+                )
                 edge_docs = await cursor.to_list(length=100)
 
                 for edge_doc in edge_docs:

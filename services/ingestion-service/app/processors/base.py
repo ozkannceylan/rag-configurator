@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -39,15 +39,15 @@ class ProcessedDocument:
     """Result of document processing."""
 
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     pages: int = 1
-    sections: List[Dict[str, Any]] = field(default_factory=list)
-    tables: List[Dict[str, Any]] = field(default_factory=list)
-    images: List[Dict[str, Any]] = field(default_factory=list)
+    sections: list[dict[str, Any]] = field(default_factory=list)
+    tables: list[dict[str, Any]] = field(default_factory=list)
+    images: list[dict[str, Any]] = field(default_factory=list)
     processing_time_ms: float = 0.0
     processor_name: str = ""
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def success(self) -> bool:
@@ -64,7 +64,7 @@ class ProcessedDocument:
         """Get character count."""
         return len(self.content)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "content": self.content,
@@ -87,16 +87,16 @@ class BaseProcessor(ABC):
     """Abstract base class for document processors."""
 
     # File extensions this processor handles
-    supported_extensions: List[str] = []
+    supported_extensions: list[str] = []
 
-    def __init__(self, config: Optional[DocumentProcessingConfig] = None):
+    def __init__(self, config: DocumentProcessingConfig | None = None):
         """Initialize processor with optional config."""
         self.config = config or DocumentProcessingConfig()
         self.logger = logging.getLogger(self.__class__.__name__)
 
     @abstractmethod
     async def process(
-        self, file_path: Path, config: Optional[DocumentProcessingConfig] = None
+        self, file_path: Path, config: DocumentProcessingConfig | None = None
     ) -> ProcessedDocument:
         """
         Process a document and extract text content.
@@ -114,7 +114,7 @@ class BaseProcessor(ABC):
         """Check if this processor can handle the given file."""
         return file_path.suffix.lower() in self.supported_extensions
 
-    def get_file_metadata(self, file_path: Path) -> Dict[str, Any]:
+    def get_file_metadata(self, file_path: Path) -> dict[str, Any]:
         """Extract basic file metadata."""
         stat = file_path.stat()
         return {

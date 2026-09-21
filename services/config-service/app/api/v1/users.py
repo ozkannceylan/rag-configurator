@@ -3,10 +3,10 @@
 from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.db.mongodb import get_db
 from app.api.deps import CurrentUser
-from app.schemas.user import UserResponse, UserUpdate
+from app.db.mongodb import get_db
 from app.schemas.auth import MessageResponse
+from app.schemas.user import UserResponse, UserUpdate
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])

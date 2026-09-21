@@ -4,9 +4,8 @@ import hashlib
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, Field
@@ -39,18 +38,18 @@ class IngestionStatusResponse(BaseModel):
     """Response for ingestion status."""
 
     config_id: str
-    ingestion_id: Optional[str] = None
-    task_id: Optional[str] = None
+    ingestion_id: str | None = None
+    task_id: str | None = None
     status: str
     progress: float = 0.0
-    current_step: Optional[str] = None
+    current_step: str | None = None
     total_files: int = 0
     processed_files: int = 0
     failed_files: int = 0
     total_chunks: int = 0
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
-    error: Optional[str] = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    error: str | None = None
 
 
 class CancelIngestionResponse(BaseModel):
@@ -77,15 +76,15 @@ class IngestionLogEntry(BaseModel):
     timestamp: str
     level: str
     message: str
-    file_path: Optional[str] = None
+    file_path: str | None = None
 
 
 class IngestionLogsResponse(BaseModel):
     """Response for ingestion logs."""
 
     config_id: str
-    ingestion_id: Optional[str] = None
-    logs: List[IngestionLogEntry] = []
+    ingestion_id: str | None = None
+    logs: list[IngestionLogEntry] = []
     total_count: int = 0
 
 
@@ -93,7 +92,7 @@ class IngestionStatsResponse(BaseModel):
     """Response for ingestion statistics."""
 
     config_id: str
-    ingestion_id: Optional[str] = None
+    ingestion_id: str | None = None
     total_files: int = 0
     processed_files: int = 0
     failed_files: int = 0
@@ -102,8 +101,8 @@ class IngestionStatsResponse(BaseModel):
     total_embeddings: int = 0
     graph_nodes: int = 0
     graph_edges: int = 0
-    processing_time_seconds: Optional[float] = None
-    files_by_type: Dict[str, int] = Field(default_factory=dict)
+    processing_time_seconds: float | None = None
+    files_by_type: dict[str, int] = Field(default_factory=dict)
     avg_chunks_per_file: float = 0.0
 
 
@@ -112,8 +111,8 @@ class IngestionHistoryEntry(BaseModel):
 
     ingestion_id: str
     status: str
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
+    started_at: str | None = None
+    completed_at: str | None = None
     total_files: int = 0
     processed_files: int = 0
     failed_files: int = 0
@@ -123,7 +122,7 @@ class IngestionHistoryResponse(BaseModel):
     """Response for ingestion history."""
 
     config_id: str
-    history: List[IngestionHistoryEntry] = []
+    history: list[IngestionHistoryEntry] = []
     total_count: int = 0
 
 
@@ -135,23 +134,23 @@ def get_ingestion_collection(db: AsyncIOMotorDatabase):
     return db[INGESTION_COLLECTION]
 
 
-def compute_data_source_hash(config: Dict[str, Any]) -> str:
+def compute_data_source_hash(config: dict[str, Any]) -> str:
     """Build a stable hash of the effective data source definition."""
     data_source = config.get("data_source", {})
     normalized = json.dumps(data_source, sort_keys=True, default=str)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def build_idempotency_key(config_id: str, config: Dict[str, Any]) -> str:
+def build_idempotency_key(config_id: str, config: dict[str, Any]) -> str:
     """Build the idempotency key for ingestion dispatch."""
     source_hash = compute_data_source_hash(config)
-    return hashlib.sha256(f"{config_id}:{source_hash}".encode("utf-8")).hexdigest()
+    return hashlib.sha256(f"{config_id}:{source_hash}".encode()).hexdigest()
 
 
 async def get_latest_ingestion_by_idempotency(
     db: AsyncIOMotorDatabase,
     idempotency_key: str,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Return the newest ingestion job for the given idempotency key."""
     ingestions = get_ingestion_collection(db)
     ingestion = await ingestions.find_one(
@@ -165,7 +164,7 @@ async def get_latest_ingestion_by_idempotency(
 
 async def get_latest_ingestion(
     db: AsyncIOMotorDatabase, config_id: str
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Get the latest ingestion for a config."""
     ingestions = get_ingestion_collection(db)
     ingestion = await ingestions.find_one(
@@ -179,7 +178,7 @@ async def get_latest_ingestion(
 
 async def get_running_ingestion(
     db: AsyncIOMotorDatabase, config_id: str
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Get a running ingestion for a config."""
     ingestions = get_ingestion_collection(db)
     ingestion = await ingestions.find_one(
@@ -193,7 +192,7 @@ async def get_running_ingestion(
     return ingestion
 
 
-def format_datetime(dt: Optional[datetime]) -> Optional[str]:
+def format_datetime(dt: datetime | None) -> str | None:
     """Format datetime to ISO string."""
     if dt:
         return dt.isoformat()
@@ -429,9 +428,10 @@ async def retry_ingestion(
             detail="No ingestion found for this configuration",
         )
 
-    if ingestion.get("status") in ("pending", "running") and ingestion.get(
-        "idempotency_key"
-    ) == idempotency_key:
+    if (
+        ingestion.get("status") in ("pending", "running")
+        and ingestion.get("idempotency_key") == idempotency_key
+    ):
         return RetryIngestionResponse(
             task_id=ingestion.get("celery_task_id") or f"existing-{ingestion['_id']}",
             ingestion_id=ingestion["_id"],
@@ -500,7 +500,7 @@ async def get_ingestion_logs(
     config_id: str,
     limit: int = Query(default=100, le=1000),
     offset: int = Query(default=0, ge=0),
-    level: Optional[str] = Query(default=None, description="Filter by log level"),
+    level: str | None = Query(default=None, description="Filter by log level"),
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> IngestionLogsResponse:
     """
@@ -522,7 +522,7 @@ async def get_ingestion_logs(
         )
 
     # Get errors as logs
-    logs: List[IngestionLogEntry] = []
+    logs: list[IngestionLogEntry] = []
     errors = ingestion.get("errors", [])
     warnings = ingestion.get("warnings", [])
 
@@ -629,7 +629,7 @@ async def get_ingestion_stats(
             }
         },
     ]
-    files_by_type: Dict[str, int] = {}
+    files_by_type: dict[str, int] = {}
     async for doc in documents.aggregate(doc_pipeline):
         file_type = doc["_id"] or "unknown"
         files_by_type[file_type] = doc["count"]
@@ -709,7 +709,7 @@ async def get_ingestion_history(
         .limit(limit)
     )
 
-    history: List[IngestionHistoryEntry] = []
+    history: list[IngestionHistoryEntry] = []
     async for doc in cursor:
         history.append(
             IngestionHistoryEntry(
@@ -742,7 +742,7 @@ async def delete_ingestion_data(
         description="Also delete ingestion history records",
     ),
     db: AsyncIOMotorDatabase = Depends(get_database),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Delete all ingested data for a configuration.
 
@@ -764,7 +764,6 @@ async def delete_ingestion_data(
 
     # Delete graph data
     deleted_nodes = 0
-    deleted_edges = 0
     try:
         from app.storage.graph_store import GraphStore
 
@@ -776,7 +775,9 @@ async def delete_ingestion_data(
     # Delete history if requested
     deleted_ingestions = 0
     if include_history:
-        result = await get_ingestion_collection(db).delete_many({"config_id": config_id})
+        result = await get_ingestion_collection(db).delete_many(
+            {"config_id": config_id}
+        )
         deleted_ingestions = result.deleted_count
 
     logger.info(

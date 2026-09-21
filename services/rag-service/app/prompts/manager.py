@@ -1,12 +1,11 @@
 """Prompt manager for template loading and variable substitution."""
 
 import logging
-import os
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -29,19 +28,19 @@ class PromptTemplate:
     name: str
     content: str
     category: str = "default"
-    variables: List[str] = field(default_factory=list)
+    variables: list[str] = field(default_factory=list)
     version: str = "1.0.0"
-    description: Optional[str] = None
-    created_at: Optional[str] = None
+    description: str | None = None
+    created_at: str | None = None
 
     def __post_init__(self):
         """Extract variables from template."""
         if not self.variables:
             self.variables = self._extract_variables()
         if not self.created_at:
-            self.created_at = datetime.now(timezone.utc).isoformat()
+            self.created_at = datetime.now(UTC).isoformat()
 
-    def _extract_variables(self) -> List[str]:
+    def _extract_variables(self) -> list[str]:
         """Extract variable names from template."""
         # Match {variable_name} patterns
         pattern = r"\{(\w+)\}"
@@ -66,7 +65,7 @@ class PromptTemplate:
         except Exception as e:
             raise PromptError(f"Failed to format template '{self.name}': {e}")
 
-    def validate_variables(self, **kwargs: Any) -> List[str]:
+    def validate_variables(self, **kwargs: Any) -> list[str]:
         """
         Check for missing required variables.
 
@@ -75,7 +74,7 @@ class PromptTemplate:
         """
         return [var for var in self.variables if var not in kwargs]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "name": self.name,
@@ -93,25 +92,25 @@ class PromptConfig:
     """Configuration for prompt management."""
 
     # System prompt settings
-    system_prompt: Optional[str] = None
+    system_prompt: str | None = None
     system_prompt_name: str = "default"
 
     # RAG prompt settings
-    rag_prompt: Optional[str] = None
+    rag_prompt: str | None = None
     rag_prompt_name: str = "default"
 
     # Custom templates directory
-    templates_dir: Optional[str] = None
+    templates_dir: str | None = None
 
     # Enable MLflow tracking
     track_prompts: bool = False
-    mlflow_experiment: Optional[str] = None
+    mlflow_experiment: str | None = None
 
     # Custom templates (name -> content)
-    custom_templates: Dict[str, str] = field(default_factory=dict)
+    custom_templates: dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PromptConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "PromptConfig":
         """Create config from dictionary."""
         return cls(
             system_prompt=data.get("system_prompt"),
@@ -138,7 +137,7 @@ class PromptManager:
 
     def __init__(
         self,
-        config: Optional[PromptConfig] = None,
+        config: PromptConfig | None = None,
         track: bool = False,
     ):
         """
@@ -152,7 +151,7 @@ class PromptManager:
         self.track = track or self.config.track_prompts
 
         # Template storage by category
-        self._templates: Dict[str, Dict[str, PromptTemplate]] = {
+        self._templates: dict[str, dict[str, PromptTemplate]] = {
             "system": {},
             "rag": {},
             "judge": {},
@@ -176,7 +175,7 @@ class PromptManager:
             yaml_path = templates_dir / f"{category}.yaml"
             if yaml_path.exists():
                 try:
-                    with open(yaml_path, "r", encoding="utf-8") as f:
+                    with open(yaml_path, encoding="utf-8") as f:
                         templates = yaml.safe_load(f) or {}
 
                     for name, content in templates.items():
@@ -204,7 +203,7 @@ class PromptManager:
                 category=category,
             )
 
-    def get_system_prompt(self, name: Optional[str] = None) -> str:
+    def get_system_prompt(self, name: str | None = None) -> str:
         """
         Get system prompt.
 
@@ -237,8 +236,8 @@ class PromptManager:
         self,
         context: str,
         query: str,
-        name: Optional[str] = None,
-        history: Optional[str] = None,
+        name: str | None = None,
+        history: str | None = None,
         **kwargs: Any,
     ) -> str:
         """
@@ -346,7 +345,7 @@ class PromptManager:
         self,
         category: str,
         name: str,
-    ) -> Optional[PromptTemplate]:
+    ) -> PromptTemplate | None:
         """
         Get a specific template.
 
@@ -361,8 +360,8 @@ class PromptManager:
 
     def list_templates(
         self,
-        category: Optional[str] = None,
-    ) -> Dict[str, List[str]]:
+        category: str | None = None,
+    ) -> dict[str, list[str]]:
         """
         List available templates.
 
@@ -376,8 +375,7 @@ class PromptManager:
             return {category: list(self._templates.get(category, {}).keys())}
 
         return {
-            cat: list(templates.keys())
-            for cat, templates in self._templates.items()
+            cat: list(templates.keys()) for cat, templates in self._templates.items()
         }
 
     def add_template(
@@ -385,7 +383,7 @@ class PromptManager:
         name: str,
         content: str,
         category: str = "rag",
-        description: Optional[str] = None,
+        description: str | None = None,
     ) -> PromptTemplate:
         """
         Add a custom template.
@@ -416,9 +414,9 @@ class PromptManager:
 
     def format_context(
         self,
-        chunks: List[Dict[str, Any]],
+        chunks: list[dict[str, Any]],
         format_type: str = "numbered",
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
     ) -> str:
         """
         Format retrieved chunks as context string.
@@ -448,7 +446,9 @@ class PromptManager:
             elif format_type == "bullet":
                 parts.append(f"• {content}")
             elif format_type == "xml":
-                parts.append(f"<source id=\"{i}\" score=\"{score:.3f}\">\n{content}\n</source>")
+                parts.append(
+                    f'<source id="{i}" score="{score:.3f}">\n{content}\n</source>'
+                )
             else:  # plain
                 parts.append(content)
 
@@ -462,8 +462,8 @@ class PromptManager:
 
     def format_history(
         self,
-        messages: List[Dict[str, str]],
-        max_turns: Optional[int] = None,
+        messages: list[dict[str, str]],
+        max_turns: int | None = None,
     ) -> str:
         """
         Format conversation history.
@@ -479,7 +479,7 @@ class PromptManager:
             return ""
 
         if max_turns:
-            messages = messages[-max_turns * 2:]  # Each turn = user + assistant
+            messages = messages[-max_turns * 2 :]  # Each turn = user + assistant
 
         parts = []
         for msg in messages:
@@ -521,8 +521,8 @@ class PromptManager:
         self,
         category: str,
         name: str,
-        variables: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        variables: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Validate a template with given variables.
 
@@ -553,7 +553,7 @@ class PromptManager:
 
     def export_templates(
         self,
-        category: Optional[str] = None,
+        category: str | None = None,
         format: str = "yaml",
     ) -> str:
         """
@@ -581,6 +581,7 @@ class PromptManager:
             return yaml.dump(data, default_flow_style=False, allow_unicode=True)
         else:
             import json
+
             return json.dumps(data, indent=2)
 
     def import_templates(
@@ -602,6 +603,7 @@ class PromptManager:
             data = yaml.safe_load(content)
         else:
             import json
+
             data = json.loads(content)
 
         count = 0

@@ -1,15 +1,15 @@
 """Factory functions for creating LLM instances."""
 
 import logging
-from enum import Enum
-from typing import Any, Dict, Optional
+from enum import StrEnum
+from typing import Any
 
 from app.llm.base import BaseLLM, LLMConfig, LLMError
 
 logger = logging.getLogger(__name__)
 
 
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     """Supported LLM providers."""
 
     OPENAI = "openai"
@@ -29,7 +29,7 @@ DEFAULT_MODELS = {
 
 def get_llm(
     provider: LLMProvider,
-    config: Optional[LLMConfig] = None,
+    config: LLMConfig | None = None,
     **kwargs: Any,
 ) -> BaseLLM:
     """
@@ -101,8 +101,8 @@ def get_llm(
 
 
 def get_llm_from_config(
-    pipeline_config: Dict[str, Any],
-    config_override: Optional[LLMConfig] = None,
+    pipeline_config: dict[str, Any],
+    config_override: LLMConfig | None = None,
 ) -> BaseLLM:
     """
     Create LLM from pipeline configuration.
@@ -163,8 +163,8 @@ def create_llm_config(
     model: str = "gpt-4o-mini",
     temperature: float = 0.7,
     max_tokens: int = 2048,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
     **kwargs: Any,
 ) -> LLMConfig:
     """
@@ -223,8 +223,10 @@ async def check_provider_availability(provider: LLMProvider) -> bool:
         elif provider == LLMProvider.OPENAI:
             # OpenAI is available if we can import and API key exists
             try:
-                from openai import AsyncOpenAI
                 import os
+
+                # Availability probe only; ImportError below is the signal.
+                from openai import AsyncOpenAI  # noqa: F401
 
                 return bool(os.environ.get("OPENAI_API_KEY"))
             except ImportError:
@@ -232,8 +234,10 @@ async def check_provider_availability(provider: LLMProvider) -> bool:
 
         elif provider == LLMProvider.ANTHROPIC:
             try:
-                from anthropic import AsyncAnthropic
                 import os
+
+                # Availability probe only; ImportError below is the signal.
+                from anthropic import AsyncAnthropic  # noqa: F401
 
                 return bool(os.environ.get("ANTHROPIC_API_KEY"))
             except ImportError:
@@ -246,7 +250,7 @@ async def check_provider_availability(provider: LLMProvider) -> bool:
         return False
 
 
-def list_providers() -> Dict[str, Dict[str, Any]]:
+def list_providers() -> dict[str, dict[str, Any]]:
     """
     List all available providers with their default models.
 

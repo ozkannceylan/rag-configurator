@@ -31,11 +31,16 @@ exclude = '''
 
 [tool.ruff]
 line-length = 88
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501"]
 target-version = "py311"
 
-[tool.ruff.isort]
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
 known-first-party = ["app"]
 
 [tool.mypy]

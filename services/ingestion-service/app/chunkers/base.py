@@ -4,7 +4,7 @@ import hashlib
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class Chunk:
     """A chunk of text from a document."""
 
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     # Position information
     chunk_index: int = 0
@@ -76,7 +76,7 @@ class Chunk:
         """Get approximate word count."""
         return len(self.content.split())
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "content": self.content,
@@ -93,7 +93,7 @@ class Chunk:
 class BaseChunker(ABC):
     """Abstract base class for text chunkers."""
 
-    def __init__(self, config: Optional[ChunkingConfig] = None):
+    def __init__(self, config: ChunkingConfig | None = None):
         """Initialize chunker with optional config."""
         self.config = config or ChunkingConfig()
         self.config.validate()
@@ -103,9 +103,9 @@ class BaseChunker(ABC):
     def chunk(
         self,
         text: str,
-        config: Optional[ChunkingConfig] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[Chunk]:
+        config: ChunkingConfig | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[Chunk]:
         """
         Split text into chunks.
 
@@ -125,7 +125,7 @@ class BaseChunker(ABC):
         index: int,
         start_char: int,
         end_char: int,
-        base_metadata: Optional[Dict[str, Any]] = None,
+        base_metadata: dict[str, Any] | None = None,
     ) -> Chunk:
         """Create a chunk with metadata."""
         metadata = dict(base_metadata) if base_metadata else {}
@@ -160,7 +160,7 @@ class BaseChunker(ABC):
 
         return text
 
-    def _filter_chunks(self, chunks: List[Chunk]) -> List[Chunk]:
+    def _filter_chunks(self, chunks: list[Chunk]) -> list[Chunk]:
         """Filter out chunks that are too small."""
         return [
             chunk

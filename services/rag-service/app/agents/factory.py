@@ -1,16 +1,16 @@
 """Agent factory for creating agent instances."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from app.agents.base import AgentConfig, BaseAgent
-from app.agents.naive import NaiveRAGAgent
-from app.agents.react import ReActAgent, ReActConfig
 from app.agents.crag import CRAGAgent, CRAGConfig
-from app.agents.self_rag import SelfRAGAgent, SelfRAGConfig
-from app.agents.multi_query import MultiQueryAgent, MultiQueryConfig
-from app.agents.plan_solve import PlanSolveAgent, PlanSolveConfig
 from app.agents.graph_rag import GraphRAGAgent, GraphRAGConfig
+from app.agents.multi_query import MultiQueryAgent, MultiQueryConfig
+from app.agents.naive import NaiveRAGAgent
+from app.agents.plan_solve import PlanSolveAgent, PlanSolveConfig
+from app.agents.react import ReActAgent, ReActConfig
+from app.agents.self_rag import SelfRAGAgent, SelfRAGConfig
 from app.llm.base import BaseLLM
 from app.prompts.manager import PromptManager
 from app.retrieval.base import BaseRetriever
@@ -22,8 +22,8 @@ def create_agent(
     agent_type: str,
     retriever: BaseRetriever,
     llm: BaseLLM,
-    prompt_manager: Optional[PromptManager] = None,
-    config: Optional[Dict[str, Any]] = None,
+    prompt_manager: PromptManager | None = None,
+    config: dict[str, Any] | None = None,
 ) -> BaseAgent:
     """
     Create an agent instance based on type.
@@ -117,7 +117,7 @@ def create_agent(
         )
 
 
-def list_available_agents() -> Dict[str, Dict[str, Any]]:
+def list_available_agents() -> dict[str, dict[str, Any]]:
     """
     List all available agent types.
 

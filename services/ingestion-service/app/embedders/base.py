@@ -3,7 +3,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +14,11 @@ class EmbeddingConfig:
 
     # Model settings
     model: str = "text-embedding-3-small"
-    dimensions: Optional[int] = None  # None = use model default
+    dimensions: int | None = None  # None = use model default
 
     # API settings
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    api_key: str | None = None
+    base_url: str | None = None
 
     # Batch settings
     batch_size: int = 100
@@ -36,19 +36,19 @@ class EmbeddingConfig:
 class EmbeddingResult:
     """Result of embedding generation."""
 
-    embeddings: List[List[float]]
+    embeddings: list[list[float]]
     model: str
     dimensions: int
     total_tokens: int = 0
     processing_time_ms: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def count(self) -> int:
         """Number of embeddings generated."""
         return len(self.embeddings)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "embeddings": self.embeddings,
@@ -64,14 +64,14 @@ class EmbeddingResult:
 class BaseEmbedder(ABC):
     """Abstract base class for embedding providers."""
 
-    def __init__(self, config: Optional[EmbeddingConfig] = None):
+    def __init__(self, config: EmbeddingConfig | None = None):
         """Initialize embedder with optional config."""
         self.config = config or EmbeddingConfig()
         self.logger = logging.getLogger(self.__class__.__name__)
 
     @abstractmethod
     async def embed(
-        self, texts: List[str], config: Optional[EmbeddingConfig] = None
+        self, texts: list[str], config: EmbeddingConfig | None = None
     ) -> EmbeddingResult:
         """
         Generate embeddings for a list of texts.
@@ -98,8 +98,8 @@ class BaseEmbedder(ABC):
         pass
 
     async def embed_single(
-        self, text: str, config: Optional[EmbeddingConfig] = None
-    ) -> List[float]:
+        self, text: str, config: EmbeddingConfig | None = None
+    ) -> list[float]:
         """
         Generate embedding for a single text.
 
@@ -113,7 +113,7 @@ class BaseEmbedder(ABC):
         result = await self.embed([text], config)
         return result.embeddings[0] if result.embeddings else []
 
-    def _validate_texts(self, texts: List[str]) -> List[str]:
+    def _validate_texts(self, texts: list[str]) -> list[str]:
         """Validate and clean input texts."""
         if not texts:
             return []
@@ -131,6 +131,6 @@ class BaseEmbedder(ABC):
 
         return cleaned
 
-    def _batch_texts(self, texts: List[str], batch_size: int) -> List[List[str]]:
+    def _batch_texts(self, texts: list[str], batch_size: int) -> list[list[str]]:
         """Split texts into batches."""
         return [texts[i : i + batch_size] for i in range(0, len(texts), batch_size)]

@@ -2,7 +2,6 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Type
 
 from app.processors.base import BaseProcessor, DocumentProcessingConfig
 from app.processors.docx import DocxProcessor
@@ -13,12 +12,12 @@ from app.processors.text import TextProcessor
 logger = logging.getLogger(__name__)
 
 # Registry of processors by file extension
-PROCESSOR_REGISTRY: Dict[str, Type[BaseProcessor]] = {}
+PROCESSOR_REGISTRY: dict[str, type[BaseProcessor]] = {}
 
 
 def _register_processors() -> None:
     """Register all processors in the registry."""
-    processors: List[Type[BaseProcessor]] = [
+    processors: list[type[BaseProcessor]] = [
         TextProcessor,
         PDFProcessor,
         ImageProcessor,
@@ -37,7 +36,7 @@ _register_processors()
 
 def get_processor(
     file_path: Path | str,
-    config: Optional[DocumentProcessingConfig] = None,
+    config: DocumentProcessingConfig | None = None,
 ) -> BaseProcessor:
     """
     Get the appropriate processor for a file.
@@ -68,12 +67,12 @@ def get_processor(
     return processor_class(config)
 
 
-def get_supported_extensions() -> List[str]:
+def get_supported_extensions() -> list[str]:
     """Get list of all supported file extensions."""
     return sorted(PROCESSOR_REGISTRY.keys())
 
 
-def get_processor_for_extension(extension: str) -> Optional[Type[BaseProcessor]]:
+def get_processor_for_extension(extension: str) -> type[BaseProcessor] | None:
     """
     Get the processor class for a specific extension.
 
@@ -104,7 +103,7 @@ def is_supported(file_path: Path | str) -> bool:
     return file_path.suffix.lower() in PROCESSOR_REGISTRY
 
 
-def get_processor_info() -> Dict[str, Dict]:
+def get_processor_info() -> dict[str, dict]:
     """
     Get information about all registered processors.
 
@@ -114,7 +113,7 @@ def get_processor_info() -> Dict[str, Dict]:
     info = {}
 
     # Group extensions by processor
-    processor_extensions: Dict[Type[BaseProcessor], List[str]] = {}
+    processor_extensions: dict[type[BaseProcessor], list[str]] = {}
     for ext, processor_class in PROCESSOR_REGISTRY.items():
         if processor_class not in processor_extensions:
             processor_extensions[processor_class] = []

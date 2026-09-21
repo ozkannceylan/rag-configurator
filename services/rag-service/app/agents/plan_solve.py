@@ -3,15 +3,16 @@
 import logging
 import re
 import time
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List, Optional, TypedDict
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Any, TypedDict
 
 from app.agents.base import (
-    BaseAgent,
     AgentConfig,
     AgentError,
     AgentResponse,
     AgentStep,
+    BaseAgent,
     StepType,
 )
 from app.llm.base import BaseLLM, Message
@@ -27,26 +28,26 @@ class PlanSolveState(TypedDict, total=False):
     # Input
     query: str
     config_id: str
-    conversation_history: List[Dict[str, str]]
+    conversation_history: list[dict[str, str]]
 
     # Planning
-    plan: List[str]  # List of sub-questions
+    plan: list[str]  # List of sub-questions
     current_step: int
     max_steps: int
 
     # Execution
-    step_results: List[str]  # Results from each step
-    step_contexts: List[List[RetrievedChunk]]  # Context for each step
+    step_results: list[str]  # Results from each step
+    step_contexts: list[list[RetrievedChunk]]  # Context for each step
 
     # Synthesis
     synthesized_answer: str
     final_answer: str
-    sources: List[RetrievedChunk]
+    sources: list[RetrievedChunk]
 
     # Tracking
-    steps: List[AgentStep]
-    error: Optional[str]
-    metadata: Dict[str, Any]
+    steps: list[AgentStep]
+    error: str | None
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -68,7 +69,7 @@ class PlanSolveConfig(AgentConfig):
     retrieve_per_step: bool = True
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PlanSolveConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "PlanSolveConfig":
         """Create from dictionary."""
         base = AgentConfig.from_dict(data)
         return cls(
@@ -146,8 +147,8 @@ class PlanSolveAgent(BaseAgent):
         self,
         retriever: BaseRetriever,
         llm: BaseLLM,
-        prompt_manager: Optional[PromptManager] = None,
-        config: Optional[PlanSolveConfig] = None,
+        prompt_manager: PromptManager | None = None,
+        config: PlanSolveConfig | None = None,
     ):
         """
         Initialize Plan-Solve agent.
@@ -173,7 +174,9 @@ class PlanSolveAgent(BaseAgent):
     def _init_langgraph(self) -> bool:
         """Initialize LangGraph if available."""
         try:
-            from langgraph.graph import StateGraph, END
+            # Availability probe: the import must stay so a missing LangGraph
+            # raises ImportError here rather than later at call time.
+            from langgraph.graph import END, StateGraph  # noqa: F401
 
             self._graph = self._build_graph()
             return True
@@ -183,7 +186,7 @@ class PlanSolveAgent(BaseAgent):
 
     def _build_graph(self):
         """Build the LangGraph state graph."""
-        from langgraph.graph import StateGraph, END
+        from langgraph.graph import END, StateGraph
 
         graph = StateGraph(PlanSolveState)
 
@@ -202,7 +205,7 @@ class PlanSolveAgent(BaseAgent):
         graph.add_conditional_edges(
             "execute_step",
             self._has_more_steps,
-            {"yes": "execute_step", "no": "synthesize"}
+            {"yes": "execute_step", "no": "synthesize"},
         )
 
         graph.add_edge("synthesize", END)
@@ -289,7 +292,7 @@ class PlanSolveAgent(BaseAgent):
                 "error": str(e),
             }
 
-    def _parse_plan(self, response: str, max_steps: int) -> List[str]:
+    def _parse_plan(self, response: str, max_steps: int) -> list[str]:
         """Parse plan from LLM response."""
         plan = []
 
@@ -300,7 +303,7 @@ class PlanSolveAgent(BaseAgent):
             # Remove numbering (1., 1), etc.)
             line = re.sub(r"^\d+[.)]\s*", "", line)
             line = re.sub(r"^[-•]\s*", "", line)
-            line = line.strip('"\'')
+            line = line.strip("\"'")
 
             if line and len(line) > 10:  # Minimum length for valid step
                 plan.append(line)
@@ -318,7 +321,6 @@ class PlanSolveAgent(BaseAgent):
         """Execute the current step."""
         start_time = time.time()
 
-        query = state["query"]
         plan = state.get("plan", [])
         current_step = state.get("current_step", 0)
         config_id = state["config_id"]
@@ -339,7 +341,9 @@ class PlanSolveAgent(BaseAgent):
                 # Build query using sub-question + previous results
                 step_query = sub_question
                 if step_results:
-                    step_query = f"{sub_question} Context: {' '.join(step_results[-2:])}"
+                    step_query = (
+                        f"{sub_question} Context: {' '.join(step_results[-2:])}"
+                    )
 
                 context_chunks = await self.retriever.retrieve(
                     query=step_query,
@@ -349,7 +353,9 @@ class PlanSolveAgent(BaseAgent):
 
                 # Filter by min score
                 if self.config.min_score > 0:
-                    context_chunks = [c for c in context_chunks if c.score >= self.config.min_score]
+                    context_chunks = [
+                        c for c in context_chunks if c.score >= self.config.min_score
+                    ]
 
                 context_str = self.prompt_manager.format_context(
                     [c.to_dict() for c in context_chunks],
@@ -359,10 +365,9 @@ class PlanSolveAgent(BaseAgent):
             # Build previous answers string
             previous_answers = ""
             if step_results:
-                previous_answers = "\n".join([
-                    f"Step {i+1}: {result}"
-                    for i, result in enumerate(step_results)
-                ])
+                previous_answers = "\n".join(
+                    [f"Step {i+1}: {result}" for i, result in enumerate(step_results)]
+                )
 
             # Generate answer for this step
             prompt = STEP_EXECUTION_PROMPT.format(
@@ -515,10 +520,9 @@ class PlanSolveAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Synthesis failed: {e}")
             # Fallback: concatenate step results
-            fallback_answer = "\n\n".join([
-                f"Step {i+1}: {result}"
-                for i, result in enumerate(step_results)
-            ])
+            fallback_answer = "\n\n".join(
+                [f"Step {i+1}: {result}" for i, result in enumerate(step_results)]
+            )
 
             step = AgentStep(
                 step_type=StepType.ERROR,
@@ -539,7 +543,7 @@ class PlanSolveAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """
@@ -632,7 +636,7 @@ class PlanSolveAgent(BaseAgent):
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """

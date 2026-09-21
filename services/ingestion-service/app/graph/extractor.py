@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import httpx
 
@@ -19,11 +19,11 @@ class ExtractionConfig:
     llm_provider: str = "ollama"
     llm_model: str = "llama3.2"
     llm_base_url: str = "http://localhost:11434"
-    openai_api_key: Optional[str] = None
+    openai_api_key: str | None = None
 
     # Extraction settings
-    entity_types: List[str] = field(default_factory=list)
-    relation_types: List[str] = field(default_factory=list)
+    entity_types: list[str] = field(default_factory=list)
+    relation_types: list[str] = field(default_factory=list)
     auto_extract: bool = True  # Let LLM determine types if lists are empty
 
     # Processing
@@ -41,13 +41,13 @@ class ExtractedEntity:
 
     name: str
     entity_type: str
-    properties: Dict[str, Any] = field(default_factory=dict)
+    properties: dict[str, Any] = field(default_factory=dict)
     confidence: float = 1.0
     source_text: str = ""
     start_char: int = 0
     end_char: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "name": self.name,
@@ -67,11 +67,11 @@ class ExtractedRelation:
     source_entity: str
     target_entity: str
     relation_type: str
-    properties: Dict[str, Any] = field(default_factory=dict)
+    properties: dict[str, Any] = field(default_factory=dict)
     confidence: float = 1.0
     source_text: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "source_entity": self.source_entity,
@@ -87,8 +87,8 @@ class ExtractedRelation:
 class ExtractionResult:
     """Result of entity extraction."""
 
-    entities: List[ExtractedEntity] = field(default_factory=list)
-    relations: List[ExtractedRelation] = field(default_factory=list)
+    entities: list[ExtractedEntity] = field(default_factory=list)
+    relations: list[ExtractedRelation] = field(default_factory=list)
     raw_response: str = ""
     tokens_used: int = 0
 
@@ -143,7 +143,7 @@ Only extract entities and relationships of the specified types."""
     AUTO_EXTRACT_INSTRUCTIONS = """Identify all significant entities (people, organizations, locations, concepts, events, products, etc.) and their relationships.
 Use descriptive type names in lowercase with underscores (e.g., "person", "organization", "works_for", "located_in")."""
 
-    def __init__(self, config: Optional[ExtractionConfig] = None):
+    def __init__(self, config: ExtractionConfig | None = None):
         """
         Initialize entity extractor.
 
@@ -151,7 +151,7 @@ Use descriptive type names in lowercase with underscores (e.g., "person", "organ
             config: Extraction configuration
         """
         self.config = config or ExtractionConfig()
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
@@ -184,7 +184,7 @@ Use descriptive type names in lowercase with underscores (e.g., "person", "organ
             text=text,
         )
 
-    async def _call_ollama(self, prompt: str) -> Tuple[str, int]:
+    async def _call_ollama(self, prompt: str) -> tuple[str, int]:
         """Call Ollama API for completion."""
         client = await self._get_client()
 
@@ -208,7 +208,7 @@ Use descriptive type names in lowercase with underscores (e.g., "person", "organ
             logger.error(f"Ollama API error: {e}")
             raise
 
-    async def _call_openai(self, prompt: str) -> Tuple[str, int]:
+    async def _call_openai(self, prompt: str) -> tuple[str, int]:
         """Call OpenAI API for completion."""
         client = await self._get_client()
 
@@ -223,7 +223,10 @@ Use descriptive type names in lowercase with underscores (e.g., "person", "organ
         payload = {
             "model": self.config.llm_model,
             "messages": [
-                {"role": "system", "content": "You are an entity extraction assistant. Always respond with valid JSON."},
+                {
+                    "role": "system",
+                    "content": "You are an entity extraction assistant. Always respond with valid JSON.",
+                },
                 {"role": "user", "content": prompt},
             ],
             "temperature": self.config.temperature,
@@ -242,7 +245,7 @@ Use descriptive type names in lowercase with underscores (e.g., "person", "organ
             logger.error(f"OpenAI API error: {e}")
             raise
 
-    async def _call_llm(self, prompt: str) -> Tuple[str, int]:
+    async def _call_llm(self, prompt: str) -> tuple[str, int]:
         """Call the configured LLM provider."""
         if self.config.llm_provider == "ollama":
             return await self._call_ollama(prompt)
@@ -251,10 +254,12 @@ Use descriptive type names in lowercase with underscores (e.g., "person", "organ
         else:
             raise ValueError(f"Unsupported LLM provider: {self.config.llm_provider}")
 
-    def _parse_response(self, response: str) -> Tuple[List[ExtractedEntity], List[ExtractedRelation]]:
+    def _parse_response(
+        self, response: str
+    ) -> tuple[list[ExtractedEntity], list[ExtractedRelation]]:
         """Parse LLM response into entities and relations."""
-        entities: List[ExtractedEntity] = []
-        relations: List[ExtractedRelation] = []
+        entities: list[ExtractedEntity] = []
+        relations: list[ExtractedRelation] = []
 
         # Try to extract JSON from response
         json_match = re.search(r"\{[\s\S]*\}", response)
@@ -346,8 +351,8 @@ Use descriptive type names in lowercase with underscores (e.g., "person", "organ
             return ExtractionResult()
 
     async def extract_batch(
-        self, texts: List[str], chunk_ids: Optional[List[str]] = None
-    ) -> List[ExtractionResult]:
+        self, texts: list[str], chunk_ids: list[str] | None = None
+    ) -> list[ExtractionResult]:
         """
         Extract entities from multiple texts.
 

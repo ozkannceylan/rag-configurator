@@ -2,14 +2,11 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.graph.extractor import (
     EntityExtractor,
     ExtractionConfig,
-    ExtractionResult,
-    ExtractedEntity,
-    ExtractedRelation,
 )
 from app.storage.graph_store import GraphStore
 
@@ -44,7 +41,7 @@ class GraphBuildResult:
     chunks_processed: int = 0
     total_entities_extracted: int = 0
     total_relations_extracted: int = 0
-    errors: List[Dict[str, Any]] = field(default_factory=list)
+    errors: list[dict[str, Any]] = field(default_factory=list)
 
 
 class GraphBuilder:
@@ -61,7 +58,7 @@ class GraphBuilder:
     def __init__(
         self,
         graph_store: GraphStore,
-        config: Optional[GraphBuildConfig] = None,
+        config: GraphBuildConfig | None = None,
     ):
         """
         Initialize graph builder.
@@ -78,7 +75,7 @@ class GraphBuilder:
     async def _get_embedder(self):
         """Get or create embedder for entity embeddings."""
         if self._embedder is None and self.config.embed_entities:
-            from app.embedders.factory import get_embedder, EmbeddingProvider
+            from app.embedders.factory import EmbeddingProvider, get_embedder
 
             provider = EmbeddingProvider(self.config.embedding_provider)
             self._embedder = get_embedder(
@@ -95,9 +92,9 @@ class GraphBuilder:
 
     async def build_from_chunks(
         self,
-        chunks: List[Dict[str, Any]],
+        chunks: list[dict[str, Any]],
         config_id: str,
-        document_id: Optional[str] = None,
+        document_id: str | None = None,
     ) -> GraphBuildResult:
         """
         Build graph from a list of text chunks.
@@ -127,7 +124,7 @@ class GraphBuilder:
                 result.total_relations_extracted += len(extraction.relations)
 
                 # Process extracted entities
-                entity_node_map: Dict[str, str] = {}
+                entity_node_map: dict[str, str] = {}
 
                 for entity in extraction.entities:
                     try:
@@ -144,11 +141,13 @@ class GraphBuilder:
                         result.nodes_created += 1  # Counts both creates and updates
                     except Exception as e:
                         logger.error(f"Failed to store entity '{entity.name}': {e}")
-                        result.errors.append({
-                            "type": "entity_storage",
-                            "entity": entity.name,
-                            "error": str(e),
-                        })
+                        result.errors.append(
+                            {
+                                "type": "entity_storage",
+                                "entity": entity.name,
+                                "error": str(e),
+                            }
+                        )
 
                 # Process extracted relations
                 for relation in extraction.relations:
@@ -207,19 +206,23 @@ class GraphBuilder:
                         logger.error(
                             f"Failed to store relation '{relation.source_entity}' -> '{relation.target_entity}': {e}"
                         )
-                        result.errors.append({
-                            "type": "relation_storage",
-                            "relation": f"{relation.source_entity} -> {relation.target_entity}",
-                            "error": str(e),
-                        })
+                        result.errors.append(
+                            {
+                                "type": "relation_storage",
+                                "relation": f"{relation.source_entity} -> {relation.target_entity}",
+                                "error": str(e),
+                            }
+                        )
 
             except Exception as e:
                 logger.error(f"Failed to process chunk {chunk_id}: {e}")
-                result.errors.append({
-                    "type": "chunk_processing",
-                    "chunk_id": str(chunk_id),
-                    "error": str(e),
-                })
+                result.errors.append(
+                    {
+                        "type": "chunk_processing",
+                        "chunk_id": str(chunk_id),
+                        "error": str(e),
+                    }
+                )
 
         # Embed entities if configured
         if self.config.embed_entities:
@@ -250,9 +253,7 @@ class GraphBuilder:
                 return
 
             # Create text representations
-            texts = [
-                f"{doc['node_type']}: {doc['name']}" for doc in nodes_to_embed
-            ]
+            texts = [f"{doc['node_type']}: {doc['name']}" for doc in nodes_to_embed]
 
             # Generate embeddings
             embedding_result = await embedder.embed(texts)
@@ -270,17 +271,19 @@ class GraphBuilder:
 
         except Exception as e:
             logger.error(f"Failed to embed entities: {e}")
-            result.errors.append({
-                "type": "entity_embedding",
-                "error": str(e),
-            })
+            result.errors.append(
+                {
+                    "type": "entity_embedding",
+                    "error": str(e),
+                }
+            )
 
     async def build_from_text(
         self,
         text: str,
         config_id: str,
-        chunk_id: Optional[str] = None,
-        document_id: Optional[str] = None,
+        chunk_id: str | None = None,
+        document_id: str | None = None,
     ) -> GraphBuildResult:
         """
         Build graph from a single text.
@@ -303,9 +306,9 @@ class GraphBuilder:
     async def get_entity_context(
         self,
         config_id: str,
-        entity_names: List[str],
+        entity_names: list[str],
         depth: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get graph context for a list of entities.
 
@@ -357,7 +360,7 @@ class GraphBuilder:
     async def extract_entities_from_query(
         self,
         query: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Extract entity mentions from a query.
 

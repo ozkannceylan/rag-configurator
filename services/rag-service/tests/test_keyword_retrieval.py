@@ -1,10 +1,11 @@
 """Tests for keyword retrieval module."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from app.retrieval.keyword import KeywordRetriever, KeywordConfig
+import pytest
+
 from app.retrieval.base import RetrievedChunk, SourceType
+from app.retrieval.keyword import KeywordConfig, KeywordRetriever
 
 
 class TestKeywordConfig:
@@ -295,27 +296,21 @@ class TestFilterConfiguration:
 
     def test_folder_paths_filter(self):
         """Test folder paths filter configuration."""
-        config = KeywordConfig(
-            folder_paths=["/data/public", "/data/shared"]
-        )
+        config = KeywordConfig(folder_paths=["/data/public", "/data/shared"])
 
         assert len(config.folder_paths) == 2
         assert "/data/public" in config.folder_paths
 
     def test_access_tags_filter(self):
         """Test access tags filter configuration."""
-        config = KeywordConfig(
-            access_tags=["admin", "user"]
-        )
+        config = KeywordConfig(access_tags=["admin", "user"])
 
         assert len(config.access_tags) == 2
         assert "admin" in config.access_tags
 
     def test_file_types_filter(self):
         """Test file types filter configuration."""
-        config = KeywordConfig(
-            file_types=[".pdf", ".docx"]
-        )
+        config = KeywordConfig(file_types=[".pdf", ".docx"])
 
         assert len(config.file_types) == 2
         assert ".pdf" in config.file_types

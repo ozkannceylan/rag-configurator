@@ -2,7 +2,7 @@
 
 import logging
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -33,8 +33,8 @@ class VectorRetriever(BaseRetriever):
     def __init__(
         self,
         db: AsyncIOMotorDatabase,
-        config: Optional[RetrievalConfig] = None,
-        embedder: Optional[Any] = None,
+        config: RetrievalConfig | None = None,
+        embedder: Any | None = None,
     ):
         """
         Initialize vector retriever.
@@ -48,7 +48,7 @@ class VectorRetriever(BaseRetriever):
         self.db = db
         self.chunks = db[self.CHUNKS_COLLECTION]
         self._embedder = embedder
-        self._use_atlas_search: Optional[bool] = None
+        self._use_atlas_search: bool | None = None
 
     async def _get_embedder(self):
         """Get or create embedder instance."""
@@ -100,9 +100,9 @@ class VectorRetriever(BaseRetriever):
         self,
         query: str,
         config_id: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> List[RetrievedChunk]:
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
+    ) -> list[RetrievedChunk]:
         """
         Retrieve relevant chunks using vector similarity.
 
@@ -151,14 +151,14 @@ class VectorRetriever(BaseRetriever):
 
     async def _search_with_atlas(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         config_id: str,
         top_k: int,
-        filters: Dict[str, Any],
-    ) -> List[RetrievedChunk]:
+        filters: dict[str, Any],
+    ) -> list[RetrievedChunk]:
         """Search using MongoDB Atlas Vector Search."""
         # Build filter for vector search
-        vector_filter: Dict[str, Any] = {"config_id": config_id}
+        vector_filter: dict[str, Any] = {"config_id": config_id}
 
         # Add folder path filter (for RBAC)
         if "folder_paths" in filters and filters["folder_paths"]:
@@ -231,14 +231,14 @@ class VectorRetriever(BaseRetriever):
 
     async def _search_with_cosine(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         config_id: str,
         top_k: int,
-        filters: Dict[str, Any],
-    ) -> List[RetrievedChunk]:
+        filters: dict[str, Any],
+    ) -> list[RetrievedChunk]:
         """Search using in-memory cosine similarity (fallback)."""
         # Build query filter
-        query_filter: Dict[str, Any] = {
+        query_filter: dict[str, Any] = {
             "config_id": config_id,
             "embedding": {"$exists": True, "$ne": []},
         }
@@ -291,9 +291,7 @@ class VectorRetriever(BaseRetriever):
         scored_chunks.sort(key=lambda x: x.score, reverse=True)
         return scored_chunks[:top_k]
 
-    def _cosine_similarity(
-        self, vec1: List[float], vec2: List[float]
-    ) -> float:
+    def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """Calculate cosine similarity between two vectors."""
         if len(vec1) != len(vec2):
             return 0.0
@@ -308,8 +306,8 @@ class VectorRetriever(BaseRetriever):
         return dot_product / (norm1 * norm2)
 
     async def _get_document_metadata(
-        self, document_id: Optional[str]
-    ) -> Optional[Dict[str, Any]]:
+        self, document_id: str | None
+    ) -> dict[str, Any] | None:
         """Get document metadata for enrichment."""
         if not document_id:
             return None
@@ -323,7 +321,7 @@ class VectorRetriever(BaseRetriever):
         except Exception:
             return None
 
-    async def get_chunk_by_id(self, chunk_id: str) -> Optional[RetrievedChunk]:
+    async def get_chunk_by_id(self, chunk_id: str) -> RetrievedChunk | None:
         """Get a specific chunk by ID."""
         doc = await self.chunks.find_one({"_id": chunk_id})
         if not doc:
@@ -344,7 +342,7 @@ class VectorRetriever(BaseRetriever):
 
     async def get_chunks_by_document(
         self, document_id: str, include_embeddings: bool = False
-    ) -> List[RetrievedChunk]:
+    ) -> list[RetrievedChunk]:
         """Get all chunks for a document."""
         projection = None if include_embeddings else {"embedding": 0}
 

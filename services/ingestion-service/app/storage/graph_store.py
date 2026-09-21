@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -14,24 +14,24 @@ logger = logging.getLogger(__name__)
 class GraphNode(BaseModel):
     """MongoDB document model for graph nodes."""
 
-    id: Optional[str] = Field(None, alias="_id")
+    id: str | None = Field(None, alias="_id")
     config_id: str = Field(..., description="RAG pipeline configuration ID")
     node_type: str = Field(..., description="Entity type")
     name: str = Field(..., description="Entity name")
     name_normalized: str = Field("", description="Normalized name for matching")
 
     # Properties
-    properties: Dict[str, Any] = Field(default_factory=dict)
+    properties: dict[str, Any] = Field(default_factory=dict)
 
     # Embedding for semantic search
-    embedding: List[float] = Field(default_factory=list)
+    embedding: list[float] = Field(default_factory=list)
     embedding_model: str = Field("")
 
     # Source tracking
-    source_chunks: List[str] = Field(
+    source_chunks: list[str] = Field(
         default_factory=list, description="Chunk IDs where entity was found"
     )
-    source_documents: List[str] = Field(
+    source_documents: list[str] = Field(
         default_factory=list, description="Document IDs where entity was found"
     )
 
@@ -45,7 +45,7 @@ class GraphNode(BaseModel):
         populate_by_name = True
         json_encoders = {datetime: lambda v: v.isoformat()}
 
-    def to_mongo(self) -> Dict[str, Any]:
+    def to_mongo(self) -> dict[str, Any]:
         """Convert to MongoDB document."""
         data = self.model_dump(exclude={"id"}, by_alias=True)
         if self.id:
@@ -56,7 +56,7 @@ class GraphNode(BaseModel):
 class GraphEdge(BaseModel):
     """MongoDB document model for graph edges."""
 
-    id: Optional[str] = Field(None, alias="_id")
+    id: str | None = Field(None, alias="_id")
     config_id: str = Field(..., description="RAG pipeline configuration ID")
     relation_type: str = Field(..., description="Relationship type")
 
@@ -69,12 +69,12 @@ class GraphEdge(BaseModel):
     target_name: str = Field("", description="Target entity name")
 
     # Properties
-    properties: Dict[str, Any] = Field(default_factory=dict)
+    properties: dict[str, Any] = Field(default_factory=dict)
     weight: float = Field(1.0, description="Edge weight/strength")
     confidence: float = Field(1.0, description="Extraction confidence")
 
     # Source tracking
-    source_chunks: List[str] = Field(default_factory=list)
+    source_chunks: list[str] = Field(default_factory=list)
 
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -84,7 +84,7 @@ class GraphEdge(BaseModel):
         populate_by_name = True
         json_encoders = {datetime: lambda v: v.isoformat()}
 
-    def to_mongo(self) -> Dict[str, Any]:
+    def to_mongo(self) -> dict[str, Any]:
         """Convert to MongoDB document."""
         data = self.model_dump(exclude={"id"}, by_alias=True)
         if self.id:
@@ -148,9 +148,9 @@ class GraphStore:
         config_id: str,
         name: str,
         node_type: str,
-        properties: Optional[Dict[str, Any]] = None,
-        source_chunk_id: Optional[str] = None,
-        source_document_id: Optional[str] = None,
+        properties: dict[str, Any] | None = None,
+        source_chunk_id: str | None = None,
+        source_document_id: str | None = None,
         confidence: float = 1.0,
     ) -> str:
         """
@@ -177,7 +177,7 @@ class GraphStore:
 
         if existing:
             # Update existing node
-            update_data: Dict[str, Any] = {
+            update_data: dict[str, Any] = {
                 "updated_at": datetime.utcnow(),
             }
 
@@ -187,13 +187,13 @@ class GraphStore:
                     update_data[f"properties.{key}"] = value
 
             # Add source references
-            add_to_set: Dict[str, Any] = {}
+            add_to_set: dict[str, Any] = {}
             if source_chunk_id:
                 add_to_set["source_chunks"] = source_chunk_id
             if source_document_id:
                 add_to_set["source_documents"] = source_document_id
 
-            update_ops: Dict[str, Any] = {
+            update_ops: dict[str, Any] = {
                 "$set": update_data,
                 "$inc": {"mention_count": 1},
             }
@@ -221,7 +221,7 @@ class GraphStore:
             await self.nodes.insert_one(data)
             return data["_id"]
 
-    async def get_node(self, node_id: str) -> Optional[GraphNode]:
+    async def get_node(self, node_id: str) -> GraphNode | None:
         """Get a node by ID."""
         doc = await self.nodes.find_one({"_id": node_id})
         if doc:
@@ -229,9 +229,7 @@ class GraphStore:
             return GraphNode(**doc)
         return None
 
-    async def get_node_by_name(
-        self, config_id: str, name: str
-    ) -> Optional[GraphNode]:
+    async def get_node_by_name(self, config_id: str, name: str) -> GraphNode | None:
         """Get a node by name."""
         name_normalized = self.normalize_name(name)
         doc = await self.nodes.find_one(
@@ -245,12 +243,12 @@ class GraphStore:
     async def get_nodes_by_config(
         self,
         config_id: str,
-        node_type: Optional[str] = None,
+        node_type: str | None = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[GraphNode]:
+    ) -> list[GraphNode]:
         """Get nodes for a config, optionally filtered by type."""
-        query: Dict[str, Any] = {"config_id": config_id}
+        query: dict[str, Any] = {"config_id": config_id}
         if node_type:
             query["node_type"] = node_type
 
@@ -261,12 +259,12 @@ class GraphStore:
             nodes.append(GraphNode(**doc))
         return nodes
 
-    async def get_node_types(self, config_id: str) -> List[str]:
+    async def get_node_types(self, config_id: str) -> list[str]:
         """Get all distinct node types for a config."""
         return await self.nodes.distinct("node_type", {"config_id": config_id})
 
     async def update_node_embedding(
-        self, node_id: str, embedding: List[float], model: str
+        self, node_id: str, embedding: list[float], model: str
     ) -> bool:
         """Update a node's embedding."""
         result = await self.nodes.update_one(
@@ -312,8 +310,8 @@ class GraphStore:
         relation_type: str,
         source_name: str = "",
         target_name: str = "",
-        properties: Optional[Dict[str, Any]] = None,
-        source_chunk_id: Optional[str] = None,
+        properties: dict[str, Any] | None = None,
+        source_chunk_id: str | None = None,
         confidence: float = 1.0,
     ) -> str:
         """
@@ -345,7 +343,7 @@ class GraphStore:
 
         if existing:
             # Update existing edge
-            update_data: Dict[str, Any] = {
+            update_data: dict[str, Any] = {
                 "updated_at": datetime.utcnow(),
             }
 
@@ -353,7 +351,7 @@ class GraphStore:
                 for key, value in properties.items():
                     update_data[f"properties.{key}"] = value
 
-            update_ops: Dict[str, Any] = {
+            update_ops: dict[str, Any] = {
                 "$set": update_data,
                 "$inc": {"weight": 1},
             }
@@ -383,7 +381,7 @@ class GraphStore:
             await self.edges.insert_one(data)
             return data["_id"]
 
-    async def get_edge(self, edge_id: str) -> Optional[GraphEdge]:
+    async def get_edge(self, edge_id: str) -> GraphEdge | None:
         """Get an edge by ID."""
         doc = await self.edges.find_one({"_id": edge_id})
         if doc:
@@ -395,8 +393,8 @@ class GraphStore:
         self,
         node_id: str,
         direction: str = "both",
-        relation_type: Optional[str] = None,
-    ) -> List[GraphEdge]:
+        relation_type: str | None = None,
+    ) -> list[GraphEdge]:
         """
         Get edges connected to a node.
 
@@ -409,7 +407,7 @@ class GraphStore:
             List of edges
         """
         if direction == "outgoing":
-            query: Dict[str, Any] = {"source_node": node_id}
+            query: dict[str, Any] = {"source_node": node_id}
         elif direction == "incoming":
             query = {"target_node": node_id}
         else:
@@ -428,12 +426,12 @@ class GraphStore:
     async def get_edges_by_config(
         self,
         config_id: str,
-        relation_type: Optional[str] = None,
+        relation_type: str | None = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[GraphEdge]:
+    ) -> list[GraphEdge]:
         """Get edges for a config."""
-        query: Dict[str, Any] = {"config_id": config_id}
+        query: dict[str, Any] = {"config_id": config_id}
         if relation_type:
             query["relation_type"] = relation_type
 
@@ -444,7 +442,7 @@ class GraphStore:
             edges.append(GraphEdge(**doc))
         return edges
 
-    async def get_relation_types(self, config_id: str) -> List[str]:
+    async def get_relation_types(self, config_id: str) -> list[str]:
         """Get all distinct relation types for a config."""
         return await self.edges.distinct("relation_type", {"config_id": config_id})
 
@@ -463,8 +461,8 @@ class GraphStore:
         self,
         node_id: str,
         depth: int = 1,
-        relation_types: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        relation_types: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Get neighboring nodes up to specified depth.
 
@@ -477,8 +475,8 @@ class GraphStore:
             Dict with nodes and edges in the subgraph
         """
         visited_nodes: set = {node_id}
-        all_nodes: List[GraphNode] = []
-        all_edges: List[GraphEdge] = []
+        all_nodes: list[GraphNode] = []
+        all_edges: list[GraphEdge] = []
 
         # Get starting node
         start_node = await self.get_node(node_id)
@@ -530,7 +528,7 @@ class GraphStore:
         source_node_id: str,
         target_node_id: str,
         max_depth: int = 5,
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> list[dict[str, Any]] | None:
         """
         Find a path between two nodes using BFS.
 
@@ -578,7 +576,7 @@ class GraphStore:
 
     # ==================== Stats ====================
 
-    async def get_stats(self, config_id: str) -> Dict[str, Any]:
+    async def get_stats(self, config_id: str) -> dict[str, Any]:
         """Get statistics for a config's graph."""
         node_count = await self.count_nodes(config_id)
         edge_count = await self.count_edges(config_id)

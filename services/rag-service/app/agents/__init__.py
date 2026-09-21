@@ -1,31 +1,31 @@
 """Agent module for RAG pipelines."""
 
 from app.agents.base import (
-    BaseAgent,
-    AgentResponse,
-    AgentStep,
-    AgentState,
     AgentConfig,
     AgentError,
+    AgentResponse,
+    AgentState,
+    AgentStep,
+    BaseAgent,
     StepType,
-)
-from app.agents.naive import NaiveRAGAgent
-from app.agents.react import (
-    ReActAgent,
-    ReActConfig,
-    ReActState,
-    Tool,
-    ToolType,
-    Thought,
-    Action,
-    Observation,
 )
 from app.agents.crag import (
     CRAGAgent,
     CRAGConfig,
     CRAGState,
-    RelevanceGrade,
     RelevanceEvaluation,
+    RelevanceGrade,
+)
+from app.agents.naive import NaiveRAGAgent
+from app.agents.react import (
+    Action,
+    Observation,
+    ReActAgent,
+    ReActConfig,
+    ReActState,
+    Thought,
+    Tool,
+    ToolType,
 )
 
 __all__ = [

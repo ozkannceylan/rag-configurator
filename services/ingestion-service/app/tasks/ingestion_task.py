@@ -5,7 +5,7 @@ import logging
 import random
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from celery import states
 from celery.exceptions import MaxRetriesExceededError
@@ -75,10 +75,10 @@ class IngestionPipeline:
         self.ingestion_id = ingestion_id
         self.celery_task = celery_task
 
-        self.client: Optional[AsyncIOMotorClient] = None
+        self.client: AsyncIOMotorClient | None = None
         self.db = None
-        self.config: Optional[Dict[str, Any]] = None
-        self.tracker: Optional[ProgressTracker] = None
+        self.config: dict[str, Any] | None = None
+        self.tracker: ProgressTracker | None = None
 
         # Components (lazy loaded)
         self._processor = None
@@ -118,19 +118,19 @@ class IngestionPipeline:
         """Clean up resources."""
         if self._embedding_cache:
             await self._embedding_cache.disconnect()
-        if self._embedder and hasattr(self._embedder, 'close'):
+        if self._embedder and hasattr(self._embedder, "close"):
             await self._embedder.close()
-        if self._graph_builder and hasattr(self._graph_builder, 'close'):
+        if self._graph_builder and hasattr(self._graph_builder, "close"):
             await self._graph_builder.close()
         if self.client:
             self.client.close()
 
-    async def _load_config(self) -> Optional[Dict[str, Any]]:
+    async def _load_config(self) -> dict[str, Any] | None:
         """Load configuration from MongoDB."""
         from bson import ObjectId
-        
+
         configs = self.db["configs"]
-        
+
         # Try with ObjectId first (MongoDB default)
         try:
             config = await configs.find_one({"_id": ObjectId(self.config_id)})
@@ -138,7 +138,7 @@ class IngestionPipeline:
                 return config
         except Exception:
             pass
-        
+
         # Try with string _id
         config = await configs.find_one({"_id": self.config_id})
         if not config:
@@ -146,11 +146,11 @@ class IngestionPipeline:
             config = await configs.find_one({"id": self.config_id})
         return config
 
-    def _config_filter(self) -> Dict[str, Any]:
+    def _config_filter(self) -> dict[str, Any]:
         """Build a safe filter for config lookups/updates."""
         from bson import ObjectId
 
-        filters: List[Dict[str, Any]] = []
+        filters: list[dict[str, Any]] = []
         if ObjectId.is_valid(self.config_id):
             filters.append({"_id": ObjectId(self.config_id)})
         filters.append({"_id": self.config_id})
@@ -163,17 +163,17 @@ class IngestionPipeline:
     async def _update_ingestion_status(
         self,
         status: str,
-        error: Optional[str] = None,
-        stats: Optional[Dict[str, Any]] = None,
+        error: str | None = None,
+        stats: dict[str, Any] | None = None,
     ) -> None:
         """Update ingestion job status in MongoDB."""
-        from app.storage.vector_store import VectorStore
         from app.storage.models import IngestionStatus
+        from app.storage.vector_store import VectorStore
 
         store = VectorStore(self.db)
 
         status_enum = IngestionStatus(status)
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
 
         if error:
             kwargs["error_message"] = error
@@ -216,8 +216,8 @@ class IngestionPipeline:
 
     async def _get_processor(self, file_path: str):
         """Get the appropriate processor for a file."""
-        from app.processors.factory import get_processor
         from app.processors.base import DocumentProcessingConfig
+        from app.processors.factory import get_processor
 
         processor_type = get_processor_type(file_path)
         if not processor_type:
@@ -237,8 +237,8 @@ class IngestionPipeline:
 
     async def _get_chunker(self):
         """Get the text chunker based on config."""
-        from app.chunkers.factory import get_chunker, ChunkingStrategy
         from app.chunkers.base import ChunkingConfig
+        from app.chunkers.factory import ChunkingStrategy, get_chunker
 
         chunking_config = self.config.get("chunking", {})
 
@@ -267,8 +267,8 @@ class IngestionPipeline:
         if self._embedder:
             return self._embedder
 
-        from app.embedders.factory import get_embedder, EmbeddingProvider
         from app.embedders.base import EmbeddingConfig
+        from app.embedders.factory import EmbeddingProvider, get_embedder
 
         # Config stores embedding under models.embedding
         models_config = self.config.get("models", {})
@@ -280,7 +280,9 @@ class IngestionPipeline:
         except ValueError:
             provider = EmbeddingProvider.OPENAI
 
-        model = embedding_config.get("model_name") or embedding_config.get("model", settings.embedding_model)
+        model = embedding_config.get("model_name") or embedding_config.get(
+            "model", settings.embedding_model
+        )
         api_key = embedding_config.get("api_key") or settings.openai_api_key
         base_url = embedding_config.get("base_url")
         dimensions = embedding_config.get("dimensions")
@@ -302,7 +304,7 @@ class IngestionPipeline:
         self._embedder = get_embedder(provider=provider, config=config)
         return self._embedder
 
-    async def _embed_with_cache(self, embedder, chunk_texts: List[str]):
+    async def _embed_with_cache(self, embedder, chunk_texts: list[str]):
         """Generate embeddings, using cache when available."""
         from app.embedders.base import EmbeddingResult
 
@@ -332,7 +334,7 @@ class IngestionPipeline:
         result = await embedder.embed(uncached_texts)
 
         # Merge cached + new embeddings in original order
-        all_embeddings: List[List[float]] = [[] for _ in chunk_texts]
+        all_embeddings: list[list[float]] = [[] for _ in chunk_texts]
         for i, emb in cached.items():
             all_embeddings[i] = emb
         for j, idx in enumerate(uncached_indices):
@@ -382,7 +384,7 @@ class IngestionPipeline:
         if not graph_config.get("enabled", False):
             return None
 
-        from app.graph.builder import GraphBuilder, GraphBuildConfig
+        from app.graph.builder import GraphBuildConfig, GraphBuilder
         from app.graph.extractor import ExtractionConfig
         from app.storage.graph_store import GraphStore
 
@@ -403,7 +405,7 @@ class IngestionPipeline:
         self._graph_builder = GraphBuilder(graph_store, build_config)
         return self._graph_builder
 
-    async def _scan_data_source(self) -> List[str]:
+    async def _scan_data_source(self) -> list[str]:
         """Scan data source for files to process."""
         data_source = self.config.get("data_source", {})
         source_type = data_source.get("type", "local")
@@ -417,9 +419,17 @@ class IngestionPipeline:
             if folders:
                 # Scan each configured folder
                 for folder in folders:
-                    folder_path = folder.get("path", "") if isinstance(folder, dict) else folder
-                    recursive = folder.get("recursive", True) if isinstance(folder, dict) else True
-                    full_path = str(Path(base_path) / folder_path) if folder_path else base_path
+                    folder_path = (
+                        folder.get("path", "") if isinstance(folder, dict) else folder
+                    )
+                    recursive = (
+                        folder.get("recursive", True)
+                        if isinstance(folder, dict)
+                        else True
+                    )
+                    full_path = (
+                        str(Path(base_path) / folder_path) if folder_path else base_path
+                    )
 
                     files = scan_directory(
                         full_path,
@@ -454,7 +464,7 @@ class IngestionPipeline:
         self,
         file_path: str,
         base_path: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process a single file through the pipeline.
 
@@ -639,13 +649,17 @@ class IngestionPipeline:
                 try:
                     vector_store = await self._get_vector_store()
                     await vector_store.delete_document(document_id)
-                    logger.info(f"Cleaned up orphaned document {document_id} after error")
+                    logger.info(
+                        f"Cleaned up orphaned document {document_id} after error"
+                    )
                 except Exception as cleanup_err:
-                    logger.warning(f"Failed to clean up document {document_id}: {cleanup_err}")
+                    logger.warning(
+                        f"Failed to clean up document {document_id}: {cleanup_err}"
+                    )
 
         return result
 
-    async def run(self) -> Dict[str, Any]:
+    async def run(self) -> dict[str, Any]:
         """
         Run the complete ingestion pipeline.
 
@@ -662,7 +676,9 @@ class IngestionPipeline:
             vector_store = await self._get_vector_store()
             deleted = await vector_store.delete_documents_by_config(self.config_id)
             if deleted:
-                logger.info(f"Cleared {deleted} previous documents for config {self.config_id}")
+                logger.info(
+                    f"Cleared {deleted} previous documents for config {self.config_id}"
+                )
 
             # Scan for files
             data_source = self.config.get("data_source", {})
@@ -764,7 +780,7 @@ class IngestionPipeline:
         finally:
             await self.cleanup()
 
-    async def _update_config_stats(self, stats: Dict[str, Any]) -> None:
+    async def _update_config_stats(self, stats: dict[str, Any]) -> None:
         """Update configuration with final statistics."""
         try:
             await self.db["configs"].update_one(
@@ -805,7 +821,7 @@ def run_ingestion(
     config_id: str,
     user_id: str,
     ingestion_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Main Celery task for running the ingestion pipeline.
 
@@ -869,7 +885,7 @@ def run_ingestion(
     bind=True,
     name="app.tasks.ingestion_task.cancel_ingestion",
 )
-def cancel_ingestion(self, ingestion_id: str) -> Dict[str, Any]:
+def cancel_ingestion(self, ingestion_id: str) -> dict[str, Any]:
     """
     Cancel a running ingestion job.
 
@@ -927,7 +943,7 @@ def cancel_ingestion(self, ingestion_id: str) -> Dict[str, Any]:
     bind=True,
     name="app.tasks.ingestion_task.get_ingestion_status",
 )
-def get_ingestion_status(self, ingestion_id: str) -> Dict[str, Any]:
+def get_ingestion_status(self, ingestion_id: str) -> dict[str, Any]:
     """
     Get the current status of an ingestion job.
 
@@ -937,6 +953,7 @@ def get_ingestion_status(self, ingestion_id: str) -> Dict[str, Any]:
     Returns:
         Dict with ingestion status and progress
     """
+
     async def do_get_status():
         client = AsyncIOMotorClient(settings.mongodb_uri)
         db = client[settings.mongodb_database]
@@ -952,7 +969,11 @@ def get_ingestion_status(self, ingestion_id: str) -> Dict[str, Any]:
                 "config_id": ingestion.get("config_id"),
                 "status": ingestion.get("status"),
                 "progress": (
-                    (ingestion.get("processed_files", 0) / ingestion.get("total_files", 1)) * 100
+                    (
+                        ingestion.get("processed_files", 0)
+                        / ingestion.get("total_files", 1)
+                    )
+                    * 100
                     if ingestion.get("total_files", 0) > 0
                     else 0
                 ),

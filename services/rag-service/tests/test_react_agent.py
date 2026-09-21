@@ -1,22 +1,23 @@
 """Tests for ReAct agent module."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from app.agents.base import AgentResponse
 from app.agents.react import (
+    REACT_SYSTEM_PROMPT,
+    Action,
+    Observation,
     ReActAgent,
     ReActConfig,
     ReActState,
+    Thought,
     Tool,
     ToolType,
-    Thought,
-    Action,
-    Observation,
-    REACT_SYSTEM_PROMPT,
 )
-from app.agents.base import AgentResponse, StepType
+from app.llm.base import LLMResponse, LLMUsage
 from app.retrieval.base import RetrievedChunk
-from app.llm.base import Message, LLMResponse, LLMUsage
 
 
 class TestToolType:
@@ -36,6 +37,7 @@ class TestTool:
 
     def test_create_tool(self):
         """Test creating a tool."""
+
         async def handler(input, config_id, state):
             return "result"
 
@@ -177,15 +179,17 @@ class TestReActAgent:
     def mock_retriever(self):
         """Create a mock retriever."""
         retriever = AsyncMock()
-        retriever.retrieve = AsyncMock(return_value=[
-            RetrievedChunk(
-                content="Python is a high-level programming language.",
-                score=0.9,
-                chunk_id="c1",
-                document_id="d1",
-                config_id="cfg",
-            ),
-        ])
+        retriever.retrieve = AsyncMock(
+            return_value=[
+                RetrievedChunk(
+                    content="Python is a high-level programming language.",
+                    score=0.9,
+                    chunk_id="c1",
+                    document_id="d1",
+                    config_id="cfg",
+                ),
+            ]
+        )
         return retriever
 
     @pytest.fixture
@@ -203,13 +207,17 @@ class TestReActAgent:
                 return LLMResponse(
                     content="Thought: I need to search for information about Python.\nAction: search[Python programming language]",
                     model="gpt-4o-mini",
-                    usage=LLMUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150),
+                    usage=LLMUsage(
+                        prompt_tokens=100, completion_tokens=50, total_tokens=150
+                    ),
                 )
             else:
                 return LLMResponse(
                     content="Thought: I now have enough information to answer.\nAnswer: Python is a high-level programming language used for various applications.",
                     model="gpt-4o-mini",
-                    usage=LLMUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150),
+                    usage=LLMUsage(
+                        prompt_tokens=100, completion_tokens=50, total_tokens=150
+                    ),
                 )
 
         llm.generate = mock_generate
@@ -262,6 +270,7 @@ class TestReActAgent:
 
     def test_add_custom_tool(self, agent):
         """Test adding a custom tool."""
+
         async def custom_handler(input, config_id, state):
             return "custom result"
 
@@ -326,11 +335,13 @@ class TestReActAgent:
         """Test run respects max iterations."""
         # Create LLM that never wants to answer
         llm = AsyncMock()
-        llm.generate = AsyncMock(return_value=LLMResponse(
-            content="Thought: I need more information.\nAction: search[more info]",
-            model="test",
-            usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ))
+        llm.generate = AsyncMock(
+            return_value=LLMResponse(
+                content="Thought: I need more information.\nAction: search[more info]",
+                model="test",
+                usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+            )
+        )
 
         config = ReActConfig(max_iterations=2)
         agent = ReActAgent(
@@ -380,7 +391,9 @@ class TestReActAgent:
         assert "4" in result
 
     @pytest.mark.asyncio
-    async def test_calculate_tool_invalid_expression(self, mock_retriever, mock_llm, mock_prompt_manager):
+    async def test_calculate_tool_invalid_expression(
+        self, mock_retriever, mock_llm, mock_prompt_manager
+    ):
         """Test calculate tool with invalid expression."""
         config = ReActConfig(enable_calculate=True)
         agent = ReActAgent(

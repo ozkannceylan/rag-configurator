@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -102,7 +102,7 @@ class VectorStore:
         logger.debug(f"Stored document: {doc_id} ({doc.file_name})")
         return doc_id
 
-    async def get_document(self, document_id: str) -> Optional[DocumentRecord]:
+    async def get_document(self, document_id: str) -> DocumentRecord | None:
         """Get a document by ID."""
         doc = await self.documents.find_one({"_id": document_id})
         if doc:
@@ -112,7 +112,7 @@ class VectorStore:
 
     async def get_documents_by_config(
         self, config_id: str, skip: int = 0, limit: int = 100
-    ) -> List[DocumentRecord]:
+    ) -> list[DocumentRecord]:
         """Get all documents for a config."""
         cursor = self.documents.find({"config_id": config_id}).skip(skip).limit(limit)
         documents = []
@@ -148,7 +148,7 @@ class VectorStore:
 
     # ==================== Chunk Operations ====================
 
-    async def store_chunks(self, chunks: List[ChunkRecord]) -> List[str]:
+    async def store_chunks(self, chunks: list[ChunkRecord]) -> list[str]:
         """
         Store multiple chunk records.
 
@@ -179,7 +179,7 @@ class VectorStore:
         ids = await self.store_chunks([chunk])
         return ids[0] if ids else ""
 
-    async def get_chunk(self, chunk_id: str) -> Optional[ChunkRecord]:
+    async def get_chunk(self, chunk_id: str) -> ChunkRecord | None:
         """Get a chunk by ID."""
         doc = await self.chunks.find_one({"_id": chunk_id})
         if doc:
@@ -189,13 +189,13 @@ class VectorStore:
 
     async def get_chunks_by_document(
         self, document_id: str, include_embeddings: bool = False
-    ) -> List[ChunkRecord]:
+    ) -> list[ChunkRecord]:
         """Get all chunks for a document."""
         projection = None if include_embeddings else {"embedding": 0}
 
-        cursor = self.chunks.find(
-            {"document_id": document_id}, projection
-        ).sort("chunk_index", 1)
+        cursor = self.chunks.find({"document_id": document_id}, projection).sort(
+            "chunk_index", 1
+        )
 
         chunks = []
         async for doc in cursor:
@@ -211,7 +211,7 @@ class VectorStore:
         skip: int = 0,
         limit: int = 100,
         include_embeddings: bool = False,
-    ) -> List[ChunkRecord]:
+    ) -> list[ChunkRecord]:
         """Get chunks for a config."""
         projection = None if include_embeddings else {"embedding": 0}
 
@@ -234,7 +234,7 @@ class VectorStore:
         return await self.chunks.count_documents({"config_id": config_id})
 
     async def update_chunk_embedding(
-        self, chunk_id: str, embedding: List[float], model: str, dimensions: int
+        self, chunk_id: str, embedding: list[float], model: str, dimensions: int
     ) -> bool:
         """Update a chunk's embedding."""
         result = await self.chunks.update_one(
@@ -273,15 +273,13 @@ class VectorStore:
             # Another request won the race — return the existing record.
             idem_key = data.get("idempotency_key")
             if idem_key is not None:
-                existing = await self.ingestions.find_one(
-                    {"idempotency_key": idem_key}
-                )
+                existing = await self.ingestions.find_one({"idempotency_key": idem_key})
                 if existing:
                     return str(existing["_id"])
             # Fallback: re-raise if we somehow can't find the duplicate.
             raise
 
-    async def get_ingestion(self, ingestion_id: str) -> Optional[IngestionRecord]:
+    async def get_ingestion(self, ingestion_id: str) -> IngestionRecord | None:
         """Get an ingestion by ID."""
         doc = await self.ingestions.find_one({"_id": ingestion_id})
         if doc:
@@ -289,9 +287,7 @@ class VectorStore:
             return IngestionRecord(**doc)
         return None
 
-    async def get_ingestion_by_task(
-        self, task_id: str
-    ) -> Optional[IngestionRecord]:
+    async def get_ingestion_by_task(self, task_id: str) -> IngestionRecord | None:
         """Get ingestion by Celery task ID."""
         doc = await self.ingestions.find_one({"celery_task_id": task_id})
         if doc:
@@ -301,7 +297,7 @@ class VectorStore:
 
     async def get_ingestions_by_config(
         self, config_id: str, skip: int = 0, limit: int = 20
-    ) -> List[IngestionRecord]:
+    ) -> list[IngestionRecord]:
         """Get ingestions for a config."""
         cursor = (
             self.ingestions.find({"config_id": config_id})
@@ -350,12 +346,12 @@ class VectorStore:
     async def update_ingestion_progress(
         self,
         ingestion_id: str,
-        processed_files: Optional[int] = None,
-        failed_files: Optional[int] = None,
-        total_chunks: Optional[int] = None,
+        processed_files: int | None = None,
+        failed_files: int | None = None,
+        total_chunks: int | None = None,
     ) -> bool:
         """Update ingestion progress counters."""
-        update_data: Dict[str, Any] = {"updated_at": datetime.utcnow()}
+        update_data: dict[str, Any] = {"updated_at": datetime.utcnow()}
 
         if processed_files is not None:
             update_data["processed_files"] = processed_files
@@ -421,11 +417,11 @@ class VectorStore:
     async def search_by_embedding(
         self,
         config_id: str,
-        embedding: List[float],
+        embedding: list[float],
         limit: int = 10,
         min_score: float = 0.0,
-        folder_paths: Optional[List[str]] = None,
-    ) -> List[SearchResult]:
+        folder_paths: list[str] | None = None,
+    ) -> list[SearchResult]:
         """
         Search for similar chunks using vector similarity.
 
@@ -444,7 +440,7 @@ class VectorStore:
             List of search results sorted by similarity
         """
         # Build query filter
-        query: Dict[str, Any] = {
+        query: dict[str, Any] = {
             "config_id": config_id,
             "embedding": {"$exists": True, "$ne": []},
         }
@@ -485,12 +481,12 @@ class VectorStore:
 
         return results[:limit]
 
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+    def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """Calculate cosine similarity between two vectors."""
         if len(vec1) != len(vec2):
             return 0.0
 
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=True))
         norm1 = sum(a * a for a in vec1) ** 0.5
         norm2 = sum(b * b for b in vec2) ** 0.5
 
@@ -501,7 +497,7 @@ class VectorStore:
 
     # ==================== Stats Operations ====================
 
-    async def get_config_stats(self, config_id: str) -> Dict[str, Any]:
+    async def get_config_stats(self, config_id: str) -> dict[str, Any]:
         """Get statistics for a config."""
         doc_count = await self.documents.count_documents({"config_id": config_id})
         chunk_count = await self.chunks.count_documents({"config_id": config_id})

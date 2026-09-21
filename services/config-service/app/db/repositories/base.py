@@ -1,7 +1,8 @@
 """Base repository with common CRUD operations."""
 
-from typing import Optional, List, TypeVar, Generic
 from datetime import datetime, timezone
+from typing import Generic, List, Optional, TypeVar
+
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 

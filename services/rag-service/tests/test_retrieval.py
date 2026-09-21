@@ -1,9 +1,8 @@
 """Tests for retrieval module."""
 
-import math
+from unittest.mock import MagicMock
+
 import pytest
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.retrieval.base import (
     BaseRetriever,
@@ -12,8 +11,8 @@ from app.retrieval.base import (
     RetrievedChunk,
     SourceType,
 )
-from app.retrieval.vector import VectorRetriever
 from app.retrieval.embedder import QueryEmbedder
+from app.retrieval.vector import VectorRetriever
 
 
 class TestRetrievedChunk:
@@ -274,16 +273,17 @@ class TestVectorRetriever:
         """Test applying score threshold filter."""
         chunks = [
             RetrievedChunk(
-                content="High", score=0.9, chunk_id="1",
-                document_id="d", config_id="c"
+                content="High", score=0.9, chunk_id="1", document_id="d", config_id="c"
             ),
             RetrievedChunk(
-                content="Low", score=0.3, chunk_id="2",
-                document_id="d", config_id="c"
+                content="Low", score=0.3, chunk_id="2", document_id="d", config_id="c"
             ),
             RetrievedChunk(
-                content="Medium", score=0.6, chunk_id="3",
-                document_id="d", config_id="c"
+                content="Medium",
+                score=0.6,
+                chunk_id="3",
+                document_id="d",
+                config_id="c",
             ),
         ]
 
@@ -350,12 +350,10 @@ class TestBaseRetriever:
         retriever = ConcreteRetriever(RetrievalConfig(min_score=0.6))
         chunks = [
             RetrievedChunk(
-                content="A", score=0.9, chunk_id="1",
-                document_id="d", config_id="c"
+                content="A", score=0.9, chunk_id="1", document_id="d", config_id="c"
             ),
             RetrievedChunk(
-                content="B", score=0.4, chunk_id="2",
-                document_id="d", config_id="c"
+                content="B", score=0.4, chunk_id="2", document_id="d", config_id="c"
             ),
         ]
 

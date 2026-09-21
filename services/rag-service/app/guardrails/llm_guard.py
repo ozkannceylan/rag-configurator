@@ -3,7 +3,7 @@
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.guardrails.base import BaseGuardrail, GuardrailCheck, GuardrailResult
 from app.llm.base import BaseLLM, Message
@@ -72,7 +72,7 @@ class LLMGuard(BaseGuardrail):
     def __init__(
         self,
         llm: BaseLLM,
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize LLM Guard.
@@ -106,7 +106,7 @@ class LLMGuard(BaseGuardrail):
 
         Checks for prompt injection and PII in user input.
         """
-        checks: List[GuardrailCheck] = []
+        checks: list[GuardrailCheck] = []
         blocked_reason = None
 
         # Prompt injection check
@@ -114,7 +114,9 @@ class LLMGuard(BaseGuardrail):
             injection_result = await self._check_prompt_injection(query)
             checks.append(injection_result)
             if not injection_result.passed:
-                blocked_reason = f"Prompt injection detected: {injection_result.details}"
+                blocked_reason = (
+                    f"Prompt injection detected: {injection_result.details}"
+                )
 
         # PII check on input
         if self.check_pii_input:
@@ -136,7 +138,7 @@ class LLMGuard(BaseGuardrail):
 
         Checks for toxicity and PII leakage in generated response.
         """
-        checks: List[GuardrailCheck] = []
+        checks: list[GuardrailCheck] = []
         blocked_reason = None
 
         # Toxicity check
@@ -278,7 +280,7 @@ class LLMGuard(BaseGuardrail):
             )
 
     @staticmethod
-    def _parse_json(text: str) -> Dict[str, Any]:
+    def _parse_json(text: str) -> dict[str, Any]:
         """Parse JSON from LLM response, handling markdown code fences."""
         # Strip markdown code fences
         json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)

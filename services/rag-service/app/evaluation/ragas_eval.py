@@ -12,7 +12,7 @@ Each metric uses a structured LLM prompt to produce a 0-1 score.
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.evaluation.base import BaseEvaluator
 from app.evaluation.models import EvaluationResult, MetricResult
@@ -109,7 +109,7 @@ AVAILABLE_METRICS = [
 ]
 
 
-def _parse_score_response(raw: str) -> Dict[str, Any]:
+def _parse_score_response(raw: str) -> dict[str, Any]:
     """Parse the JSON score response from the LLM, tolerating markdown fences."""
     text = raw.strip()
     # Strip markdown code fences if present
@@ -126,7 +126,9 @@ def _parse_score_response(raw: str) -> Dict[str, Any]:
             "explanation": str(data.get("explanation", "")),
         }
     except (json.JSONDecodeError, ValueError, TypeError) as exc:
-        logger.warning("Failed to parse LLM score response: %s – raw: %s", exc, raw[:200])
+        logger.warning(
+            "Failed to parse LLM score response: %s – raw: %s", exc, raw[:200]
+        )
         return {"score": 0.0, "explanation": f"Parse error: {exc}"}
 
 
@@ -141,7 +143,7 @@ class RagasEvaluator(BaseEvaluator):
     def __init__(
         self,
         llm: BaseLLM,
-        metrics: Optional[List[str]] = None,
+        metrics: list[str] | None = None,
     ) -> None:
         self.llm = llm
         self.metrics = metrics or list(AVAILABLE_METRICS)
@@ -157,9 +159,11 @@ class RagasEvaluator(BaseEvaluator):
     # ------------------------------------------------------------------
 
     async def _score_faithfulness(
-        self, answer: str, contexts: List[str]
+        self, answer: str, contexts: list[str]
     ) -> MetricResult:
-        combined_context = "\n\n---\n\n".join(contexts) if contexts else "(no context provided)"
+        combined_context = (
+            "\n\n---\n\n".join(contexts) if contexts else "(no context provided)"
+        )
         prompt = FAITHFULNESS_PROMPT.format(context=combined_context, answer=answer)
         response = await self.llm.generate(
             messages=[Message.user(prompt)],
@@ -173,9 +177,7 @@ class RagasEvaluator(BaseEvaluator):
             explanation=parsed["explanation"],
         )
 
-    async def _score_answer_relevancy(
-        self, query: str, answer: str
-    ) -> MetricResult:
+    async def _score_answer_relevancy(self, query: str, answer: str) -> MetricResult:
         prompt = ANSWER_RELEVANCY_PROMPT.format(query=query, answer=answer)
         response = await self.llm.generate(
             messages=[Message.user(prompt)],
@@ -190,11 +192,13 @@ class RagasEvaluator(BaseEvaluator):
         )
 
     async def _score_context_precision(
-        self, query: str, contexts: List[str]
+        self, query: str, contexts: list[str]
     ) -> MetricResult:
-        numbered = "\n".join(
-            f"[{i+1}] {c}" for i, c in enumerate(contexts)
-        ) if contexts else "(no contexts)"
+        numbered = (
+            "\n".join(f"[{i+1}] {c}" for i, c in enumerate(contexts))
+            if contexts
+            else "(no contexts)"
+        )
         prompt = CONTEXT_PRECISION_PROMPT.format(query=query, contexts=numbered)
         response = await self.llm.generate(
             messages=[Message.user(prompt)],
@@ -209,11 +213,13 @@ class RagasEvaluator(BaseEvaluator):
         )
 
     async def _score_context_recall(
-        self, ground_truth: str, contexts: List[str]
+        self, ground_truth: str, contexts: list[str]
     ) -> MetricResult:
-        numbered = "\n".join(
-            f"[{i+1}] {c}" for i, c in enumerate(contexts)
-        ) if contexts else "(no contexts)"
+        numbered = (
+            "\n".join(f"[{i+1}] {c}" for i, c in enumerate(contexts))
+            if contexts
+            else "(no contexts)"
+        )
         prompt = CONTEXT_RECALL_PROMPT.format(
             ground_truth=ground_truth, contexts=numbered
         )
@@ -237,11 +243,11 @@ class RagasEvaluator(BaseEvaluator):
         self,
         query: str,
         answer: str,
-        contexts: List[str],
-        ground_truth: Optional[str] = None,
+        contexts: list[str],
+        ground_truth: str | None = None,
     ) -> EvaluationResult:
         """Run the requested RAGAS metrics and return an ``EvaluationResult``."""
-        metric_results: List[MetricResult] = []
+        metric_results: list[MetricResult] = []
 
         for metric_name in self.metrics:
             try:
@@ -259,7 +265,9 @@ class RagasEvaluator(BaseEvaluator):
                             explanation="Skipped: no ground truth provided.",
                         )
                     else:
-                        result = await self._score_context_recall(ground_truth, contexts)
+                        result = await self._score_context_recall(
+                            ground_truth, contexts
+                        )
                 else:
                     continue  # unreachable due to __init__ validation
                 metric_results.append(result)

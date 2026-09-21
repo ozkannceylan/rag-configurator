@@ -1,17 +1,13 @@
 """Tests for data lineage tracking endpoint."""
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
 from app.api.v1.lineage import (
-    QueryLineage,
     generate_query_id,
     store_query_lineage,
 )
-from app.retrieval.base import RetrievedChunk, SourceType
-
+from app.retrieval.base import RetrievedChunk
 
 # ------------------------------------------------------------------
 # Unit tests for lineage helpers
@@ -141,7 +137,7 @@ async def test_get_lineage_endpoint(client, mock_mongodb):
         ],
         "steps": [],
         "total_duration_ms": 200.0,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
         "metadata": {},
     }
 
@@ -182,7 +178,7 @@ async def test_get_lineage_wrong_user(client, mock_mongodb):
         "chunks": [],
         "steps": [],
         "total_duration_ms": 0,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
         "metadata": {},
     }
 
@@ -208,7 +204,7 @@ async def test_list_lineage_by_config(client, mock_mongodb):
             "chunks": [],
             "steps": [],
             "total_duration_ms": 100,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
             "metadata": {},
         },
     ]

@@ -1,8 +1,8 @@
 """API endpoints for chat with conversation history."""
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -16,8 +16,8 @@ from app.core.auth import (
 )
 from app.db.mongodb import mongodb
 from app.llm.base import LLMContextLengthError, LLMError
-from app.retrieval.factory import get_retriever_from_config
 from app.prompts.manager import PromptManager
+from app.retrieval.factory import get_retriever_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class ChatMessage(BaseModel):
 
     role: str = Field(..., description="Message role: 'user' or 'assistant'")
     content: str = Field(..., description="Message content")
-    timestamp: Optional[str] = Field(None, description="Message timestamp")
+    timestamp: str | None = Field(None, description="Message timestamp")
 
 
 class ChatRequest(BaseModel):
@@ -37,8 +37,8 @@ class ChatRequest(BaseModel):
 
     message: str = Field(..., description="User message", max_length=10000)
     config_id: str = Field(..., description="RAG pipeline configuration ID")
-    conversation_id: Optional[str] = Field(None, description="Existing conversation ID")
-    user_role: Optional[str] = Field(None, description="User role for RBAC")
+    conversation_id: str | None = Field(None, description="Existing conversation ID")
+    user_role: str | None = Field(None, description="User role for RBAC")
     include_sources: bool = Field(True, description="Include source chunks in response")
 
 
@@ -47,15 +47,15 @@ class ChatResponse(BaseModel):
 
     answer: str
     conversation_id: str
-    sources: List[Dict[str, Any]]
-    metadata: Dict[str, Any]
+    sources: list[dict[str, Any]]
+    metadata: dict[str, Any]
 
 
 class ConversationHistoryResponse(BaseModel):
     """Response model for conversation history."""
 
     conversation_id: str
-    messages: List[ChatMessage]
+    messages: list[ChatMessage]
     created_at: str
     updated_at: str
 
@@ -88,15 +88,18 @@ async def chat(request: ChatRequest, http_request: Request):
         if not conversation_id:
             # Create new conversation
             from bson import ObjectId
+
             conversation_id = str(ObjectId())
-            await db["conversations"].insert_one({
-                "_id": conversation_id,
-                "config_id": request.config_id,
-                "user_id": user_id,
-                "messages": [],
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            })
+            await db["conversations"].insert_one(
+                {
+                    "_id": conversation_id,
+                    "config_id": request.config_id,
+                    "user_id": user_id,
+                    "messages": [],
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            )
 
         # Load configuration
         config_doc = await require_config_access(db, request.config_id, user_id)
@@ -134,15 +137,23 @@ async def chat(request: ChatRequest, http_request: Request):
 
         # Update conversation in database
         new_messages = [
-            {"role": "user", "content": request.message, "timestamp": datetime.now(timezone.utc).isoformat()},
-            {"role": "assistant", "content": response.answer, "timestamp": datetime.now(timezone.utc).isoformat()},
+            {
+                "role": "user",
+                "content": request.message,
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+            {
+                "role": "assistant",
+                "content": response.answer,
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
         ]
 
         await db["conversations"].update_one(
             {"_id": conversation_id},
             {
                 "$push": {"messages": {"$each": new_messages}},
-                "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
+                "$set": {"updated_at": datetime.now(UTC).isoformat()},
             },
         )
 
@@ -150,12 +161,14 @@ async def chat(request: ChatRequest, http_request: Request):
         sources = []
         if request.include_sources:
             for chunk in response.sources:
-                sources.append({
-                    "content": chunk.content,
-                    "score": chunk.score,
-                    "metadata": chunk.metadata,
-                    "source_type": chunk.source_type.value,
-                })
+                sources.append(
+                    {
+                        "content": chunk.content,
+                        "score": chunk.score,
+                        "metadata": chunk.metadata,
+                        "source_type": chunk.source_type.value,
+                    }
+                )
 
         # Build metadata
         metadata = {

@@ -1,17 +1,18 @@
 """Tests for graph retrieval module."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from app.retrieval.base import SourceType
 from app.retrieval.graph import (
-    GraphRetriever,
     GraphConfig,
     GraphContext,
-    GraphNode,
     GraphEdge,
+    GraphNode,
     GraphRetrievalResult,
+    GraphRetriever,
 )
-from app.retrieval.base import SourceType
 
 
 class TestGraphNode:
@@ -368,9 +369,7 @@ class TestGraphFilters:
 
     def test_relation_type_filter(self):
         """Test relation type filter configuration."""
-        config = GraphConfig(
-            relation_types=["works_for", "located_in", "knows"]
-        )
+        config = GraphConfig(relation_types=["works_for", "located_in", "knows"])
         assert len(config.relation_types) == 3
         assert "works_for" in config.relation_types
 

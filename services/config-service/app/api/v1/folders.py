@@ -1,15 +1,16 @@
 """Folder scanning endpoints."""
 
 from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import CurrentUser
 from app.schemas.folder import (
-    FolderScanRequest,
-    FolderScanResponse,
+    BrowseEntry,
     FolderBrowseRequest,
     FolderBrowseResponse,
-    BrowseEntry,
+    FolderScanRequest,
+    FolderScanResponse,
 )
 from app.services.folder_service import FolderService
 
@@ -17,9 +18,9 @@ router = APIRouter(prefix="/folders", tags=["folders"])
 
 # Allowed root paths for browsing (security: prevent arbitrary filesystem access)
 BROWSE_ROOTS = [
-    Path("/data/local"),     # Mounted from LOCAL_DATA_PATH
+    Path("/data/local"),  # Mounted from LOCAL_DATA_PATH
     Path("/app/sample-docs"),  # Demo sample docs
-    Path("/data"),            # General data directory
+    Path("/data"),  # General data directory
 ]
 
 
@@ -44,16 +45,22 @@ async def browse_folders(
             entries = []
             for root in BROWSE_ROOTS:
                 if root.exists() and root.is_dir():
-                    has_children = any(
-                        item.is_dir() and not item.name.startswith(".")
-                        for item in root.iterdir()
-                    ) if root.exists() else False
-                    entries.append(BrowseEntry(
-                        name=root.name,
-                        path=str(root),
-                        type="folder",
-                        has_children=has_children,
-                    ))
+                    has_children = (
+                        any(
+                            item.is_dir() and not item.name.startswith(".")
+                            for item in root.iterdir()
+                        )
+                        if root.exists()
+                        else False
+                    )
+                    entries.append(
+                        BrowseEntry(
+                            name=root.name,
+                            path=str(root),
+                            type="folder",
+                            has_children=has_children,
+                        )
+                    )
             return FolderBrowseResponse(
                 current_path="/",
                 parent_path=None,
@@ -96,23 +103,27 @@ async def browse_folders(
             if item.name.startswith("."):
                 continue
             if item.is_dir():
-                has_children = any(
-                    child.is_dir() and not child.name.startswith(".")
-                    for child in item.iterdir()
-                ) if item.is_dir() else False
-                entries.append(BrowseEntry(
-                    name=item.name,
-                    path=str(item),
-                    type="folder",
-                    has_children=has_children,
-                ))
+                has_children = (
+                    any(
+                        child.is_dir() and not child.name.startswith(".")
+                        for child in item.iterdir()
+                    )
+                    if item.is_dir()
+                    else False
+                )
+                entries.append(
+                    BrowseEntry(
+                        name=item.name,
+                        path=str(item),
+                        type="folder",
+                        has_children=has_children,
+                    )
+                )
 
         # Calculate parent path (if not at a root)
         parent_path = str(browse_path.parent)
         is_root = any(
-            browse_path == root.resolve()
-            for root in BROWSE_ROOTS
-            if root.exists()
+            browse_path == root.resolve() for root in BROWSE_ROOTS if root.exists()
         )
         if is_root:
             parent_path = ""  # Go back to root listing

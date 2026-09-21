@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.chunkers.base import BaseChunker, Chunk, ChunkingConfig
 
@@ -28,16 +28,16 @@ class SemanticChunker(BaseChunker):
         r"(?<=:)\s*\n",  # After colon with newline
     ]
 
-    def __init__(self, config: Optional[ChunkingConfig] = None):
+    def __init__(self, config: ChunkingConfig | None = None):
         """Initialize semantic chunker."""
         super().__init__(config)
 
     def chunk(
         self,
         text: str,
-        config: Optional[ChunkingConfig] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[Chunk]:
+        config: ChunkingConfig | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[Chunk]:
         """
         Split text into semantic chunks based on sentences.
 
@@ -74,7 +74,7 @@ class SemanticChunker(BaseChunker):
 
     def _split_into_sentences(
         self, text: str, config: ChunkingConfig
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Split text into sentences with position tracking.
 
@@ -118,7 +118,7 @@ class SemanticChunker(BaseChunker):
 
         return sentences
 
-    def _regex_sentence_split(self, text: str) -> List[Dict[str, Any]]:
+    def _regex_sentence_split(self, text: str) -> list[dict[str, Any]]:
         """
         Split text into sentences using regex.
 
@@ -155,8 +155,8 @@ class SemanticChunker(BaseChunker):
         return sentences
 
     def _combine_short_sentences(
-        self, sentences: List[Dict[str, Any]], config: ChunkingConfig
-    ) -> List[Dict[str, Any]]:
+        self, sentences: list[dict[str, Any]], config: ChunkingConfig
+    ) -> list[dict[str, Any]]:
         """
         Combine short sentences with adjacent sentences.
 
@@ -195,11 +195,11 @@ class SemanticChunker(BaseChunker):
 
     def _group_sentences_into_chunks(
         self,
-        sentences: List[Dict[str, Any]],
+        sentences: list[dict[str, Any]],
         config: ChunkingConfig,
-        metadata: Optional[Dict[str, Any]],
+        metadata: dict[str, Any] | None,
         original_text: str,
-    ) -> List[Chunk]:
+    ) -> list[Chunk]:
         """
         Group sentences into chunks respecting size limits.
 
@@ -257,9 +257,9 @@ class SemanticChunker(BaseChunker):
 
     def _create_chunk_from_sentences(
         self,
-        sentences: List[Dict[str, Any]],
+        sentences: list[dict[str, Any]],
         index: int,
-        metadata: Optional[Dict[str, Any]],
+        metadata: dict[str, Any] | None,
     ) -> Chunk:
         """
         Create a chunk from a list of sentences.
@@ -288,8 +288,8 @@ class SemanticChunker(BaseChunker):
         )
 
     def _get_overlap_sentences(
-        self, sentences: List[Dict[str, Any]], config: ChunkingConfig
-    ) -> List[Dict[str, Any]]:
+        self, sentences: list[dict[str, Any]], config: ChunkingConfig
+    ) -> list[dict[str, Any]]:
         """
         Get sentences for overlap from the end of the current chunk.
 

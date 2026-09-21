@@ -8,12 +8,12 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.security import extract_bearer_token
 from app.db.mongodb import get_db
 from app.schemas.auth import (
-    RegisterRequest,
     LoginRequest,
-    RefreshRequest,
     LogoutRequest,
-    TokenResponse,
     MessageResponse,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
 )
 from app.services.auth_service import AuthService
 

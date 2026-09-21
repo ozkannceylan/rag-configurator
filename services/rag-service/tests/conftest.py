@@ -1,9 +1,10 @@
 """Pytest configuration and fixtures."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from unittest.mock import AsyncMock, MagicMock
 from rag_config_common.auth.hmac_verify import build_signed_headers
 
 
@@ -19,9 +20,9 @@ def mock_mongodb():
 @pytest_asyncio.fixture
 async def client(mock_mongodb):
     """Create a test client with mocked dependencies."""
-    from app.main import app
     from app.core.settings import settings
     from app.db.mongodb import mongodb
+    from app.main import app
 
     # Mock the database
     mongodb.database = mock_mongodb
@@ -50,8 +51,8 @@ async def client(mock_mongodb):
 @pytest_asyncio.fixture
 async def unsigned_client(mock_mongodb):
     """Create a client that does not sign requests."""
-    from app.main import app
     from app.db.mongodb import mongodb
+    from app.main import app
 
     mongodb.database = mock_mongodb
     mongodb.client = MagicMock()

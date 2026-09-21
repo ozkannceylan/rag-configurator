@@ -1,13 +1,13 @@
 """MongoDB document models for vector storage."""
 
 from datetime import datetime
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class IngestionStatus(str, Enum):
+class IngestionStatus(StrEnum):
     """Status of an ingestion job."""
 
     PENDING = "pending"
@@ -20,7 +20,7 @@ class IngestionStatus(str, Enum):
 class DocumentRecord(BaseModel):
     """MongoDB document model for processed files."""
 
-    id: Optional[str] = Field(None, alias="_id")
+    id: str | None = Field(None, alias="_id")
     config_id: str = Field(..., description="RAG pipeline configuration ID")
     ingestion_id: str = Field(..., description="Ingestion job ID")
     user_id: str = Field(..., description="User who owns this document")
@@ -45,13 +45,13 @@ class DocumentRecord(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Additional metadata
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         populate_by_name = True
         json_encoders = {datetime: lambda v: v.isoformat()}
 
-    def to_mongo(self) -> Dict[str, Any]:
+    def to_mongo(self) -> dict[str, Any]:
         """Convert to MongoDB document."""
         data = self.model_dump(exclude={"id"}, by_alias=True)
         if self.id:
@@ -62,7 +62,7 @@ class DocumentRecord(BaseModel):
 class ChunkRecord(BaseModel):
     """MongoDB document model for text chunks with embeddings."""
 
-    id: Optional[str] = Field(None, alias="_id")
+    id: str | None = Field(None, alias="_id")
     config_id: str = Field(..., description="RAG pipeline configuration ID")
     document_id: str = Field(..., description="Parent document ID")
     ingestion_id: str = Field(..., description="Ingestion job ID")
@@ -73,7 +73,7 @@ class ChunkRecord(BaseModel):
     content_hash: str = Field("", description="MD5 hash of content")
 
     # Embedding
-    embedding: List[float] = Field(default_factory=list, description="Vector embedding")
+    embedding: list[float] = Field(default_factory=list, description="Vector embedding")
     embedding_model: str = Field("", description="Model used for embedding")
     embedding_dimensions: int = Field(0, description="Embedding vector dimensions")
 
@@ -84,19 +84,21 @@ class ChunkRecord(BaseModel):
 
     # RBAC metadata
     folder_path: str = Field("", description="Source folder for access control")
-    access_tags: List[str] = Field(default_factory=list, description="Access control tags")
+    access_tags: list[str] = Field(
+        default_factory=list, description="Access control tags"
+    )
 
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Additional metadata
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         populate_by_name = True
         json_encoders = {datetime: lambda v: v.isoformat()}
 
-    def to_mongo(self) -> Dict[str, Any]:
+    def to_mongo(self) -> dict[str, Any]:
         """Convert to MongoDB document."""
         data = self.model_dump(exclude={"id"}, by_alias=True)
         if self.id:
@@ -107,18 +109,18 @@ class ChunkRecord(BaseModel):
 class IngestionRecord(BaseModel):
     """MongoDB document model for ingestion jobs."""
 
-    id: Optional[str] = Field(None, alias="_id")
+    id: str | None = Field(None, alias="_id")
     config_id: str = Field(..., description="RAG pipeline configuration ID")
     user_id: str = Field(..., description="User who initiated ingestion")
 
     # Status
     status: IngestionStatus = Field(IngestionStatus.PENDING)
-    celery_task_id: Optional[str] = Field(None, description="Celery task ID")
-    idempotency_key: Optional[str] = Field(
+    celery_task_id: str | None = Field(None, description="Celery task ID")
+    idempotency_key: str | None = Field(
         None,
         description="Stable key used to collapse duplicate ingestion starts",
     )
-    data_source_hash: Optional[str] = Field(
+    data_source_hash: str | None = Field(
         None,
         description="Hash of the effective data source definition",
     )
@@ -130,17 +132,17 @@ class IngestionRecord(BaseModel):
     total_chunks: int = Field(0)
 
     # Timing
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Error tracking
-    errors: List[Dict[str, Any]] = Field(default_factory=list)
-    warnings: List[str] = Field(default_factory=list)
+    errors: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
     # Configuration snapshot
-    config_snapshot: Dict[str, Any] = Field(
+    config_snapshot: dict[str, Any] = Field(
         default_factory=dict, description="Copy of config at ingestion time"
     )
 
@@ -149,7 +151,7 @@ class IngestionRecord(BaseModel):
         use_enum_values = True
         json_encoders = {datetime: lambda v: v.isoformat() if v else None}
 
-    def to_mongo(self) -> Dict[str, Any]:
+    def to_mongo(self) -> dict[str, Any]:
         """Convert to MongoDB document."""
         data = self.model_dump(exclude={"id"}, by_alias=True)
         if self.id:
@@ -164,7 +166,7 @@ class IngestionRecord(BaseModel):
         return (self.processed_files / self.total_files) * 100
 
     @property
-    def duration_seconds(self) -> Optional[float]:
+    def duration_seconds(self) -> float | None:
         """Calculate job duration in seconds."""
         if not self.started_at:
             return None
@@ -180,9 +182,9 @@ class SearchResult(BaseModel):
     config_id: str
     content: str
     score: float = Field(..., description="Similarity score")
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     # Document info
-    file_name: Optional[str] = None
-    file_path: Optional[str] = None
+    file_name: str | None = None
+    file_path: str | None = None
     chunk_index: int = 0

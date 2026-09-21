@@ -1,7 +1,6 @@
 """MongoDB connection management."""
 
 import logging
-from typing import Optional
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
@@ -13,8 +12,8 @@ logger = logging.getLogger(__name__)
 class MongoDB:
     """MongoDB connection manager."""
 
-    client: Optional[AsyncIOMotorClient] = None
-    database: Optional[AsyncIOMotorDatabase] = None
+    client: AsyncIOMotorClient | None = None
+    database: AsyncIOMotorDatabase | None = None
 
     async def connect(self) -> None:
         """Connect to MongoDB."""

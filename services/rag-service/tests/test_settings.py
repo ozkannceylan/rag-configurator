@@ -1,6 +1,5 @@
 """Tests for RAG service settings."""
 
-import pytest
 from unittest.mock import patch
 
 
@@ -11,6 +10,7 @@ class TestSettings:
         """Test default settings values."""
         with patch.dict("os.environ", {}, clear=True):
             from importlib import reload
+
             from app.core import settings as settings_module
 
             reload(settings_module)
@@ -27,6 +27,7 @@ class TestSettings:
         """Test MongoDB settings."""
         with patch.dict("os.environ", {}, clear=True):
             from importlib import reload
+
             from app.core import settings as settings_module
 
             reload(settings_module)
@@ -39,6 +40,7 @@ class TestSettings:
         """Test LLM provider settings."""
         with patch.dict("os.environ", {}, clear=True):
             from importlib import reload
+
             from app.core import settings as settings_module
 
             reload(settings_module)
@@ -51,6 +53,7 @@ class TestSettings:
         """Test RAG-specific settings."""
         with patch.dict("os.environ", {}, clear=True):
             from importlib import reload
+
             from app.core import settings as settings_module
 
             reload(settings_module)
@@ -64,6 +67,7 @@ class TestSettings:
         """Test is_development property."""
         with patch.dict("os.environ", {"ENVIRONMENT": "development"}, clear=True):
             from importlib import reload
+
             from app.core import settings as settings_module
 
             reload(settings_module)
@@ -75,6 +79,7 @@ class TestSettings:
         """Test is_development returns False for production."""
         with patch.dict("os.environ", {"ENVIRONMENT": "production"}, clear=True):
             from importlib import reload
+
             from app.core import settings as settings_module
 
             reload(settings_module)
@@ -86,6 +91,7 @@ class TestSettings:
         """Test mlflow_enabled property."""
         with patch.dict("os.environ", {}, clear=True):
             from importlib import reload
+
             from app.core import settings as settings_module
 
             reload(settings_module)
@@ -112,6 +118,7 @@ class TestSettings:
             clear=True,
         ):
             from importlib import reload
+
             from app.core import settings as settings_module
 
             reload(settings_module)
@@ -124,6 +131,7 @@ class TestSettings:
         """Test timeout configuration."""
         with patch.dict("os.environ", {}, clear=True):
             from importlib import reload
+
             from app.core import settings as settings_module
 
             reload(settings_module)

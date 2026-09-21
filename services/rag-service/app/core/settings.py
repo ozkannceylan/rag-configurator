@@ -1,7 +1,6 @@
 """Application settings using Pydantic Settings."""
 
 from functools import lru_cache
-from typing import List, Optional, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -47,7 +46,7 @@ class Settings(BaseSettings):
     )
 
     # OpenTelemetry
-    otel_exporter_otlp_endpoint: Optional[str] = Field(
+    otel_exporter_otlp_endpoint: str | None = Field(
         default=None,
         alias="OTEL_EXPORTER_OTLP_ENDPOINT",
     )
@@ -61,27 +60,27 @@ class Settings(BaseSettings):
     default_llm_model: str = Field(default="gpt-4o-mini", alias="DEFAULT_LLM_MODEL")
 
     # OpenAI Configuration
-    openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
-    openai_organization: Optional[str] = Field(default=None, alias="OPENAI_ORGANIZATION")
-    openai_base_url: Optional[str] = Field(default=None, alias="OPENAI_BASE_URL")
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    openai_organization: str | None = Field(default=None, alias="OPENAI_ORGANIZATION")
+    openai_base_url: str | None = Field(default=None, alias="OPENAI_BASE_URL")
 
     # Anthropic Configuration
-    anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
 
     # Ollama Configuration (local native /api/chat, or Cloud via OLLAMA_API_KEY)
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         alias="OLLAMA_BASE_URL",
     )
-    ollama_api_key: Optional[str] = Field(default=None, alias="OLLAMA_API_KEY")
+    ollama_api_key: str | None = Field(default=None, alias="OLLAMA_API_KEY")
     ollama_default_model: str = Field(
         default="llama3.2",
         alias="OLLAMA_DEFAULT_MODEL",
     )
 
     # vLLM Configuration (self-hosted inference)
-    vllm_base_url: Optional[str] = Field(default=None, alias="VLLM_BASE_URL")
-    vllm_api_key: Optional[str] = Field(default=None, alias="VLLM_API_KEY")
+    vllm_base_url: str | None = Field(default=None, alias="VLLM_BASE_URL")
+    vllm_api_key: str | None = Field(default=None, alias="VLLM_API_KEY")
 
     # Embedding Configuration
     embedding_provider: str = Field(default="openai", alias="EMBEDDING_PROVIDER")
@@ -102,28 +101,32 @@ class Settings(BaseSettings):
     stream_chunk_size: int = Field(default=10, alias="STREAM_CHUNK_SIZE")
 
     # MLflow Configuration (optional, for experiment tracking)
-    mlflow_tracking_uri: Optional[str] = Field(default=None, alias="MLFLOW_TRACKING_URI")
+    mlflow_tracking_uri: str | None = Field(default=None, alias="MLFLOW_TRACKING_URI")
     mlflow_experiment_name: str = Field(
         default="rag-experiments",
         alias="MLFLOW_EXPERIMENT_NAME",
     )
 
     # CORS Configuration - use Union to prevent pydantic-settings from JSON parsing
-    cors_origins: Union[str, List[str]] = Field(
+    cors_origins: str | list[str] = Field(
         default=["http://localhost:3000", "http://localhost:5173"],
         alias="CORS_ORIGINS",
     )
 
     # Rate Limiting
     rate_limit_requests: int = Field(default=100, alias="RATE_LIMIT_REQUESTS")
-    rate_limit_window_seconds: int = Field(default=60, alias="RATE_LIMIT_WINDOW_SECONDS")
+    rate_limit_window_seconds: int = Field(
+        default=60, alias="RATE_LIMIT_WINDOW_SECONDS"
+    )
 
     # Timeout Configuration
     llm_timeout_seconds: float = Field(default=60.0, alias="LLM_TIMEOUT_SECONDS")
-    retrieval_timeout_seconds: float = Field(default=10.0, alias="RETRIEVAL_TIMEOUT_SECONDS")
+    retrieval_timeout_seconds: float = Field(
+        default=10.0, alias="RETRIEVAL_TIMEOUT_SECONDS"
+    )
 
     # TypeSafe Jev (System One) judge
-    typesafe_api_key: Optional[str] = Field(default=None, alias="TYPESAFE_API_KEY")
+    typesafe_api_key: str | None = Field(default=None, alias="TYPESAFE_API_KEY")
     typesafe_base_url: str = Field(
         default="https://api.typesafe.ai",
         alias="TYPESAFE_BASE_URL",
@@ -132,7 +135,7 @@ class Settings(BaseSettings):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v) -> List[str]:
+    def parse_cors_origins(cls, v) -> list[str]:
         """Parse CORS origins from comma-separated string or list."""
         if isinstance(v, str):
             # Handle comma-separated string

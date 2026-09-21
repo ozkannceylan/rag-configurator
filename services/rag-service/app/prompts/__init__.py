@@ -1,10 +1,10 @@
 """Prompt management module."""
 
 from app.prompts.manager import (
-    PromptManager,
     PromptConfig,
-    PromptTemplate,
     PromptError,
+    PromptManager,
+    PromptTemplate,
 )
 
 __all__ = [

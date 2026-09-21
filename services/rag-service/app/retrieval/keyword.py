@@ -2,8 +2,8 @@
 
 import logging
 import re
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -40,12 +40,12 @@ class KeywordConfig:
     metadata_weight: float = 0.5
 
     # Filter settings
-    folder_paths: Optional[List[str]] = None
-    access_tags: Optional[List[str]] = None
-    file_types: Optional[List[str]] = None
+    folder_paths: list[str] | None = None
+    access_tags: list[str] | None = None
+    file_types: list[str] | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "KeywordConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "KeywordConfig":
         """Create from dictionary."""
         return cls(
             top_k=data.get("top_k", 10),
@@ -78,8 +78,8 @@ class KeywordRetriever(BaseRetriever):
     def __init__(
         self,
         db: AsyncIOMotorDatabase,
-        config: Optional[RetrievalConfig] = None,
-        keyword_config: Optional[KeywordConfig] = None,
+        config: RetrievalConfig | None = None,
+        keyword_config: KeywordConfig | None = None,
     ):
         """
         Initialize keyword retriever.
@@ -93,7 +93,7 @@ class KeywordRetriever(BaseRetriever):
         self.db = db
         self.chunks = db[self.CHUNKS_COLLECTION]
         self.keyword_config = keyword_config or KeywordConfig()
-        self._use_atlas_search: Optional[bool] = None
+        self._use_atlas_search: bool | None = None
 
     async def _check_atlas_search(self) -> bool:
         """Check if MongoDB Atlas Search is available."""
@@ -139,9 +139,9 @@ class KeywordRetriever(BaseRetriever):
         self,
         query: str,
         config_id: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> List[RetrievedChunk]:
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
+    ) -> list[RetrievedChunk]:
         """
         Retrieve relevant chunks using keyword search.
 
@@ -179,9 +179,7 @@ class KeywordRetriever(BaseRetriever):
             )
 
         # Apply score threshold
-        chunks = self._apply_score_threshold(
-            chunks, self.keyword_config.min_score
-        )
+        chunks = self._apply_score_threshold(chunks, self.keyword_config.min_score)
 
         # Apply boost factor
         if self.keyword_config.boost_factor != 1.0:
@@ -195,11 +193,11 @@ class KeywordRetriever(BaseRetriever):
         query: str,
         config_id: str,
         top_k: int,
-        filters: Dict[str, Any],
-    ) -> List[RetrievedChunk]:
+        filters: dict[str, Any],
+    ) -> list[RetrievedChunk]:
         """Search using MongoDB Atlas Search."""
         # Build text search clause
-        text_clause: Dict[str, Any] = {
+        text_clause: dict[str, Any] = {
             "text": {
                 "query": query,
                 "path": "content",
@@ -213,30 +211,26 @@ class KeywordRetriever(BaseRetriever):
             }
 
         # Build filter clauses
-        filter_clauses: List[Dict[str, Any]] = [
+        filter_clauses: list[dict[str, Any]] = [
             {"equals": {"path": "config_id", "value": config_id}}
         ]
 
         # Add folder path filter (for RBAC)
         folder_paths = filters.get("folder_paths") or self.keyword_config.folder_paths
         if folder_paths:
-            filter_clauses.append({
-                "in": {"path": "folder_path", "value": folder_paths}
-            })
+            filter_clauses.append(
+                {"in": {"path": "folder_path", "value": folder_paths}}
+            )
 
         # Add access tags filter
         access_tags = filters.get("access_tags") or self.keyword_config.access_tags
         if access_tags:
-            filter_clauses.append({
-                "in": {"path": "access_tags", "value": access_tags}
-            })
+            filter_clauses.append({"in": {"path": "access_tags", "value": access_tags}})
 
         # Add file type filter
         file_types = filters.get("file_types") or self.keyword_config.file_types
         if file_types:
-            filter_clauses.append({
-                "in": {"path": "file_type", "value": file_types}
-            })
+            filter_clauses.append({"in": {"path": "file_type", "value": file_types}})
 
         # Build aggregation pipeline
         pipeline = [
@@ -301,14 +295,14 @@ class KeywordRetriever(BaseRetriever):
         query: str,
         config_id: str,
         top_k: int,
-        filters: Dict[str, Any],
-    ) -> List[RetrievedChunk]:
+        filters: dict[str, Any],
+    ) -> list[RetrievedChunk]:
         """Search using MongoDB text index (fallback)."""
         # Ensure text index exists
         await self._ensure_text_index()
 
         # Build query filter
-        query_filter: Dict[str, Any] = {
+        query_filter: dict[str, Any] = {
             "config_id": config_id,
             "$text": {"$search": query},
         }
@@ -329,10 +323,14 @@ class KeywordRetriever(BaseRetriever):
             query_filter["file_type"] = {"$in": file_types}
 
         # Execute search with text score
-        cursor = self.chunks.find(
-            query_filter,
-            {"score": {"$meta": "textScore"}},
-        ).sort([("score", {"$meta": "textScore"})]).limit(top_k)
+        cursor = (
+            self.chunks.find(
+                query_filter,
+                {"score": {"$meta": "textScore"}},
+            )
+            .sort([("score", {"$meta": "textScore"})])
+            .limit(top_k)
+        )
 
         results = await cursor.to_list(length=top_k)
 
@@ -363,8 +361,8 @@ class KeywordRetriever(BaseRetriever):
         return chunks
 
     async def _get_document_metadata(
-        self, document_id: Optional[str]
-    ) -> Optional[Dict[str, Any]]:
+        self, document_id: str | None
+    ) -> dict[str, Any] | None:
         """Get document metadata for enrichment."""
         if not document_id:
             return None
@@ -382,9 +380,9 @@ class KeywordRetriever(BaseRetriever):
         self,
         query: str,
         config_id: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Search with highlighted snippets (Atlas Search only).
 
@@ -467,18 +465,20 @@ class KeywordRetriever(BaseRetriever):
                     if t.get("type") == "hit":
                         highlight_texts.append(t.get("value", ""))
 
-            formatted.append({
-                "chunk_id": str(doc.get("_id")),
-                "content": doc.get("content", ""),
-                "score": doc.get("score", 0.0),
-                "highlights": highlight_texts,
-            })
+            formatted.append(
+                {
+                    "chunk_id": str(doc.get("_id")),
+                    "content": doc.get("content", ""),
+                    "score": doc.get("score", 0.0),
+                    "highlights": highlight_texts,
+                }
+            )
 
         return formatted
 
     def _generate_simple_highlights(
         self, content: str, query: str, context_chars: int = 50
-    ) -> List[str]:
+    ) -> list[str]:
         """Generate simple highlights without Atlas Search."""
         highlights = []
         query_terms = query.lower().split()
@@ -517,7 +517,7 @@ class KeywordRetriever(BaseRetriever):
         prefix: str,
         config_id: str,
         limit: int = 5,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Get autocomplete suggestions for a query prefix.
 

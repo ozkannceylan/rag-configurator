@@ -1,19 +1,19 @@
 """ReAct (Reasoning + Acting) agent implementation using LangGraph."""
 
-import json
 import logging
 import re
 import time
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, TypedDict
+from enum import StrEnum
+from typing import Any, TypedDict
 
 from app.agents.base import (
-    BaseAgent,
     AgentConfig,
     AgentError,
     AgentResponse,
     AgentStep,
+    BaseAgent,
     StepType,
 )
 from app.llm.base import BaseLLM, Message
@@ -23,7 +23,7 @@ from app.retrieval.base import BaseRetriever, RetrievedChunk
 logger = logging.getLogger(__name__)
 
 
-class ToolType(str, Enum):
+class ToolType(StrEnum):
     """Available tool types."""
 
     SEARCH = "search"
@@ -41,9 +41,9 @@ class Tool:
     description: str
     tool_type: ToolType
     handler: Callable
-    parameters: Dict[str, str] = field(default_factory=dict)
+    parameters: dict[str, str] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for prompt."""
         return {
             "name": self.name,
@@ -88,27 +88,27 @@ class ReActState(TypedDict, total=False):
     # Input
     query: str
     config_id: str
-    conversation_history: List[Dict[str, str]]
+    conversation_history: list[dict[str, str]]
 
     # ReAct loop state
-    thoughts: List[Thought]
-    actions: List[Action]
-    observations: List[Observation]
+    thoughts: list[Thought]
+    actions: list[Action]
+    observations: list[Observation]
     iterations: int
     max_iterations: int
 
     # Context accumulation
-    context: List[str]
-    retrieved_chunks: List[RetrievedChunk]
+    context: list[str]
+    retrieved_chunks: list[RetrievedChunk]
 
     # Output
     answer: str
     should_answer: bool
 
     # Tracking
-    steps: List[AgentStep]
-    error: Optional[str]
-    metadata: Dict[str, Any]
+    steps: list[AgentStep]
+    error: str | None
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -125,10 +125,10 @@ class ReActConfig(AgentConfig):
     enable_calculate: bool = False
 
     # Prompts
-    react_system_prompt: Optional[str] = None
+    react_system_prompt: str | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ReActConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "ReActConfig":
         """Create from dictionary."""
         base = AgentConfig.from_dict(data)
         return cls(
@@ -203,9 +203,9 @@ class ReActAgent(BaseAgent):
         self,
         retriever: BaseRetriever,
         llm: BaseLLM,
-        prompt_manager: Optional[PromptManager] = None,
-        config: Optional[ReActConfig] = None,
-        tools: Optional[List[Tool]] = None,
+        prompt_manager: PromptManager | None = None,
+        config: ReActConfig | None = None,
+        tools: list[Tool] | None = None,
     ):
         """
         Initialize ReAct agent.
@@ -226,7 +226,7 @@ class ReActAgent(BaseAgent):
         self.react_config = config or ReActConfig()
 
         # Initialize tools
-        self._tools: Dict[str, Tool] = {}
+        self._tools: dict[str, Tool] = {}
         self._init_default_tools()
         if tools:
             for tool in tools:
@@ -273,7 +273,9 @@ class ReActAgent(BaseAgent):
     def _init_langgraph(self) -> bool:
         """Initialize LangGraph if available."""
         try:
-            from langgraph.graph import StateGraph, END
+            # Availability probe: the import must stay so a missing LangGraph
+            # raises ImportError here rather than later at call time.
+            from langgraph.graph import END, StateGraph  # noqa: F401
 
             self._graph = self._build_graph()
             return True
@@ -283,7 +285,7 @@ class ReActAgent(BaseAgent):
 
     def _build_graph(self):
         """Build the LangGraph state graph."""
-        from langgraph.graph import StateGraph, END
+        from langgraph.graph import END, StateGraph
 
         graph = StateGraph(ReActState)
 
@@ -303,7 +305,7 @@ class ReActAgent(BaseAgent):
             {
                 "continue": "act",
                 "answer": "answer",
-            }
+            },
         )
 
         # Linear edges
@@ -346,9 +348,12 @@ class ReActAgent(BaseAgent):
             tools_desc = self._format_tools_description()
 
             # Generate thought
-            system_prompt = self.react_config.react_system_prompt or REACT_SYSTEM_PROMPT.format(
-                tools=tools_desc,
-                max_iterations=self.react_config.max_iterations,
+            system_prompt = (
+                self.react_config.react_system_prompt
+                or REACT_SYSTEM_PROMPT.format(
+                    tools=tools_desc,
+                    max_iterations=self.react_config.max_iterations,
+                )
             )
 
             thought_prompt = THOUGHT_PROMPT.format(
@@ -369,17 +374,21 @@ class ReActAgent(BaseAgent):
             )
 
             # Parse response
-            thought_text, action_text, answer_text = self._parse_response(response.content)
+            thought_text, action_text, answer_text = self._parse_response(
+                response.content
+            )
 
             duration = (time.time() - start_time) * 1000
 
             # Create thought
             thoughts = list(state.get("thoughts", []))
             if thought_text:
-                thoughts.append(Thought(
-                    content=thought_text,
-                    iteration=iterations,
-                ))
+                thoughts.append(
+                    Thought(
+                        content=thought_text,
+                        iteration=iterations,
+                    )
+                )
 
             # Create step
             step = AgentStep(
@@ -447,11 +456,13 @@ class ReActAgent(BaseAgent):
 
             # Create action record
             actions = list(state.get("actions", []))
-            actions.append(Action(
-                tool=tool_name,
-                input=tool_input,
-                iteration=iterations,
-            ))
+            actions.append(
+                Action(
+                    tool=tool_name,
+                    input=tool_input,
+                    iteration=iterations,
+                )
+            )
 
             duration = (time.time() - start_time) * 1000
 
@@ -504,12 +515,14 @@ class ReActAgent(BaseAgent):
 
             # Create observation
             observations = list(state.get("observations", []))
-            observations.append(Observation(
-                content=observation_text,
-                tool=tool_name,
-                iteration=iterations,
-                success=success,
-            ))
+            observations.append(
+                Observation(
+                    content=observation_text,
+                    tool=tool_name,
+                    iteration=iterations,
+                    success=success,
+                )
+            )
 
             # Accumulate context
             context = list(state.get("context", []))
@@ -519,10 +532,17 @@ class ReActAgent(BaseAgent):
             duration = (time.time() - start_time) * 1000
 
             step = AgentStep(
-                step_type=StepType.RETRIEVE if tool_name in ["search", "retrieve"] else StepType.TOOL_CALL,
+                step_type=(
+                    StepType.RETRIEVE
+                    if tool_name in ["search", "retrieve"]
+                    else StepType.TOOL_CALL
+                ),
                 name="observe",
                 input={"tool": tool_name},
-                output={"observation_length": len(observation_text), "success": success},
+                output={
+                    "observation_length": len(observation_text),
+                    "success": success,
+                },
                 duration_ms=duration,
             )
 
@@ -539,12 +559,14 @@ class ReActAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Observe failed: {e}")
             observations = list(state.get("observations", []))
-            observations.append(Observation(
-                content=f"Error: {str(e)}",
-                tool=tool_name,
-                iteration=iterations,
-                success=False,
-            ))
+            observations.append(
+                Observation(
+                    content=f"Error: {str(e)}",
+                    tool=tool_name,
+                    iteration=iterations,
+                    success=False,
+                )
+            )
             return {
                 **state,
                 "observations": observations,
@@ -621,7 +643,7 @@ Provide a clear, comprehensive answer based on the above information:"""
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AgentResponse:
         """
@@ -673,7 +695,9 @@ Provide a clear, comprehensive answer based on the above information:"""
                 metadata={
                     "iterations": final_state.get("iterations", 0),
                     "thoughts": [t.content for t in final_state.get("thoughts", [])],
-                    "actions": [f"{a.tool}[{a.input}]" for a in final_state.get("actions", [])],
+                    "actions": [
+                        f"{a.tool}[{a.input}]" for a in final_state.get("actions", [])
+                    ],
                 },
             )
 
@@ -712,7 +736,7 @@ Provide a clear, comprehensive answer based on the above information:"""
         self,
         query: str,
         config_id: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """
@@ -830,17 +854,27 @@ Provide a clear, comprehensive answer based on the above information:"""
         answer = ""
 
         # Extract thought
-        thought_match = re.search(r"Thought:\s*(.+?)(?=Action:|Answer:|$)", response, re.DOTALL | re.IGNORECASE)
+        thought_match = re.search(
+            r"Thought:\s*(.+?)(?=Action:|Answer:|$)",
+            response,
+            re.DOTALL | re.IGNORECASE,
+        )
         if thought_match:
             thought = thought_match.group(1).strip()
 
         # Extract action
-        action_match = re.search(r"Action:\s*(.+?)(?=Observation:|Thought:|Answer:|$)", response, re.DOTALL | re.IGNORECASE)
+        action_match = re.search(
+            r"Action:\s*(.+?)(?=Observation:|Thought:|Answer:|$)",
+            response,
+            re.DOTALL | re.IGNORECASE,
+        )
         if action_match:
             action = action_match.group(1).strip()
 
         # Extract answer
-        answer_match = re.search(r"Answer:\s*(.+?)$", response, re.DOTALL | re.IGNORECASE)
+        answer_match = re.search(
+            r"Answer:\s*(.+?)$", response, re.DOTALL | re.IGNORECASE
+        )
         if answer_match:
             answer = answer_match.group(1).strip()
 

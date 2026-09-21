@@ -1,0 +1,5 @@
+# Lint/format toolchain — pinned so CI and local runs agree.
+# Keep these in sync across all three Python services and with
+# .github/workflows/ci.yml (Python Lint job).
+ruff==0.15.8
+black==26.3.1

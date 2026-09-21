@@ -1,20 +1,21 @@
 """Tests for CRAG (Corrective RAG) agent module."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from app.agents.base import AgentResponse, StepType
 from app.agents.crag import (
+    QUERY_REWRITE_PROMPT,
+    RELEVANCE_EVALUATION_PROMPT,
     CRAGAgent,
     CRAGConfig,
     CRAGState,
-    RelevanceGrade,
     RelevanceEvaluation,
-    RELEVANCE_EVALUATION_PROMPT,
-    QUERY_REWRITE_PROMPT,
+    RelevanceGrade,
 )
-from app.agents.base import AgentResponse, StepType
+from app.llm.base import LLMResponse, LLMUsage
 from app.retrieval.base import RetrievedChunk
-from app.llm.base import Message, LLMResponse, LLMUsage
 
 
 class TestRelevanceGrade:
@@ -119,22 +120,24 @@ class TestCRAGAgent:
     def mock_retriever(self):
         """Create a mock retriever."""
         retriever = AsyncMock()
-        retriever.retrieve = AsyncMock(return_value=[
-            RetrievedChunk(
-                content="Python is a high-level programming language.",
-                score=0.9,
-                chunk_id="c1",
-                document_id="d1",
-                config_id="cfg",
-            ),
-            RetrievedChunk(
-                content="Python supports object-oriented programming.",
-                score=0.85,
-                chunk_id="c2",
-                document_id="d1",
-                config_id="cfg",
-            ),
-        ])
+        retriever.retrieve = AsyncMock(
+            return_value=[
+                RetrievedChunk(
+                    content="Python is a high-level programming language.",
+                    score=0.9,
+                    chunk_id="c1",
+                    document_id="d1",
+                    config_id="cfg",
+                ),
+                RetrievedChunk(
+                    content="Python supports object-oriented programming.",
+                    score=0.85,
+                    chunk_id="c2",
+                    document_id="d1",
+                    config_id="cfg",
+                ),
+            ]
+        )
         return retriever
 
     @pytest.fixture
@@ -153,13 +156,17 @@ class TestCRAGAgent:
                 return LLMResponse(
                     content="GRADE: relevant\nSCORE: 0.8\nREASONING: Documents are relevant.\nNEEDS_CORRECTION: no",
                     model="gpt-4o-mini",
-                    usage=LLMUsage(prompt_tokens=50, completion_tokens=20, total_tokens=70),
+                    usage=LLMUsage(
+                        prompt_tokens=50, completion_tokens=20, total_tokens=70
+                    ),
                 )
             else:
                 return LLMResponse(
                     content="Python is a versatile programming language.",
                     model="gpt-4o-mini",
-                    usage=LLMUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150),
+                    usage=LLMUsage(
+                        prompt_tokens=100, completion_tokens=50, total_tokens=150
+                    ),
                 )
 
         llm.generate = mock_generate
@@ -182,28 +189,36 @@ class TestCRAGAgent:
                 return LLMResponse(
                     content="GRADE: irrelevant\nSCORE: 0.3\nREASONING: Documents don't match.\nNEEDS_CORRECTION: yes",
                     model="gpt-4o-mini",
-                    usage=LLMUsage(prompt_tokens=50, completion_tokens=20, total_tokens=70),
+                    usage=LLMUsage(
+                        prompt_tokens=50, completion_tokens=20, total_tokens=70
+                    ),
                 )
             # Query rewrite
             elif call_count[0] == 2:
                 return LLMResponse(
                     content="Rewritten Query: What are Python programming language features?",
                     model="gpt-4o-mini",
-                    usage=LLMUsage(prompt_tokens=50, completion_tokens=20, total_tokens=70),
+                    usage=LLMUsage(
+                        prompt_tokens=50, completion_tokens=20, total_tokens=70
+                    ),
                 )
             # Second evaluation returns good relevance
             elif "GRADE:" in str(messages):
                 return LLMResponse(
                     content="GRADE: relevant\nSCORE: 0.8\nREASONING: Now relevant.\nNEEDS_CORRECTION: no",
                     model="gpt-4o-mini",
-                    usage=LLMUsage(prompt_tokens=50, completion_tokens=20, total_tokens=70),
+                    usage=LLMUsage(
+                        prompt_tokens=50, completion_tokens=20, total_tokens=70
+                    ),
                 )
             # Final answer
             else:
                 return LLMResponse(
                     content="Python is a programming language.",
                     model="gpt-4o-mini",
-                    usage=LLMUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150),
+                    usage=LLMUsage(
+                        prompt_tokens=100, completion_tokens=50, total_tokens=150
+                    ),
                 )
 
         llm.generate = mock_generate
@@ -214,7 +229,9 @@ class TestCRAGAgent:
         """Create a mock prompt manager."""
         manager = MagicMock()
         manager.get_system_prompt = MagicMock(return_value="You are helpful.")
-        manager.get_rag_prompt = MagicMock(return_value="Context: {context}\nQuery: {query}")
+        manager.get_rag_prompt = MagicMock(
+            return_value="Context: {context}\nQuery: {query}"
+        )
         manager.format_context = MagicMock(return_value="[1] Python content...")
         manager.format_history = MagicMock(return_value="")
         return manager
@@ -266,10 +283,7 @@ class TestCRAGAgent:
 
     @pytest.mark.asyncio
     async def test_run_with_correction(
-        self,
-        mock_retriever,
-        mock_llm_poor_relevance,
-        mock_prompt_manager
+        self, mock_retriever, mock_llm_poor_relevance, mock_prompt_manager
     ):
         """Test run that requires query correction."""
         agent = CRAGAgent(
@@ -289,19 +303,17 @@ class TestCRAGAgent:
         assert len(response.metadata["rewritten_queries"]) >= 1
 
     @pytest.mark.asyncio
-    async def test_run_respects_max_rewrites(
-        self,
-        mock_retriever,
-        mock_prompt_manager
-    ):
+    async def test_run_respects_max_rewrites(self, mock_retriever, mock_prompt_manager):
         """Test that run respects max_rewrites limit."""
         # Create LLM that always says irrelevant
         llm = AsyncMock()
-        llm.generate = AsyncMock(return_value=LLMResponse(
-            content="GRADE: irrelevant\nSCORE: 0.2\nREASONING: Not relevant.\nNEEDS_CORRECTION: yes",
-            model="test",
-            usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ))
+        llm.generate = AsyncMock(
+            return_value=LLMResponse(
+                content="GRADE: irrelevant\nSCORE: 0.2\nREASONING: Not relevant.\nNEEDS_CORRECTION: yes",
+                model="test",
+                usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+            )
+        )
 
         config = CRAGConfig(max_rewrites=2)
         agent = CRAGAgent(
@@ -599,11 +611,13 @@ class TestCRAGScoreEvaluation:
     def agent_score_only(self, mock_retriever):
         """Create agent with score-only evaluation."""
         llm = AsyncMock()
-        llm.generate = AsyncMock(return_value=LLMResponse(
-            content="Answer",
-            model="test",
-            usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        ))
+        llm.generate = AsyncMock(
+            return_value=LLMResponse(
+                content="Answer",
+                model="test",
+                usage=LLMUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+            )
+        )
 
         config = CRAGConfig(
             use_llm_evaluation=False,
@@ -619,15 +633,17 @@ class TestCRAGScoreEvaluation:
     def mock_retriever(self):
         """Create mock retriever."""
         retriever = AsyncMock()
-        retriever.retrieve = AsyncMock(return_value=[
-            RetrievedChunk(
-                content="Content",
-                score=0.9,
-                chunk_id="c1",
-                document_id="d1",
-                config_id="cfg",
-            ),
-        ])
+        retriever.retrieve = AsyncMock(
+            return_value=[
+                RetrievedChunk(
+                    content="Content",
+                    score=0.9,
+                    chunk_id="c1",
+                    document_id="d1",
+                    config_id="cfg",
+                ),
+            ]
+        )
         return retriever
 
     @pytest.mark.asyncio

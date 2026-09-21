@@ -2,7 +2,6 @@
 
 import logging
 import uuid
-from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -28,14 +27,14 @@ class EvaluateRequest(BaseModel):
 
     config_id: str = Field(..., description="RAG pipeline configuration ID")
     query: str = Field(..., description="The user query")
-    answer: Optional[str] = Field(
+    answer: str | None = Field(
         None, description="The generated answer (will be generated if omitted)"
     )
-    contexts: Optional[List[str]] = Field(
+    contexts: list[str] | None = Field(
         None, description="Retrieved context chunks (will be retrieved if omitted)"
     )
-    ground_truth: Optional[str] = Field(None, description="Expected correct answer")
-    metrics: Optional[List[str]] = Field(
+    ground_truth: str | None = Field(None, description="Expected correct answer")
+    metrics: list[str] | None = Field(
         None,
         description="Metrics to compute. Defaults to all RAGAS metrics.",
     )
@@ -148,7 +147,11 @@ async def get_evaluation_history(
     limit: int = Query(20, ge=1, le=100, description="Max records to return"),
 ):
     """Get evaluation history for a configuration."""
-    user_id = get_authenticated_user_id(request)
+    # TODO(security): see tasks/JEV_JUDGE_V2_PLAN.md C3
+    # TODO(security): user_id is fetched but never enforced, so any
+    # authenticated caller can read another tenant's evaluation data.
+    # Fix tracked as C3 in tasks/JEV_JUDGE_V2_PLAN.md.
+    user_id = get_authenticated_user_id(request)  # noqa: F841
     db = mongodb.get_database()
 
     repo = EvaluationRepository(db)
@@ -165,7 +168,11 @@ async def get_evaluation_history(
 @router.get("/{config_id}/summary")
 async def get_evaluation_summary(request: Request, config_id: str):
     """Get aggregated evaluation metrics for a configuration."""
-    user_id = get_authenticated_user_id(request)
+    # TODO(security): see tasks/JEV_JUDGE_V2_PLAN.md C3
+    # TODO(security): user_id is fetched but never enforced, so any
+    # authenticated caller can read another tenant's evaluation data.
+    # Fix tracked as C3 in tasks/JEV_JUDGE_V2_PLAN.md.
+    user_id = get_authenticated_user_id(request)  # noqa: F841
     db = mongodb.get_database()
 
     repo = EvaluationRepository(db)
@@ -179,7 +186,7 @@ async def get_evaluation_summary(request: Request, config_id: str):
 # ---------------------------------------------------------------------------
 
 
-def _build_evaluator(evaluator_type: str, metrics: List[str]):
+def _build_evaluator(evaluator_type: str, metrics: list[str]):
     """Instantiate the requested evaluator backed by the default LLM."""
     from app.core.settings import settings
     from app.llm.base import LLMConfig

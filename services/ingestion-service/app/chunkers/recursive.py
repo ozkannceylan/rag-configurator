@@ -1,7 +1,7 @@
 """Recursive character text splitter."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.chunkers.base import BaseChunker, Chunk, ChunkingConfig
 
@@ -26,8 +26,8 @@ class RecursiveChunker(BaseChunker):
 
     def __init__(
         self,
-        config: Optional[ChunkingConfig] = None,
-        separators: Optional[List[str]] = None,
+        config: ChunkingConfig | None = None,
+        separators: list[str] | None = None,
     ):
         """
         Initialize recursive chunker.
@@ -42,9 +42,9 @@ class RecursiveChunker(BaseChunker):
     def chunk(
         self,
         text: str,
-        config: Optional[ChunkingConfig] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[Chunk]:
+        config: ChunkingConfig | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[Chunk]:
         """
         Split text into chunks using recursive character splitting.
 
@@ -76,8 +76,8 @@ class RecursiveChunker(BaseChunker):
         return chunks
 
     def _split_text(
-        self, text: str, separators: List[str], config: ChunkingConfig
-    ) -> List[str]:
+        self, text: str, separators: list[str], config: ChunkingConfig
+    ) -> list[str]:
         """
         Recursively split text using separators.
 
@@ -141,8 +141,8 @@ class RecursiveChunker(BaseChunker):
         return final_chunks
 
     def _merge_splits(
-        self, splits: List[str], separator: str, config: ChunkingConfig
-    ) -> List[str]:
+        self, splits: list[str], separator: str, config: ChunkingConfig
+    ) -> list[str]:
         """
         Merge small splits into larger chunks.
 
@@ -183,10 +183,10 @@ class RecursiveChunker(BaseChunker):
 
     def _create_chunks_with_overlap(
         self,
-        splits: List[str],
+        splits: list[str],
         config: ChunkingConfig,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[Chunk]:
+        metadata: dict[str, Any] | None = None,
+    ) -> list[Chunk]:
         """
         Create chunks with overlap from splits.
 

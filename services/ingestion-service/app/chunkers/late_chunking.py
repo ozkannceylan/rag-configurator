@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.chunkers.base import BaseChunker, Chunk, ChunkingConfig
 
@@ -33,9 +33,9 @@ class LateChunker(BaseChunker):
     def chunk(
         self,
         text: str,
-        config: Optional[ChunkingConfig] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[Chunk]:
+        config: ChunkingConfig | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[Chunk]:
         """
         Split text into sentence-boundary spans for late embedding.
 
@@ -61,9 +61,8 @@ class LateChunker(BaseChunker):
         # Split into sentences / spans
         spans = self._split_into_spans(text, cfg.chunk_size)
 
-        chunks: List[Chunk] = []
+        chunks: list[Chunk] = []
         char_offset = 0
-        approx_token_offset = 0
 
         for i, span in enumerate(spans):
             span_text = span.strip()
@@ -107,7 +106,7 @@ class LateChunker(BaseChunker):
         )
         return chunks
 
-    def _split_into_spans(self, text: str, max_span_size: int) -> List[str]:
+    def _split_into_spans(self, text: str, max_span_size: int) -> list[str]:
         """Split text at sentence boundaries, respecting max span size."""
         # First split on sentences
         raw_spans = self._SENTENCE_RE.split(text)
@@ -116,7 +115,7 @@ class LateChunker(BaseChunker):
             return [text] if text.strip() else []
 
         # Merge small spans, split large ones
-        merged: List[str] = []
+        merged: list[str] = []
         current = ""
 
         for span in raw_spans:
@@ -142,11 +141,11 @@ class LateChunker(BaseChunker):
         return merged
 
     @staticmethod
-    def _hard_split(text: str, max_size: int) -> List[str]:
+    def _hard_split(text: str, max_size: int) -> list[str]:
         """Split text at word boundaries when it exceeds max size."""
         words = text.split()
-        parts: List[str] = []
-        current: List[str] = []
+        parts: list[str] = []
+        current: list[str] = []
         length = 0
 
         for word in words:

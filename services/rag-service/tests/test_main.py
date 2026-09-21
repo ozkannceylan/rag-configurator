@@ -1,7 +1,8 @@
 """Tests for RAG service main application."""
 
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestHealthEndpoints:

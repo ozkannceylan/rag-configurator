@@ -1,13 +1,14 @@
 """Tests for prompt management module."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.prompts.manager import (
-    PromptManager,
     PromptConfig,
-    PromptTemplate,
     PromptError,
+    PromptManager,
+    PromptTemplate,
 )
 
 
@@ -208,9 +209,7 @@ class TestPromptManager:
 
     def test_get_rag_prompt_override(self):
         """Test RAG prompt config override."""
-        config = PromptConfig(
-            rag_prompt="Custom: {context}\nQ: {query}"
-        )
+        config = PromptConfig(rag_prompt="Custom: {context}\nQ: {query}")
         manager = PromptManager(config=config)
         prompt = manager.get_rag_prompt(
             context="Test context",
@@ -496,6 +495,7 @@ class TestPromptManagerExportImport:
         result = manager.export_templates(category="rag", format="json")
 
         import json
+
         data = json.loads(result)
         assert "rag" in data
         assert "export_test" in data["rag"]

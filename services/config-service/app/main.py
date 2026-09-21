@@ -1,6 +1,7 @@
 """Config Service - Main FastAPI Application."""
 
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from rag_config_common.auth.middleware import ServiceAuthMiddleware

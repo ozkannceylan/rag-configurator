@@ -3,7 +3,7 @@
 import logging
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -47,7 +47,7 @@ class EvaluationRepository:
         config_id: str,
         skip: int = 0,
         limit: int = 20,
-    ) -> List[EvaluationRun]:
+    ) -> list[EvaluationRun]:
         """Return evaluation runs for a config, newest first."""
         cursor = (
             self.collection.find({"config_id": config_id})
@@ -55,7 +55,7 @@ class EvaluationRepository:
             .skip(skip)
             .limit(limit)
         )
-        runs: List[EvaluationRun] = []
+        runs: list[EvaluationRun] = []
         async for doc in cursor:
             doc["_id"] = str(doc["_id"])
             runs.append(_doc_to_run(doc))
@@ -77,14 +77,20 @@ class EvaluationRepository:
             return EvaluationSummary(config_id=config_id)
 
         # Aggregate scores and date range in a single pass
-        score_sums: Dict[str, float] = defaultdict(float)
-        score_counts: Dict[str, int] = defaultdict(int)
+        score_sums: dict[str, float] = defaultdict(float)
+        score_counts: dict[str, int] = defaultdict(int)
         # Buckets: "0.0-0.2", "0.2-0.4", "0.4-0.6", "0.6-0.8", "0.8-1.0"
-        distribution: Dict[str, Dict[str, int]] = defaultdict(
-            lambda: {"0.0-0.2": 0, "0.2-0.4": 0, "0.4-0.6": 0, "0.6-0.8": 0, "0.8-1.0": 0}
+        distribution: dict[str, dict[str, int]] = defaultdict(
+            lambda: {
+                "0.0-0.2": 0,
+                "0.2-0.4": 0,
+                "0.4-0.6": 0,
+                "0.6-0.8": 0,
+                "0.8-1.0": 0,
+            }
         )
-        earliest: Optional[datetime] = None
-        latest: Optional[datetime] = None
+        earliest: datetime | None = None
+        latest: datetime | None = None
 
         cursor = self.collection.find({"config_id": config_id})
         async for doc in cursor:
@@ -142,7 +148,7 @@ def _score_bucket(score: float) -> str:
         return "0.8-1.0"
 
 
-def _doc_to_run(doc: Dict[str, Any]) -> EvaluationRun:
+def _doc_to_run(doc: dict[str, Any]) -> EvaluationRun:
     """Convert a MongoDB document to an ``EvaluationRun``."""
     results_data = doc.get("results", {})
     metric_results = [

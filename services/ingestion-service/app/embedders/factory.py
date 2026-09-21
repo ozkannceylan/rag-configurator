@@ -1,15 +1,14 @@
 """Factory for creating embedding providers."""
 
 import logging
-from enum import Enum
-from typing import Optional, Type
+from enum import StrEnum
 
 from app.embedders.base import BaseEmbedder, EmbeddingConfig
 
 logger = logging.getLogger(__name__)
 
 
-class EmbeddingProvider(str, Enum):
+class EmbeddingProvider(StrEnum):
     """Available embedding providers."""
 
     OPENAI = "openai"
@@ -20,7 +19,7 @@ class EmbeddingProvider(str, Enum):
 
 def get_embedder(
     provider: EmbeddingProvider | str = EmbeddingProvider.OPENAI,
-    config: Optional[EmbeddingConfig] = None,
+    config: EmbeddingConfig | None = None,
 ) -> BaseEmbedder:
     """
     Get an embedder instance for the specified provider.
@@ -44,7 +43,7 @@ def get_embedder(
             raise ValueError(
                 f"Unknown embedding provider: '{provider}'. "
                 f"Valid providers: {valid_providers}"
-            )
+            ) from None
 
     # Import and instantiate the appropriate embedder
     if provider == EmbeddingProvider.OPENAI:
@@ -175,7 +174,9 @@ def create_embedder_from_settings() -> BaseEmbedder:
     config = EmbeddingConfig(
         model=settings.embedding_model,
         dimensions=settings.embedding_dimensions,
-        api_key=settings.openai_api_key if provider == EmbeddingProvider.OPENAI else None,
+        api_key=(
+            settings.openai_api_key if provider == EmbeddingProvider.OPENAI else None
+        ),
     )
 
     return get_embedder(provider, config)
