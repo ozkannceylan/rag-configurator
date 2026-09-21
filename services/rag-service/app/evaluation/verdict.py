@@ -22,6 +22,16 @@ class JudgeVerdict:
     raw: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
 
+    @property
+    def is_valid(self) -> bool:
+        """True when this call produced a judgement rather than a failure.
+
+        A failed call still returns a JudgeVerdict so the caller can record
+        what happened, but its quality/does_pass fields are placeholders, not
+        measurements. Nothing that computes a statistic may treat it as data.
+        """
+        return self.error is None
+
     def as_row(self) -> dict[str, Any]:
         return {
             "judge": self.judge,

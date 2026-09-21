@@ -6,7 +6,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
-from app.core.auth import get_authenticated_user_id
+from app.core.auth import get_authenticated_user_id, require_config_access
 from app.db.mongodb import mongodb
 from app.db.repositories.evaluation_repo import EvaluationRepository
 from app.evaluation.models import EvaluationRun
@@ -148,11 +148,13 @@ async def get_evaluation_history(
 ):
     """Get evaluation history for a configuration."""
     # TODO(security): see tasks/JEV_JUDGE_V2_PLAN.md C3
-    # TODO(security): user_id is fetched but never enforced, so any
-    # authenticated caller can read another tenant's evaluation data.
-    # Fix tracked as C3 in tasks/JEV_JUDGE_V2_PLAN.md.
-    user_id = get_authenticated_user_id(request)  # noqa: F841
+    user_id = get_authenticated_user_id(request)
     db = mongodb.get_database()
+
+    # Reading evaluation runs exposes the queries, answers and retrieved
+    # chunks for a config, so the caller must own it. The write path already
+    # enforced this; the read paths fetched the user and ignored it.
+    await require_config_access(db, config_id, user_id)
 
     repo = EvaluationRepository(db)
     runs = await repo.get_evaluations_by_config(config_id, skip=skip, limit=limit)
@@ -169,11 +171,13 @@ async def get_evaluation_history(
 async def get_evaluation_summary(request: Request, config_id: str):
     """Get aggregated evaluation metrics for a configuration."""
     # TODO(security): see tasks/JEV_JUDGE_V2_PLAN.md C3
-    # TODO(security): user_id is fetched but never enforced, so any
-    # authenticated caller can read another tenant's evaluation data.
-    # Fix tracked as C3 in tasks/JEV_JUDGE_V2_PLAN.md.
-    user_id = get_authenticated_user_id(request)  # noqa: F841
+    user_id = get_authenticated_user_id(request)
     db = mongodb.get_database()
+
+    # Reading evaluation runs exposes the queries, answers and retrieved
+    # chunks for a config, so the caller must own it. The write path already
+    # enforced this; the read paths fetched the user and ignored it.
+    await require_config_access(db, config_id, user_id)
 
     repo = EvaluationRepository(db)
     summary = await repo.get_evaluation_summary(config_id)

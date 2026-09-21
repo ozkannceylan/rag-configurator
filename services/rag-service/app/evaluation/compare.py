@@ -54,6 +54,8 @@ class JudgeSummary:
     judge: str
     model: str
     n_calls: int
+    n_valid: int
+    error_rate: float
     agreement: float
     mean_quality_variance: float
     binary_repeatability: float
@@ -214,8 +216,23 @@ def summarize_judge(
     repeatabilities: list[float] = []
     models: list[str] = []
 
+    n_valid = 0
+    n_skipped_cases = 0
+
     for case in cases:
-        case_recs = by_case.get(case.id, [])
+        all_recs = by_case.get(case.id, [])
+        # A call that errored is not a judgement. Scoring it as one is how a
+        # parse failure or a timeout becomes a confident verdict: the failure
+        # fallback returns does_pass=False, which is "correct" on every
+        # fail-labelled case, and it is deterministic, which reads as perfect
+        # repeatability. Exclude invalid records from every statistic and
+        # report the error rate separately instead.
+        case_recs = [r for r in all_recs if r.verdict.is_valid]
+        n_valid += len(case_recs)
+        if not case_recs:
+            n_skipped_cases += 1
+            continue
+
         case_quality = [r.verdict.quality for r in case_recs]
         case_pass = [r.verdict.does_pass for r in case_recs]
         qualities.extend(case_quality)
@@ -223,8 +240,13 @@ def summarize_judge(
         latencies.extend(r.verdict.latency_ms for r in case_recs)
         costs.extend(r.verdict.cost_usd for r in case_recs)
         models.extend(r.verdict.model for r in case_recs if r.verdict.model)
-        variances.append(sample_variance(case_quality))
-        repeatabilities.append(pairwise_repeatability(case_pass))
+        # Variance and repeatability are undefined for a single observation.
+        # Averaging a placeholder 0.0 in would understate both.
+        if len(case_recs) >= 2:
+            variances.append(sample_variance(case_quality))
+            repeatabilities.append(pairwise_repeatability(case_pass))
+        else:
+            n_skipped_cases += 1
         expected = reference.get(case.id)
         if expected is None:
             continue
@@ -238,6 +260,8 @@ def summarize_judge(
         judge=judge,
         model=model,
         n_calls=len(records),
+        n_valid=n_valid,
+        error_rate=(1.0 - n_valid / len(records)) if records else 0.0,
         agreement=agreement,
         mean_quality_variance=mean_var,
         binary_repeatability=binary_rep,
@@ -250,6 +274,12 @@ def summarize_judge(
         mean_quality=statistics.mean(qualities) if qualities else 0.0,
         pass_rate=(
             sum(1 for f in pass_flags if f) / len(pass_flags) if pass_flags else 0.0
+        ),
+        notes=(
+            f"{n_skipped_cases} case(s) excluded from variance/repeatability "
+            "for having fewer than 2 valid calls"
+            if n_skipped_cases
+            else ""
         ),
     )
 
@@ -314,8 +344,12 @@ def write_results_csv(result: CompareResult, path: Path) -> None:
         "latency_ms",
         "cost_usd",
         "model",
+        "does_pass_probability",
+        "oracle_pass",
+        "valid",
         "error",
     ]
+    oracle_by_case = {c.id: c.oracle_pass for c in result.cases}
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -333,6 +367,9 @@ def write_results_csv(result: CompareResult, path: Path) -> None:
                         "latency_ms": f"{row['latency_ms']:.3f}",
                         "cost_usd": f"{row['cost_usd']:.8f}",
                         "model": row["model"],
+                        "does_pass_probability": row["does_pass_probability"],
+                        "oracle_pass": oracle_by_case.get(rec.case_id, ""),
+                        "valid": int(rec.verdict.is_valid),
                         "error": row["error"] or "",
                     }
                 )
@@ -376,14 +413,18 @@ def render_compare_report(result: CompareResult) -> str:
     lines.append("## Metrics")
     lines.append("")
     lines.append(
-        "| Judge | Model | Agreement | Repeatability | Signal value | "
-        "Mean quality var | Latency p50 (ms) | Latency p95 (ms) | Cost USD |"
+        "| Judge | Model | Valid calls | Error rate | Agreement | Repeatability | "
+        "Signal value | Mean quality var | Latency p50 (ms) | Latency p95 (ms) | "
+        "Cost USD |"
     )
-    lines.append("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    lines.append(
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+    )
     for name in sorted(result.summaries):
         s = result.summaries[name]
         lines.append(
-            f"| {name} | `{s.model}` | {s.agreement:.3f} | "
+            f"| {name} | `{s.model}` | {s.n_valid}/{s.n_calls} | "
+            f"{s.error_rate:.1%} | {s.agreement:.3f} | "
             f"{s.binary_repeatability:.3f} | {s.signal_value:.3f} | "
             f"{s.mean_quality_variance:.8f} | {s.latency_p50_ms:.1f} | "
             f"{s.latency_p95_ms:.1f} | ${s.total_cost_usd:.6f} |"
@@ -392,6 +433,9 @@ def render_compare_report(result: CompareResult) -> str:
     lines.append("### What the columns mean")
     lines.append("")
     lines.append(
+        "- **Valid calls / Error rate** — calls that produced a judgement "
+        "rather than a failure. Errored calls are excluded from every metric "
+        "below. A judge that is unavailable is not a judge that agrees.\n"
         "- **Agreement** — fraction of binary `does_pass` decisions that match "
         "the human `oracle_pass` label (or the LLM majority vote when a case "
         "has no oracle)."

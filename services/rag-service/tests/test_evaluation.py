@@ -439,11 +439,28 @@ class TestEvaluationAPI:
             )
         assert response.status_code in (401, 403)
 
+    @staticmethod
+    def _db_with_config_owner(mock_eval_collection, owner: str):
+        """Mock DB where 'configs' resolves to a config owned by `owner`."""
+
+        def getitem(name):
+            if name == "evaluations":
+                return mock_eval_collection
+            mock_coll = MagicMock()
+            mock_coll.find_one = AsyncMock(
+                return_value={"_id": "config-123", "created_by": owner}
+            )
+            return mock_coll
+
+        return MagicMock(side_effect=getitem)
+
     async def test_get_evaluation_history(
         self, client, mock_mongodb, mock_eval_collection
     ):
         """GET /api/v1/evaluation/{config_id} should return evaluation runs."""
-        mock_mongodb.__getitem__ = MagicMock(return_value=mock_eval_collection)
+        mock_mongodb.__getitem__ = self._db_with_config_owner(
+            mock_eval_collection, "user-456"
+        )
 
         response = await client.get(
             "/api/v1/evaluation/config-123",
@@ -455,11 +472,40 @@ class TestEvaluationAPI:
         assert "data" in data
         assert "meta" in data
 
+    async def test_get_evaluation_history_rejects_non_owner(
+        self, client, mock_mongodb, mock_eval_collection
+    ):
+        """Reading another tenant's evaluation history must not be allowed.
+
+        Regression test: both read endpoints used to fetch the authenticated
+        user and then filter on config_id alone, so any authenticated caller
+        could read another tenant's queries, answers and retrieved chunks.
+        """
+        mock_mongodb.__getitem__ = self._db_with_config_owner(
+            mock_eval_collection, "someone-else"
+        )
+
+        response = await client.get("/api/v1/evaluation/config-123")
+        assert response.status_code in (403, 404)
+
+    async def test_get_evaluation_summary_rejects_non_owner(
+        self, client, mock_mongodb, mock_eval_collection
+    ):
+        """Same ownership check on the summary endpoint."""
+        mock_mongodb.__getitem__ = self._db_with_config_owner(
+            mock_eval_collection, "someone-else"
+        )
+
+        response = await client.get("/api/v1/evaluation/config-123/summary")
+        assert response.status_code in (403, 404)
+
     async def test_get_evaluation_summary(
         self, client, mock_mongodb, mock_eval_collection
     ):
         """GET /api/v1/evaluation/{config_id}/summary should return a summary."""
-        mock_mongodb.__getitem__ = MagicMock(return_value=mock_eval_collection)
+        mock_mongodb.__getitem__ = self._db_with_config_owner(
+            mock_eval_collection, "user-456"
+        )
 
         response = await client.get("/api/v1/evaluation/config-123/summary")
         assert response.status_code == 200

@@ -1,5 +1,44 @@
 # Jev vs LLM-as-judge — RAG Configurator
 
+> ## ⚠️ These figures are withdrawn
+>
+> Recomputing this run from its own `results.csv` shows the headline
+> comparison is an artifact of a bug, not a measurement.
+>
+> **6 of the LLM judge's 70 calls failed** with `json_decode` and were clamped
+> to `quality=1.0` by the parse-failure fallback, then scored as judgements.
+> All six landed on one case, `remote-internet-partial`, which is the *only*
+> case contributing any LLM variance: its 0.266667 divided across 7 cases is
+> exactly the 0.03809524 reported below.
+>
+> Excluding the failed calls, the four that succeeded all returned `2.0`:
+>
+> | Judge | Valid calls | Mean quality variance |
+> | --- | ---: | ---: |
+> | Jev | 70 / 70 | 0.00022429 |
+> | LLM | 64 / 70 | **0.00000000** |
+>
+> So the LLM judge was perfectly repeatable on every call that succeeded,
+> while Jev jittered on four of seven cases. **The claimed 169.9x variance
+> advantage reverses.** The 1.000 agreement and repeatability figures come
+> from the same mechanism: the case is `oracle_pass: False` and the failure
+> fallback returns `does_pass=False`, so six API failures scored as six
+> correct answers, deterministically.
+>
+> The likely trigger is `max_tokens=256` in the compare harness against a
+> reasoning-style model, where the service's own API path uses 1024.
+>
+> **Fixed since:** errored calls are now excluded from every statistic and the
+> report carries `Valid calls` and `Error rate` columns, so a failure rate can
+> no longer hide. The comparison must be re-run with the baseline given
+> structured output, a seed and a realistic token budget before any ratio is
+> quoted again. See `tasks/JEV_JUDGE_V2_PLAN.md`.
+>
+> The original report is kept below unchanged, for the record.
+
+---
+
+
 Side-by-side comparison of TypeSafe Jev (System One) and an LLM-as-judge baseline on **fixed Naive RAG traces**. Inspired by LangChain’s [Jev-as-a-Judge for Agent Evals](https://www.langchain.com/blog/jev-agent-evals-langsmith) ([experiment repo](https://github.com/danielgshea/jev-as-a-judge)).
 
 - **Mode:** `live`
