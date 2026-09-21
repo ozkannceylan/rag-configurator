@@ -121,6 +121,14 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=60.0, alias="LLM_TIMEOUT_SECONDS")
     retrieval_timeout_seconds: float = Field(default=10.0, alias="RETRIEVAL_TIMEOUT_SECONDS")
 
+    # TypeSafe Jev (System One) judge
+    typesafe_api_key: Optional[str] = Field(default=None, alias="TYPESAFE_API_KEY")
+    typesafe_base_url: str = Field(
+        default="https://api.typesafe.ai",
+        alias="TYPESAFE_BASE_URL",
+    )
+    typesafe_model: str = Field(default="jev-latest", alias="TYPESAFE_MODEL")
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v) -> List[str]:

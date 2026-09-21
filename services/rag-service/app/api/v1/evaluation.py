@@ -41,7 +41,7 @@ class EvaluateRequest(BaseModel):
     )
     evaluator_type: str = Field(
         default="ragas",
-        description="Evaluator to use: 'ragas' or 'judge'",
+        description="Evaluator to use: 'ragas', 'judge', 'quality', or 'jev'",
     )
 
 
@@ -120,6 +120,26 @@ async def evaluate(request: Request, body: EvaluateRequest):
     return {"success": True, "data": result.model_dump()}
 
 
+@router.get("/jev-compare/latest")
+async def get_jev_compare_latest(request: Request):
+    """Return the last Jev vs LLM compare summary if artifacts exist.
+
+    Produced by ``scripts/jev_eval_compare.py``. Does not call TypeSafe or LLMs.
+    """
+    get_authenticated_user_id(request)
+    latest = _latest_compare_payload()
+    if latest is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No compare artifacts found. Run "
+                "`PYTHONPATH=services/rag-service python scripts/jev_eval_compare.py --mock` "
+                "and retry."
+            ),
+        )
+    return {"success": True, "data": latest}
+
+
 @router.get("/{config_id}")
 async def get_evaluation_history(
     request: Request,
@@ -165,6 +185,16 @@ def _build_evaluator(evaluator_type: str, metrics: List[str]):
     from app.llm.base import LLMConfig
     from app.llm.factory import LLMProvider, get_llm
 
+    kind = (evaluator_type or "ragas").strip().lower()
+    if kind == "jev":
+        from app.evaluation.jev_judge import JevJudge
+
+        return JevJudge(
+            api_key=settings.typesafe_api_key,
+            base_url=settings.typesafe_base_url,
+            model=settings.typesafe_model,
+        )
+
     provider_str = settings.default_llm_provider
     try:
         provider = LLMProvider(provider_str.lower())
@@ -175,30 +205,67 @@ def _build_evaluator(evaluator_type: str, metrics: List[str]):
         model=settings.default_llm_model,
         temperature=0.0,
         max_tokens=1024,
-        api_key=settings.openai_api_key if provider == LLMProvider.OPENAI else settings.anthropic_api_key,
+        api_key=(
+            settings.openai_api_key
+            if provider == LLMProvider.OPENAI
+            else settings.anthropic_api_key
+        ),
         base_url=settings.ollama_base_url if provider == LLMProvider.OLLAMA else None,
     )
     llm = get_llm(provider=provider, config=config)
 
-    if evaluator_type == "judge":
+    if kind == "quality":
+        from app.evaluation.quality_judge import QualityJudge
+
+        return QualityJudge(llm=llm)
+    if kind == "judge":
         from app.evaluation.judge import JudgeEvaluator
 
         return JudgeEvaluator(llm=llm)
-    else:
-        from app.evaluation.ragas_eval import RagasEvaluator
+    from app.evaluation.ragas_eval import RagasEvaluator
 
-        return RagasEvaluator(llm=llm, metrics=metrics)
+    return RagasEvaluator(llm=llm, metrics=metrics)
+
+
+def _latest_compare_payload():
+    """Load artifacts/jev-eval/latest.json from common locations."""
+    import json
+    import os
+    from pathlib import Path
+
+    env_dir = os.environ.get("JEV_EVAL_ARTIFACT_DIR")
+    candidates = []
+    if env_dir:
+        candidates.append(Path(env_dir) / "latest.json")
+    here = Path(__file__).resolve()
+    # services/rag-service/app/api/v1/evaluation.py → repo root is parents[5]
+    repo_root = here.parents[5] if len(here.parents) >= 6 else here.parents[-1]
+    service_root = here.parents[3] if len(here.parents) >= 4 else Path.cwd()
+    candidates.extend(
+        [
+            Path.cwd() / "artifacts" / "jev-eval" / "latest.json",
+            repo_root / "artifacts" / "jev-eval" / "latest.json",
+            service_root / "artifacts" / "jev-eval" / "latest.json",
+        ]
+    )
+    for path in candidates:
+        if path.is_file():
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+    return None
 
 
 async def _generate_answer_and_contexts(db, config_id: str, query: str, user_id: str):
     """Use the RAG pipeline to generate an answer and retrieve contexts."""
-    from app.core.auth import require_config_access
-    from app.api.v1.stream import build_pipeline_config
-    from app.llm.factory import LLMProvider, get_llm
-    from app.llm.base import LLMConfig
-    from app.retrieval.factory import get_retriever_from_config
-    from app.prompts.manager import PromptManager
     from app.api.v1.query import get_agent
+    from app.api.v1.stream import build_pipeline_config
+    from app.core.auth import require_config_access
+    from app.llm.base import LLMConfig
+    from app.llm.factory import LLMProvider, get_llm
+    from app.prompts.manager import PromptManager
+    from app.retrieval.factory import get_retriever_from_config
 
     config_doc = await require_config_access(db, config_id, user_id)
     pipeline_config = build_pipeline_config(config_doc)

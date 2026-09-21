@@ -27,6 +27,10 @@ tiktoken==0.7.0
 # HTTP client
 httpx==0.27.0
 
+# TypeSafe Jev (optional). The Jev judge uses httpx against POST /v1/systemone
+# by default. Install typesafe-sdk if you prefer the official client locally:
+# typesafe-sdk>=0.7.0
+
 # Server-Sent Events for streaming
 sse-starlette==2.1.0
 

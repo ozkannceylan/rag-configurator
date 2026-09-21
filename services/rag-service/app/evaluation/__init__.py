@@ -1,14 +1,16 @@
 """Evaluation framework for RAG pipelines."""
 
 from app.evaluation.base import BaseEvaluator
+from app.evaluation.jev_judge import JevJudge
+from app.evaluation.judge import JudgeEvaluator
 from app.evaluation.models import (
     EvaluationResult,
     EvaluationRun,
     EvaluationSummary,
     MetricResult,
 )
+from app.evaluation.quality_judge import QualityJudge
 from app.evaluation.ragas_eval import AVAILABLE_METRICS, RagasEvaluator
-from app.evaluation.judge import JudgeEvaluator
 
 __all__ = [
     "BaseEvaluator",
@@ -18,5 +20,7 @@ __all__ = [
     "MetricResult",
     "RagasEvaluator",
     "JudgeEvaluator",
+    "JevJudge",
+    "QualityJudge",
     "AVAILABLE_METRICS",
 ]

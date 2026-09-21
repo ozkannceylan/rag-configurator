@@ -1,32 +1,29 @@
 # Task Ledger
 
-This file is the working checklist for the current task.
-
 ## Active Task
 
-- [x] Implement Phase 1 from `tasks/v2-plan.md` without changing `docs/ARCHITECTURE.md`
+Integrate TypeSafe Jev as a judge into rag-configurator and compare it to an LLM-as-judge baseline on the same fixed RAG traces.
 
 ## Current Plan
 
-- [x] Re-read `docs/ARCHITECTURE.md`, `tasks/v2-plan.md`, and `tasks/phase0-implementation-report.md`
-- [x] Create shared Python auth and observability foundations in `shared/python/rag_config_common/`
-- [x] Add gateway HMAC signing, circuit breaker protection, and OpenTelemetry wiring
-- [x] Apply shared HMAC verification and tracing startup to config-service, ingestion-service, and rag-service
-- [x] Add ingestion job idempotency with `idempotency_key` tracking
-- [x] Add config-service audit logging for user/config state changes
-- [x] Update Mongo init script, v2 shared config models, shared TypeScript types, and environment wiring
-- [x] Add the v1->v2 config migration script
-- [x] Run targeted verification for gateway and the three Python services
-- [x] Write `tasks/phase1-implementation-report.md`
+- [x] Discover existing eval APIs (`app/evaluation/*`, `EvaluationView.vue`) and Jev HTTP/SDK contract
+- [x] Add fixed RAG eval fixtures (≥5 Naive RAG traces with optional oracle labels)
+- [x] Add Jev judge (System One Score + Noul via `/v1/systemone`) and LLM quality judge (1–5 + does_pass)
+- [x] Add compare harness `scripts/jev_eval_compare.py` with K repeats, metrics, USD cap
+- [x] Extend rag-service `evaluator_type=jev` and gateway evaluation proxy
+- [x] Offline mock tests (CI-safe) + mock/demo COMPARE_REPORT
+- [x] Docs (`docs/jev-eval.md`, README highlight, `.env.example`)
+- [x] Verify tests, commit, push, open PR
 
 ## Notes
 
-- Repo-level guidance is in `CLAUDE.md`.
-- `docs/ARCHITECTURE.md` remains fixed and was not edited.
-- Phase 1 builds on the already-completed Phase 0 security work.
-- The Phase 0 review feedback about duplicated auth helpers was addressed by introducing the shared auth package.
+- No Obsidian vault found in this environment; proceeding from the repo.
+- Do not rewrite agent architectures. LangSmith is optional and not required.
+- Live TypeSafe/OpenAI keys may be unavailable; ship mock path + recorded fixtures.
+- Claims are observational for this RAG fixture set — no ASIL/safety overclaims.
 
 ## Review
 
-- Phase 1 implementation completed with shared auth/tracing foundations, gateway transport hardening, ingestion idempotency, audit logging, v2 model updates, and migration/runtime wiring.
-- Targeted verification passed for config-service, ingestion-service, rag-service, and gateway package tests after syncing the new Go dependencies into `gateway/go.sum`.
+- Offline `tests/test_jev_eval.py` + existing `tests/test_evaluation.py`: 63 passed.
+- Mock compare: Jev agreement 1.000 / signal 1.000 vs LLM 0.814 / 0.677 on 7 frozen Naive RAG cases × 10 repeats.
+- Graphify rebuild skipped (`graphify` not installed in this environment).

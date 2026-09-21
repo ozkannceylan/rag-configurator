@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+- Jev-as-a-Judge vs LLM-as-judge compare harness on frozen RAG traces. See [jev-eval.md](jev-eval.md).
+
 ## [1.0.0] - 2025-01-30
 
 ### Added

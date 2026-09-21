@@ -686,6 +686,41 @@ Retry a failed ingestion job.
 
 **Response** (202 Accepted): New task queued
 
+## Evaluation Endpoints
+
+RAG evaluation is implemented in rag-service and proxied by the gateway.
+
+### POST /api/v1/evaluation/evaluate
+
+Score a query/answer pair. `evaluator_type` may be `ragas` (default), `judge` (existing 0–1 rubrics), `quality` (1–5 + `does_pass` LLM judge), or `jev` (TypeSafe System One).
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "config_id": "config-id",
+  "query": "How many PTO days for a 1-year employee?",
+  "answer": "15 days (0–2 years tenure).",
+  "contexts": ["0-2 years: 15 days (3 weeks)"],
+  "evaluator_type": "jev"
+}
+```
+
+If `answer` or `contexts` are omitted, the configured RAG pipeline generates them first.
+
+### GET /api/v1/evaluation/jev-compare/latest
+
+Return the last Jev vs LLM compare summary written by `scripts/jev_eval_compare.py`. Does not call providers. See [jev-eval.md](jev-eval.md).
+
+### GET /api/v1/evaluation/{config_id}
+
+Evaluation history for a configuration.
+
+### GET /api/v1/evaluation/{config_id}/summary
+
+Aggregated RAGAS/judge scores for a configuration.
+
 ## Query Endpoints
 
 ### POST /api/v1/query

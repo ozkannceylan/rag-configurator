@@ -173,6 +173,8 @@ func TestProtectedEndpointsRequireAuth(t *testing.T) {
 		{"GET", "/api/v1/ingest/123/status"},
 		{"POST", "/api/v1/query"},
 		{"POST", "/api/v1/chat"},
+		{"POST", "/api/v1/evaluation/evaluate"},
+		{"GET", "/api/v1/evaluation/jev-compare/latest"},
 	}
 
 	client := &http.Client{}

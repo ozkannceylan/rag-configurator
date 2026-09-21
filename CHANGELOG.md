@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Jev-as-a-Judge evaluation
+- TypeSafe Jev System One judge (`evaluator_type=jev`) alongside the existing RAGAS and LLM rubric judges
+- Quality LLM judge (1–5 score + `does_pass`) sharing the same rubric
+- Frozen Naive RAG fixture set and `make jev-eval-compare` harness (agreement, variance, latency, cost proxy)
+- Gateway proxy for `/api/v1/evaluation/*`
+
 ## [2.0.0] — 2026-04-08
 
 ### Phase 0: Security Hardening
