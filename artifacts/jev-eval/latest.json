@@ -8,46 +8,96 @@
     "empty-context-fabricated",
     "parental-leave-grounded"
   ],
-  "generated_at": "2026-09-21T08:17:33.923390+00:00",
-  "mode": "mock/demo",
+  "generated_at": "2026-09-21T18:35:16.620179+00:00",
+  "mode": "live",
   "repeats": 10,
   "stopped_reason": null,
   "summaries": {
     "jev": {
       "agreement": 1.0,
       "binary_repeatability": 1.0,
+      "brier_score": 0.0005685714285714294,
+      "error_rate": 0.0,
+      "expected_calibration_error": 0.02114285714285715,
       "judge": "jev",
-      "latency_p50_ms": 18.0,
-      "latency_p95_ms": 18.0,
-      "mean_cost_usd": 0.00014125,
-      "mean_latency_ms": 18.0,
-      "mean_quality": 3.0042857142857144,
-      "mean_quality_variance": 0.0,
+      "latency_p50_ms": 194.14870800392237,
+      "latency_p95_ms": 489.92810685886064,
+      "mean_cost_usd": 0.00027424999999999997,
+      "mean_latency_ms": 270.6220657710219,
+      "mean_quality": 2.7975714285714286,
+      "mean_quality_variance": 0.00020015873015873084,
       "model": "jev-1.13.0",
       "n_calls": 70,
+      "n_oracle_quality": 7,
+      "n_valid": 70,
       "notes": "",
       "pass_rate": 0.42857142857142855,
+      "quality_exact_match": 1.0,
+      "quality_mae_vs_oracle": 0.25499999999999995,
+      "quality_spearman_vs_oracle": 0.9258200997725514,
+      "quantized_quality_variance": 0.0,
+      "reliability": [
+        {
+          "bin_lower": 0.0,
+          "bin_upper": 0.1,
+          "mean_predicted": 0.01375,
+          "n": 40.0,
+          "observed_frequency": 0.0
+        },
+        {
+          "bin_lower": 0.9,
+          "bin_upper": 1.0,
+          "mean_predicted": 0.969,
+          "n": 30.0,
+          "observed_frequency": 1.0
+        }
+      ],
       "signal_value": 1.0,
-      "total_cost_usd": 0.009887499999999999
+      "total_cost_usd": 0.0191975
     },
     "llm": {
-      "agreement": 0.8142857142857143,
-      "binary_repeatability": 0.8314285714285715,
+      "agreement": 1.0,
+      "binary_repeatability": 1.0,
+      "brier_score": 0.0,
+      "error_rate": 0.0,
+      "expected_calibration_error": 0.0,
       "judge": "llm",
-      "latency_p50_ms": 277.00929704959754,
-      "latency_p95_ms": 332.3868174176975,
-      "mean_cost_usd": 0.0025,
-      "mean_latency_ms": 278.92378997773505,
-      "mean_quality": 2.9517142857142855,
-      "mean_quality_variance": 0.08231142857142859,
-      "model": "gpt-4o-mini-sim",
+      "latency_p50_ms": 4357.276323498809,
+      "latency_p95_ms": 8092.544558552618,
+      "mean_cost_usd": 0.0001843242857142857,
+      "mean_latency_ms": 4742.390928697672,
+      "mean_quality": 2.857142857142857,
+      "mean_quality_variance": 0.0,
+      "model": "deepseek-v4-flash:0731",
       "n_calls": 70,
+      "n_oracle_quality": 7,
+      "n_valid": 70,
       "notes": "",
-      "pass_rate": 0.5285714285714286,
-      "signal_value": 0.6770204081632654,
-      "total_cost_usd": 0.17500000000000002
+      "pass_rate": 0.42857142857142855,
+      "quality_exact_match": 1.0,
+      "quality_mae_vs_oracle": 0.14285714285714285,
+      "quality_spearman_vs_oracle": 1.0000000000000002,
+      "quantized_quality_variance": 0.0,
+      "reliability": [
+        {
+          "bin_lower": 0.0,
+          "bin_upper": 0.1,
+          "mean_predicted": 0.0,
+          "n": 40.0,
+          "observed_frequency": 0.0
+        },
+        {
+          "bin_lower": 0.9,
+          "bin_upper": 1.0,
+          "mean_predicted": 1.0,
+          "n": 30.0,
+          "observed_frequency": 1.0
+        }
+      ],
+      "signal_value": 1.0,
+      "total_cost_usd": 0.0129027
     }
   },
-  "total_cost_usd": 0.18488750000000004,
-  "usd_cap": 2.0
+  "total_cost_usd": 0.032100200000000016,
+  "usd_cap": 1.0
 }
