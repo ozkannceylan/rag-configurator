@@ -538,3 +538,65 @@ class TestErroredCallsAreNotScored:
 
         assert sample_variance(fine) > sample_variance(coarse)
         assert exact_match_rate(fine) == exact_match_rate(coarse) == 1.0
+
+
+class TestJevRelevanceGrader:
+    """Jev used in-loop as an agent's correction grader."""
+
+    @staticmethod
+    def _grader(payload=None, raises=None, **kwargs):
+        from app.evaluation.jev_grader import JevRelevanceGrader
+        from app.evaluation.jev_judge import JevClient, JevJudge
+
+        def transport(_payload):
+            if raises is not None:
+                raise raises
+            return payload
+
+        client = JevClient(api_key="mock", request_fn=transport)
+        return JevRelevanceGrader(JevJudge(client=client), **kwargs)
+
+    @staticmethod
+    def _payload(pass_noul: float, grounded: float = 0.9, score: float = 4.0):
+        return {
+            "model": "jev-test",
+            "answers": {
+                "quality": {"score": score},
+                "does_pass": {"noul": pass_noul},
+                "grounded": {"noul": grounded},
+            },
+            "usage": {"input_tokens": 100},
+        }
+
+    async def test_low_pass_probability_triggers_correction(self):
+        decision = await self._grader(self._payload(0.12)).grade("q", ["c"], "a")
+        assert decision.needs_correction is True
+        assert decision.is_valid is True
+        assert decision.confident is True
+
+    async def test_high_pass_probability_skips_correction(self):
+        decision = await self._grader(self._payload(0.93)).grade("q", ["c"], "a")
+        assert decision.needs_correction is False
+        assert decision.is_valid is True
+
+    async def test_uncertain_probability_is_flagged_for_escalation(self):
+        """The cascade's middle band must be distinguishable, not silently decided."""
+        grader = self._grader(self._payload(0.52), uncertainty_band=(0.4, 0.6))
+        decision = await grader.grade("q", ["c"], "a")
+        assert decision.confident is False
+        assert decision.is_valid is True
+
+    async def test_grader_failure_fails_toward_caution_and_stays_distinguishable(self):
+        """An unavailable grader must not silently read as a clean pass."""
+        grader = self._grader(raises=RuntimeError("timeout"))
+        decision = await grader.grade("q", ["c"], "a")
+        assert decision.needs_correction is True
+        assert decision.confident is False
+        assert decision.is_valid is False
+        assert decision.error is not None
+
+    def test_rejects_a_nonsensical_band(self):
+        import pytest as _pytest
+
+        with _pytest.raises(ValueError):
+            self._grader(self._payload(0.5), uncertainty_band=(0.8, 0.2))

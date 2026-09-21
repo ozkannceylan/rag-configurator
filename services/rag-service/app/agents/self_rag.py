@@ -57,6 +57,11 @@ class SelfRAGCritique:
     critique_text: str
     score: float  # 0-1 overall score
     refinements: int = 0
+    # _parse_critique extracts an explicit NEEDS_REFINEMENT verdict from the
+    # model, but the dataclass had nowhere to put it, so the value was
+    # unreachable and the refine loop re-derived its own from the support and
+    # utility verdicts. None means the grader did not express one.
+    needs_refinement: bool | None = None
 
 
 class SelfRAGState(TypedDict, total=False):
@@ -603,10 +608,20 @@ class SelfRAGAgent(BaseAgent):
                     "score": critique.score,
                     "support": critique.support_verdict.value,
                     "utility": critique.utility_verdict.value,
-                    "needs_refinement": not (
-                        critique.support_verdict == SupportVerdict.SUPPORTED
-                        and critique.utility_verdict
-                        in [UtilityVerdict.USEFUL, UtilityVerdict.PARTIALLY_USEFUL]
+                    # Prefer the grader's explicit verdict when it gave one.
+                    # It used to be unreachable, so this was always the
+                    # derived rule, discarding what the model actually said.
+                    "needs_refinement": (
+                        critique.needs_refinement
+                        if critique.needs_refinement is not None
+                        else not (
+                            critique.support_verdict == SupportVerdict.SUPPORTED
+                            and critique.utility_verdict
+                            in [
+                                UtilityVerdict.USEFUL,
+                                UtilityVerdict.PARTIALLY_USEFUL,
+                            ]
+                        )
                     ),
                 },
                 duration_ms=duration,
@@ -706,12 +721,9 @@ class SelfRAGAgent(BaseAgent):
         if refinement_match:
             needs_refinement = refinement_match.group(1).lower() == "yes"
         else:
-            # Infer from support/utility
-            # TODO: `needs_refinement` is never returned -- SelfRAGCritique has no
-            # such field, so the LLM's NEEDS_REFINEMENT verdict is thrown away and
-            # the caller re-infers it at line ~589. Suspected logic bug; behaviour
-            # left unchanged here on purpose.
-            needs_refinement = (  # noqa: F841
+            # The grader did not state a verdict, so infer one from the
+            # support and utility it did give.
+            needs_refinement = (
                 support != SupportVerdict.SUPPORTED
                 or utility == UtilityVerdict.NOT_USEFUL
             )
@@ -723,6 +735,7 @@ class SelfRAGAgent(BaseAgent):
             utility_verdict=utility,
             critique_text=critique_text,
             score=score,
+            needs_refinement=needs_refinement,
         )
 
     async def _refine_node(self, state: SelfRAGState) -> SelfRAGState:

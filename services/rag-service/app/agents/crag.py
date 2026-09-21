@@ -432,18 +432,11 @@ class CRAGAgent(BaseAgent):
                 max_tokens=500,
             )
 
-            # TODO: `needs_correction` (and `llm_grade`) are computed here and in
-            # the `else` branch below but never read -- RelevanceEvaluation is built
-            # at the end of this method from a plain threshold comparison, so the
-            # model's explicit NEEDS_CORRECTION verdict never reaches the correction
-            # branch. Suspected logic bug; behaviour left unchanged on purpose.
             llm_grade, llm_score, reasoning, needs_correction = self._parse_evaluation(
                 response.content
             )
         else:
-            needs_correction = (  # noqa: F841
-                score_based_score < self.crag_config.relevance_threshold
-            )
+            needs_correction = score_based_score < self.crag_config.relevance_threshold
             reasoning = f"Score-based evaluation: {score_based_score:.2f}"
 
         # Combine scores
@@ -470,11 +463,20 @@ class CRAGAgent(BaseAgent):
         # Build chunk scores
         chunk_scores = {c.chunk_id: c.score for c in chunks}
 
+        # The grader is asked for an explicit NEEDS_CORRECTION verdict and
+        # _parse_evaluation returns it, but this object used to be built from a
+        # bare threshold comparison on a blended score, so the verdict never
+        # reached the correction branch: CRAG would skip correction whenever the
+        # blend cleared the threshold, even when the grader had said correction
+        # was needed. The threshold is kept as a safety net, so this can only
+        # make CRAG correct more often, never less.
         return RelevanceEvaluation(
             grade=final_grade,
             score=final_score,
             reasoning=reasoning,
-            needs_correction=final_score < self.crag_config.relevance_threshold,
+            needs_correction=(
+                needs_correction or final_score < self.crag_config.relevance_threshold
+            ),
             chunk_scores=chunk_scores,
         )
 
