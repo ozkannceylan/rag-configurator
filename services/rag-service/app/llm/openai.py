@@ -111,6 +111,11 @@ class OpenAILLM(BaseLLM):
                 params["tool_choice"] = kwargs["tool_choice"]
             if "response_format" in kwargs:
                 params["response_format"] = kwargs["response_format"]
+            # Without this a caller cannot make a run reproducible even where
+            # the provider supports it. Notably absent when the judge
+            # comparison was first measured.
+            if kwargs.get("seed") is not None:
+                params["seed"] = kwargs["seed"]
 
             response = await client.chat.completions.create(**params)
 

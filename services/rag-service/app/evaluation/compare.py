@@ -72,6 +72,9 @@ class JudgeSummary:
     quality_mae_vs_oracle: float = 0.0
     quality_spearman_vs_oracle: float = 0.0
     n_oracle_quality: int = 0
+    brier_score: float = 0.0
+    expected_calibration_error: float = 0.0
+    reliability: list[dict[str, float]] = field(default_factory=list)
     notes: str = ""
 
 
@@ -181,25 +184,21 @@ def _oracle_or_reference(
     records_by_judge: dict[str, list[RepeatRecord]],
     llm_judge: str = "llm",
 ) -> dict[str, bool]:
-    """Per-case binary reference: human oracle, else LLM majority."""
-    llm_records = records_by_judge.get(llm_judge, [])
-    llm_by_case: dict[str, list[bool]] = {}
-    for rec in llm_records:
-        llm_by_case.setdefault(rec.case_id, []).append(rec.verdict.does_pass)
+    """Per-case binary reference. Human oracle only.
 
-    reference: dict[str, bool] = {}
-    for case in cases:
-        if case.oracle_pass is not None:
-            reference[case.id] = bool(case.oracle_pass)
-        elif case.id in llm_by_case:
-            reference[case.id] = majority_bool(llm_by_case[case.id])
-        else:
-            # Fall back to majority across all judges if LLM is missing.
-            flags: list[bool] = []
-            for recs in records_by_judge.values():
-                flags.extend(r.verdict.does_pass for r in recs if r.case_id == case.id)
-            reference[case.id] = majority_bool(flags)
-    return reference
+    This used to fall back to the LLM's majority vote for an unlabelled case,
+    and then to a majority pooled across all judges including the one being
+    scored. Both are circular: a judge measured against its own majority
+    vote scores 1.000 by construction, which is exactly the number the first
+    published run reported. An unlabelled case now contributes nothing to
+    agreement rather than contributing a flattering artifact.
+    """
+    del records_by_judge, llm_judge  # deliberately unused; see docstring
+    return {
+        case.id: bool(case.oracle_pass)
+        for case in cases
+        if case.oracle_pass is not None
+    }
 
 
 def _ranks(values: Sequence[float]) -> list[float]:
@@ -248,6 +247,67 @@ def exact_match_rate(values: Sequence[float]) -> float:
     return sum(1 for v in rounded if v == modal) / len(rounded)
 
 
+def brier_score(probabilities: Sequence[float], outcomes: Sequence[bool]) -> float:
+    """Mean squared error of a probability against the truth. Lower is better.
+
+    0.0 is a perfect oracle. 0.25 is what you get by always saying 0.5. A judge
+    whose Brier beats 0.25 is telling you something; one that does not is
+    emitting a number with no information in it, and routing on it would be
+    superstition.
+    """
+    if not probabilities or len(probabilities) != len(outcomes):
+        return 0.0
+    return statistics.mean(
+        (p - (1.0 if o else 0.0)) ** 2
+        for p, o in zip(probabilities, outcomes, strict=True)
+    )
+
+
+def reliability_bins(
+    probabilities: Sequence[float],
+    outcomes: Sequence[bool],
+    n_bins: int = 10,
+) -> list[dict[str, float]]:
+    """Reliability diagram data: predicted vs observed frequency per bin."""
+    if not probabilities or len(probabilities) != len(outcomes):
+        return []
+    buckets: dict[int, list[tuple[float, bool]]] = {}
+    for p, o in zip(probabilities, outcomes, strict=True):
+        idx = min(n_bins - 1, max(0, int(p * n_bins)))
+        buckets.setdefault(idx, []).append((p, o))
+    bins = []
+    for idx in sorted(buckets):
+        pairs = buckets[idx]
+        bins.append(
+            {
+                "bin_lower": idx / n_bins,
+                "bin_upper": (idx + 1) / n_bins,
+                "n": float(len(pairs)),
+                "mean_predicted": statistics.mean(p for p, _ in pairs),
+                "observed_frequency": statistics.mean(
+                    1.0 if o else 0.0 for _, o in pairs
+                ),
+            }
+        )
+    return bins
+
+
+def expected_calibration_error(
+    probabilities: Sequence[float],
+    outcomes: Sequence[bool],
+    n_bins: int = 10,
+) -> float:
+    """Weighted mean gap between predicted confidence and observed frequency."""
+    bins = reliability_bins(probabilities, outcomes, n_bins=n_bins)
+    total = sum(b["n"] for b in bins)
+    if total <= 0:
+        return 0.0
+    return sum(
+        b["n"] / total * abs(b["mean_predicted"] - b["observed_frequency"])
+        for b in bins
+    )
+
+
 def summarize_judge(
     judge: str,
     records: Sequence[RepeatRecord],
@@ -269,6 +329,8 @@ def summarize_judge(
     repeatabilities: list[float] = []
     oracle_q: list[float] = []
     judged_q: list[float] = []
+    calib_probs: list[float] = []
+    calib_truth: list[bool] = []
     models: list[str] = []
 
     n_valid = 0
@@ -315,6 +377,11 @@ def summarize_judge(
         if expected is None:
             continue
         agreements.extend(1.0 if flag == expected else 0.0 for flag in case_pass)
+        # Calibration is what makes a probability routable. Without it the
+        # 0.5 pass threshold is an arbitrary line through a number nobody has
+        # checked the meaning of.
+        calib_probs.extend(r.verdict.does_pass_probability for r in case_recs)
+        calib_truth.extend(expected for _ in case_recs)
 
     model = Counter(models).most_common(1)[0][0] if models else judge
     agreement = statistics.mean(agreements) if agreements else 0.0
@@ -350,6 +417,9 @@ def summarize_judge(
         ),
         quality_spearman_vs_oracle=spearman(oracle_q, judged_q),
         n_oracle_quality=len(oracle_q),
+        brier_score=brier_score(calib_probs, calib_truth),
+        expected_calibration_error=expected_calibration_error(calib_probs, calib_truth),
+        reliability=reliability_bins(calib_probs, calib_truth),
         notes=(
             f"{n_skipped_cases} case(s) excluded from variance/repeatability "
             "for having fewer than 2 valid calls"
@@ -379,29 +449,42 @@ async def run_compare(
     )
     spent = 0.0
     stopped = False
+    # Rolling mean cost per judge, used to stop BEFORE the cap rather than
+    # after. The previous check fired only once the budget was already spent.
+    observed_cost: dict[str, list[float]] = {name: [] for name in judges}
+
+    def projected_case_cost() -> float:
+        """What one more full pass over every judge is expected to cost."""
+        return sum(
+            statistics.mean(costs) if costs else 0.0 for costs in observed_cost.values()
+        )
+
     for repeat in range(1, repeats + 1):
         if stopped:
             break
         for case in cases:
-            if stopped:
+            # Stop at CASE granularity. Breaking mid-case left the judges on
+            # different case subsets while the summary still averaged over all
+            # of them, silently producing incomparable numbers.
+            if spent + projected_case_cost() > usd_cap:
+                result.stopped_reason = (
+                    f"USD cap ${usd_cap:.2f} would be exceeded by the next case; "
+                    f"stopped after ${spent:.4f} at repeat {repeat}"
+                )
+                stopped = True
                 break
             for name, judge_fn in judges.items():
-                if spent >= usd_cap:
-                    result.stopped_reason = (
-                        f"USD cap {usd_cap:.2f} reached after ${spent:.4f}"
-                    )
-                    stopped = True
-                    break
                 verdict = await judge_fn(
                     case.question, case.retrieved_chunks, case.answer
                 )
-                spent += float(verdict.cost_usd or 0.0)
+                cost = float(verdict.cost_usd or 0.0)
+                spent += cost
+                observed_cost[name].append(cost)
                 result.records.setdefault(name, []).append(
                     RepeatRecord(case_id=case.id, repeat=repeat, verdict=verdict)
                 )
     result.total_cost_usd = spent
-    llm_name = "llm" if "llm" in result.records else next(iter(result.records), "llm")
-    reference = _oracle_or_reference(cases, result.records, llm_judge=llm_name)
+    reference = _oracle_or_reference(cases, result.records)
     for name, recs in result.records.items():
         result.summaries[name] = summarize_judge(name, recs, cases, reference)
     return result
@@ -528,6 +611,27 @@ def render_compare_report(result: CompareResult) -> str:
             f"{summary.quality_spearman_vs_oracle:.3f} | "
             f"{summary.quantized_quality_variance:.6f} | "
             f"{summary.quality_exact_match:.3f} |"
+        )
+    lines.append("")
+    lines.append("### Calibration of the pass probability")
+    lines.append("")
+    lines.append(
+        "A probability is only useful for routing if it means what it says. "
+        "Brier is the mean squared error against the truth: 0.25 is what you "
+        "get by always guessing 0.5, so a judge that does not beat 0.25 is "
+        "emitting a number with no information in it. ECE is the weighted gap "
+        "between stated confidence and observed frequency. These decide "
+        "whether a cascade can route its uncertain middle band on this signal, "
+        "or whether the pass threshold is an arbitrary line."
+    )
+    lines.append("")
+    lines.append("| Judge | Brier (lower better) | ECE | Reliability bins |")
+    lines.append("| --- | ---: | ---: | ---: |")
+    for name, summary in result.summaries.items():
+        lines.append(
+            f"| {name} | {summary.brier_score:.4f} | "
+            f"{summary.expected_calibration_error:.4f} | "
+            f"{len(summary.reliability)} |"
         )
     lines.append("")
     lines.append("### What the columns mean")

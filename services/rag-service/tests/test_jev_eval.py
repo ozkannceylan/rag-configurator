@@ -364,8 +364,86 @@ class TestCompareMetrics:
             mode="live",
         )
         assert result.stopped_reason is not None
-        assert result.total_cost_usd >= 1.5
         assert result.summaries["llm"].n_calls < 10
+        # The cap is a budget, not a suggestion. This used to assert
+        # `>= 1.5`, encoding the overshoot as expected behaviour: the guard
+        # checked `spent >= cap` before a call and added the cost after, so it
+        # only ever fired once the money was already gone.
+        assert result.total_cost_usd <= 1.5
+
+    async def test_usd_cap_stops_at_case_granularity(self):
+        """Judges must never finish a run on different subsets of cases.
+
+        Breaking out of the inner judges loop left one judge with a verdict for
+        a case and the other without, while summarize_judge still averaged over
+        every case, silently producing incomparable summaries.
+        """
+        cases = [
+            EvalCase(
+                id=f"case-{i}",
+                question="q",
+                retrieved_chunks=["c"],
+                answer="a",
+                oracle_pass=True,
+                oracle_quality=5,
+            )
+            for i in range(4)
+        ]
+
+        def judge(cost: float):
+            async def _judge(_q, _c, _a):
+                from app.evaluation.verdict import JudgeVerdict
+
+                return JudgeVerdict(
+                    judge="x",
+                    quality=5.0,
+                    does_pass=True,
+                    groundedness=1.0,
+                    latency_ms=1.0,
+                    cost_usd=cost,
+                    model="stub",
+                )
+
+            return _judge
+
+        result = await run_compare(
+            cases,
+            {"jev": judge(0.10), "llm": judge(0.30)},
+            repeats=5,
+            usd_cap=1.0,
+            mode="live",
+        )
+
+        assert result.stopped_reason is not None
+        assert result.total_cost_usd <= 1.0
+        jev_cases = [r.case_id for r in result.records["jev"]]
+        llm_cases = [r.case_id for r in result.records["llm"]]
+        assert jev_cases == llm_cases
+
+    async def test_unlabelled_case_is_never_scored_against_a_judge(self):
+        """Regression: agreement used to fall back to the LLM's own majority."""
+        from app.evaluation.compare import _oracle_or_reference
+
+        labelled = EvalCase(
+            id="labelled",
+            question="q",
+            retrieved_chunks=["c"],
+            answer="a",
+            oracle_pass=True,
+            oracle_quality=5,
+        )
+        unlabelled = EvalCase(
+            id="unlabelled",
+            question="q",
+            retrieved_chunks=["c"],
+            answer="a",
+            oracle_pass=None,
+            oracle_quality=None,
+        )
+
+        reference = _oracle_or_reference([labelled, unlabelled], {})
+        assert reference == {"labelled": True}
+        assert "unlabelled" not in reference
 
 
 class TestEvaluationAPIJev:

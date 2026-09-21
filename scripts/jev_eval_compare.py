@@ -90,13 +90,18 @@ async def _main_async(args: argparse.Namespace) -> int:
         if llm is None:
             missing.append("OLLAMA_API_KEY (Ollama Cloud OpenAI-compat)")
         if missing:
+            # Never silently downgrade a live run to a simulation. This used to
+            # fall through to mock and exit 0, which in a scripted release
+            # would overwrite the published artifacts with synthetic numbers.
             print(
-                "Live compare requested but missing: "
+                "ERROR: live compare requested but missing: "
                 + ", ".join(missing)
-                + ". Falling back to mock/demo.",
+                + ".\nRefusing to fall back to mock, because that would write "
+                "simulated numbers where real ones are expected.\n"
+                "Export the keys, or run explicitly with --mock.",
                 file=sys.stderr,
             )
-            live = False
+            return 2
         else:
             judges = {
                 "jev": jev.judge_trace,

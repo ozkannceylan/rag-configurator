@@ -10,7 +10,7 @@ import json
 import logging
 import re
 import time
-from typing import Any
+from typing import Any, ClassVar
 
 from app.evaluation.base import BaseEvaluator
 from app.evaluation.models import EvaluationResult, MetricResult
@@ -120,8 +120,35 @@ def parse_quality_judge_response(raw: str) -> dict[str, Any]:
     }
 
 
+def _is_unsupported_param_error(exc: Exception) -> bool:
+    """True when a provider rejected response_format rather than failing for real."""
+    text = str(exc).lower()
+    return "response_format" in text and any(
+        token in text
+        for token in (
+            "unsupported",
+            "unknown",
+            "not support",
+            "invalid",
+            "unrecognized",
+        )
+    )
+
+
 class QualityJudge(BaseEvaluator):
     """LLM judge that emits Score-like 1–5 quality plus a boolean pass flag."""
+
+    # The first published comparison ran this judge at 256 tokens against a
+    # reasoning-style model. Truncation produced unterminated JSON, which the
+    # parser scored as a confident failing verdict, and 6 of 70 calls were
+    # affected. The service's own API path already used 1024; the benchmark
+    # was configured less favourably than production.
+    DEFAULT_MAX_TOKENS = 1024
+
+    # Widely supported on OpenAI-compatible endpoints. A provider that rejects
+    # it is detected at call time and the judge degrades to plain prompting
+    # rather than failing the run.
+    JSON_RESPONSE_FORMAT: ClassVar[dict[str, str]] = {"type": "json_object"}
 
     def __init__(
         self,
@@ -129,12 +156,47 @@ class QualityJudge(BaseEvaluator):
         *,
         judge_name: str = "llm",
         temperature: float = 0.0,
-        max_tokens: int = 256,
+        max_tokens: int | None = None,
+        seed: int | None = 7,
+        use_structured_output: bool = True,
+        parse_retries: int = 1,
     ) -> None:
         self.llm = llm
         self.judge_name = judge_name
         self.temperature = temperature
-        self.max_tokens = max_tokens
+        self.max_tokens = max_tokens or self.DEFAULT_MAX_TOKENS
+        self.seed = seed
+        self.use_structured_output = use_structured_output
+        self.parse_retries = max(0, parse_retries)
+        # Flipped off permanently for this instance once a provider rejects
+        # the response_format parameter, so one rejection does not cost a
+        # wasted call on every subsequent trace.
+        self._structured_supported = use_structured_output
+
+    async def _generate(self, prompt: str):
+        """One provider call, with structured output and seed when available."""
+        kwargs: dict[str, Any] = {}
+        if self._structured_supported:
+            kwargs["response_format"] = self.JSON_RESPONSE_FORMAT
+        if self.seed is not None:
+            kwargs["seed"] = self.seed
+        try:
+            return await self.llm.generate(
+                messages=[Message.user(prompt)],
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                **kwargs,
+            )
+        except Exception as exc:
+            if self._structured_supported and _is_unsupported_param_error(exc):
+                logger.warning(
+                    "Provider rejected response_format; falling back to plain "
+                    "prompting for judge %s. Parse failures become more likely.",
+                    self.judge_name,
+                )
+                self._structured_supported = False
+                return await self._generate(prompt)
+            raise
 
     async def judge_trace(
         self,
@@ -146,11 +208,24 @@ class QualityJudge(BaseEvaluator):
         prompt = llm_judge_prompt(state)
         started = time.perf_counter()
         try:
-            response = await self.llm.generate(
-                messages=[Message.user(prompt)],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
+            response = await self._generate(prompt)
+            parsed = parse_quality_judge_response(response.content)
+            # A truncated or malformed response is worth one more try before it
+            # is recorded as a failure. Scoring an unparseable reply as a
+            # verdict is what made the first published comparison wrong.
+            attempts = 0
+            while parsed.get("error") and attempts < self.parse_retries:
+                attempts += 1
+                logger.warning(
+                    "Judge %s returned unparseable output (finish_reason=%s); "
+                    "retrying %d/%d",
+                    self.judge_name,
+                    response.finish_reason,
+                    attempts,
+                    self.parse_retries,
+                )
+                response = await self._generate(prompt)
+                parsed = parse_quality_judge_response(response.content)
         except Exception as exc:
             latency_ms = (time.perf_counter() - started) * 1000.0
             logger.exception("LLM quality judge failed: %s", exc)
@@ -167,7 +242,6 @@ class QualityJudge(BaseEvaluator):
                 error=str(exc),
             )
         latency_ms = (time.perf_counter() - started) * 1000.0
-        parsed = parse_quality_judge_response(response.content)
         usage = response.usage
         prompt_tokens = usage.prompt_tokens if usage else 0
         completion_tokens = usage.completion_tokens if usage else 0
@@ -183,7 +257,17 @@ class QualityJudge(BaseEvaluator):
             model=response.model or self.llm.model,
             does_pass_probability=1.0 if does_pass else 0.0,
             explanation=str(parsed["explanation"]),
-            raw={"content": response.content, "parsed": parsed},
+            raw={
+                "content": response.content,
+                "parsed": parsed,
+                # "length" here means the reply was truncated, which is the
+                # single most useful signal for diagnosing a parse failure and
+                # was being discarded.
+                "finish_reason": response.finish_reason,
+                "structured_output": self._structured_supported,
+                "seed": self.seed,
+                "max_tokens": self.max_tokens,
+            },
             error=parsed.get("error"),
         )
 
