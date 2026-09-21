@@ -2,14 +2,12 @@
 
 Side-by-side comparison of TypeSafe Jev (System One) and an LLM-as-judge baseline on **fixed Naive RAG traces**. Inspired by LangChain’s [Jev-as-a-Judge for Agent Evals](https://www.langchain.com/blog/jev-agent-evals-langsmith) ([experiment repo](https://github.com/danielgshea/jev-as-a-judge)).
 
-- **Mode:** `mock/demo`
-- **Generated at:** 2026-09-21T08:17:33.923390+00:00
+- **Mode:** `live`
+- **Generated at:** 2026-09-21T08:20:23.712563+00:00
 - **Cases:** 7
 - **Repeats requested:** 10
 - **USD cap:** $2.00
-- **Observed cost (proxy):** $0.184888
-
-> This report is a **mock/demo** replay. Jev responses come from recorded `/v1/systemone` fixtures (in-process; latency is a stand-in); the LLM baseline is a seeded simulator that still goes through the real JSON parser. It is illustrative of the harness, not a live TypeSafe/OpenAI measurement.
+- **Observed cost (proxy):** $0.025792
 
 Numbers below are observational for this fixture set. They are **not** a general ranking of judges, a safety certification, or an ASIL claim.
 
@@ -17,8 +15,8 @@ Numbers below are observational for this fixture set. They are **not** a general
 
 | Judge | Model | Agreement | Repeatability | Signal value | Mean quality var | Latency p50 (ms) | Latency p95 (ms) | Cost USD |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| jev | `jev-1.13.0` | 1.000 | 1.000 | 1.000 | 0.00000000 | 18.0 | 18.0 | $0.009887 |
-| llm | `gpt-4o-mini-sim` | 0.814 | 0.831 | 0.677 | 0.08231143 | 277.0 | 332.4 | $0.175000 |
+| jev | `jev-1.13.0` | 1.000 | 1.000 | 1.000 | 0.00022429 | 226.5 | 556.9 | $0.016086 |
+| llm | `deepseek-v4-flash:0731` | 1.000 | 1.000 | 1.000 | 0.03809524 | 4180.0 | 6728.7 | $0.009706 |
 
 ### What the columns mean
 
@@ -30,11 +28,11 @@ Numbers below are observational for this fixture set. They are **not** a general
 
 ## Jev vs LLM on this product
 
-- Quality-score variance: Jev variance was 0 on this run (identical repeats); LLM variance was 0.08231143.
-- Mean latency: LLM was 15.5× Jev (278.9 ms vs 18.0 ms).
-- Cost proxy: LLM was 17.7× Jev ($0.175000 vs $0.009887).
-- Binary agreement: Jev 1.000, LLM 0.814.
-- Signal value: Jev 1.000, LLM 0.677.
+- Quality-score variance: LLM had 169.9× the Jev variance.
+- Mean latency: LLM was 15.3× Jev (4472.3 ms vs 293.2 ms).
+- Cost proxy: LLM was 0.6× Jev ($0.009706 vs $0.016086).
+- Binary agreement: Jev 1.000, LLM 1.000.
+- Signal value: Jev 1.000, LLM 1.000.
 
 ## Fixtures
 
