@@ -135,7 +135,7 @@ func checkService(client *http.Client, name, url string) ServiceHealth {
 			Msg("Backend health check failed")
 		return result
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check for successful status code
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {

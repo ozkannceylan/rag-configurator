@@ -59,7 +59,8 @@ func setupMockBackend() *httptest.Server {
 			"x_user_id":   r.Header.Get("X-User-ID"),
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		// Header is already sent; nothing useful to do with an encode failure.
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 }
 
@@ -126,7 +127,7 @@ func TestAuthRoutesExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s %s: Request failed: %v", route.method, route.path, err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// Route exists and proxies successfully to mock backend (200)
 		if resp.StatusCode != 200 {
@@ -169,7 +170,7 @@ func TestProtectedRoutesExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s %s: Request failed: %v", route.method, route.path, err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// With valid auth, route exists and proxies successfully to mock backend (200)
 		if resp.StatusCode != 200 {
@@ -237,7 +238,7 @@ func TestIngestionRoutesExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s %s: Request failed: %v", route.method, route.path, err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != 200 {
 			t.Errorf("%s %s: Expected status code 200, got %d", route.method, route.path, resp.StatusCode)
@@ -275,7 +276,7 @@ func TestRAGServiceRoutesExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s %s: Request failed: %v", route.method, route.path, err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != 200 {
 			t.Errorf("%s %s: Expected status code 200, got %d", route.method, route.path, resp.StatusCode)
@@ -302,7 +303,7 @@ func TestWebSocketRouteExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Stream route proxies to the RAG service over HTTP/SSE in Phase 0.
 	if resp.StatusCode != 200 {
@@ -354,7 +355,7 @@ func TestProxyBackendUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// When backend is down, proxy returns 502
 	if resp.StatusCode != 502 {
@@ -391,10 +392,12 @@ func TestProxyForwardsAuthorizationHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var response map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&response)
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode gateway response body: %v", err)
+	}
 
 	// Verify authorization header was forwarded to backend
 	if response["auth_header"] != "Bearer "+token {
@@ -424,10 +427,12 @@ func TestProxyForwardsPathParams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var response map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&response)
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode gateway response body: %v", err)
+	}
 
 	// Verify path was correctly forwarded with parameter
 	if response["path"] != "/api/v1/configs/my-config-id" {

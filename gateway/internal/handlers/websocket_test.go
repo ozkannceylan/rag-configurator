@@ -164,7 +164,7 @@ func TestWebSocketProxy_FullBidirectionalProxy(t *testing.T) {
 			t.Logf("Backend upgrade error: %v", err)
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// Echo server: read message and send response
 		for {
@@ -195,7 +195,7 @@ func TestWebSocketProxy_FullBidirectionalProxy(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(gatewayServer.URL, "http") + "/stream"
 	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	// Send message from client through gateway to backend
 	testMessage := "Hello from client"
@@ -228,7 +228,7 @@ func TestWebSocketProxy_MultipleMessages(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			messageType, message, err := conn.ReadMessage()
@@ -251,7 +251,7 @@ func TestWebSocketProxy_MultipleMessages(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(gatewayServer.URL, "http") + "/stream"
 	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	// Send multiple messages
 	messages := []string{"Message 1", "Message 2", "Message 3"}
@@ -277,7 +277,7 @@ func TestWebSocketProxy_BinaryMessages(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			messageType, message, err := conn.ReadMessage()
@@ -300,7 +300,7 @@ func TestWebSocketProxy_BinaryMessages(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(gatewayServer.URL, "http") + "/stream"
 	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	// Send binary message
 	binaryData := []byte{0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE}
@@ -329,10 +329,10 @@ func TestWebSocketProxy_HeadersForwarded(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
-		// Just keep connection alive briefly
-		conn.ReadMessage()
+		// Block until the client goes away; the result is intentionally unused.
+		_, _, _ = conn.ReadMessage()
 	}))
 	defer backendServer.Close()
 
@@ -349,7 +349,7 @@ func TestWebSocketProxy_HeadersForwarded(t *testing.T) {
 
 	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
 	require.NoError(t, err)
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	select {
 	case hdrs := <-receivedHeaders:
@@ -376,7 +376,7 @@ func TestWebSocketProxy_BackendUnavailable(t *testing.T) {
 
 	// Should still connect to gateway, but get close message when backend fails
 	if err == nil {
-		defer clientConn.Close()
+		defer func() { _ = clientConn.Close() }()
 		// Try to read - should get close message
 		_, _, err = clientConn.ReadMessage()
 		assert.Error(t, err)
@@ -398,7 +398,7 @@ func TestWebSocketProxy_ClientCloses(t *testing.T) {
 			return
 		}
 		defer func() {
-			conn.Close()
+			_ = conn.Close()
 			close(backendClosed)
 		}()
 
@@ -423,8 +423,8 @@ func TestWebSocketProxy_ClientCloses(t *testing.T) {
 	require.NoError(t, err)
 
 	// Close client connection
-	clientConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	clientConn.Close()
+	_ = clientConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	_ = clientConn.Close()
 
 	// Backend should also close
 	select {
@@ -448,8 +448,8 @@ func TestWebSocketProxy_BackendCloses(t *testing.T) {
 		}
 
 		// Close immediately after connection
-		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "Goodbye"))
-		conn.Close()
+		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "Goodbye"))
+		_ = conn.Close()
 	}))
 	defer backendServer.Close()
 
@@ -462,7 +462,7 @@ func TestWebSocketProxy_BackendCloses(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(gatewayServer.URL, "http") + "/stream"
 	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	// Client should receive close message
 	_, _, err = clientConn.ReadMessage()
@@ -484,8 +484,9 @@ func TestWebSocketProxy_PreservesQueryParams(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
-		conn.ReadMessage()
+		defer func() { _ = conn.Close() }()
+		// Block until the client goes away; the result is intentionally unused.
+		_, _, _ = conn.ReadMessage()
 	}))
 	defer backendServer.Close()
 
@@ -498,7 +499,7 @@ func TestWebSocketProxy_PreservesQueryParams(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(gatewayServer.URL, "http") + "/stream?config_id=123&mode=chat"
 	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	select {
 	case path := <-receivedPath:

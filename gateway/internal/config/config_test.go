@@ -1,16 +1,13 @@
 package config
 
 import (
-	"os"
 	"testing"
 )
 
 func TestLoad_WithRequiredEnvVars(t *testing.T) {
 	// Set required environment variable
-	os.Setenv("JWT_SECRET_KEY", "test-secret-key")
-	os.Setenv("INTER_SERVICE_SECRET", "test-inter-service-secret")
-	defer os.Unsetenv("JWT_SECRET_KEY")
-	defer os.Unsetenv("INTER_SERVICE_SECRET")
+	t.Setenv("JWT_SECRET_KEY", "test-secret-key")
+	t.Setenv("INTER_SERVICE_SECRET", "test-inter-service-secret")
 
 	cfg, err := Load()
 	if err != nil {
@@ -24,7 +21,7 @@ func TestLoad_WithRequiredEnvVars(t *testing.T) {
 
 func TestLoad_WithoutRequiredEnvVars(t *testing.T) {
 	// Clear all JWT related env vars
-	os.Unsetenv("JWT_SECRET_KEY")
+	t.Setenv("JWT_SECRET_KEY", "")
 
 	_, err := Load()
 	if err == nil {
@@ -33,10 +30,8 @@ func TestLoad_WithoutRequiredEnvVars(t *testing.T) {
 }
 
 func TestLoad_DefaultValues(t *testing.T) {
-	os.Setenv("JWT_SECRET_KEY", "test-secret")
-	os.Setenv("INTER_SERVICE_SECRET", "test-inter-service-secret")
-	defer os.Unsetenv("JWT_SECRET_KEY")
-	defer os.Unsetenv("INTER_SERVICE_SECRET")
+	t.Setenv("JWT_SECRET_KEY", "test-secret")
+	t.Setenv("INTER_SERVICE_SECRET", "test-inter-service-secret")
 
 	cfg, err := Load()
 	if err != nil {
@@ -65,23 +60,13 @@ func TestLoad_DefaultValues(t *testing.T) {
 }
 
 func TestLoad_CustomValues(t *testing.T) {
-	os.Setenv("JWT_SECRET_KEY", "custom-secret")
-	os.Setenv("INTER_SERVICE_SECRET", "custom-inter-service-secret")
-	os.Setenv("GATEWAY_PORT", "9000")
-	os.Setenv("ENVIRONMENT", "production")
-	os.Setenv("LOG_LEVEL", "debug")
-	os.Setenv("CONFIG_SERVICE_URL", "http://config:8001")
-	os.Setenv("CORS_ORIGINS", "http://example.com,http://test.com")
-
-	defer func() {
-		os.Unsetenv("JWT_SECRET_KEY")
-		os.Unsetenv("INTER_SERVICE_SECRET")
-		os.Unsetenv("GATEWAY_PORT")
-		os.Unsetenv("ENVIRONMENT")
-		os.Unsetenv("LOG_LEVEL")
-		os.Unsetenv("CONFIG_SERVICE_URL")
-		os.Unsetenv("CORS_ORIGINS")
-	}()
+	t.Setenv("JWT_SECRET_KEY", "custom-secret")
+	t.Setenv("INTER_SERVICE_SECRET", "custom-inter-service-secret")
+	t.Setenv("GATEWAY_PORT", "9000")
+	t.Setenv("ENVIRONMENT", "production")
+	t.Setenv("LOG_LEVEL", "debug")
+	t.Setenv("CONFIG_SERVICE_URL", "http://config:8001")
+	t.Setenv("CORS_ORIGINS", "http://example.com,http://test.com")
 
 	cfg, err := Load()
 	if err != nil {

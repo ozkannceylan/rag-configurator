@@ -50,9 +50,10 @@ func TestRateLimit_BlocksExcessiveTraffic(t *testing.T) {
 		req.RemoteAddr = "192.168.1.1:12345"
 		router.ServeHTTP(w, req)
 
-		if w.Code == 200 {
+		switch w.Code {
+		case 200:
 			successCount++
-		} else if w.Code == 429 {
+		case 429:
 			blockedCount++
 		}
 	}

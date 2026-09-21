@@ -138,9 +138,9 @@ func TestCORS_SubdomainWildcard(t *testing.T) {
 		{"http://app.example.com", true},
 		{"https://api.example.com", true},
 		{"http://sub.domain.example.com", true},
-		{"http://example.com", false},        // Root domain not matched by *.example.com
-		{"http://notexample.com", false},     // Different domain
-		{"http://app.other.com", false},      // Different domain
+		{"http://example.com", false},          // Root domain not matched by *.example.com
+		{"http://notexample.com", false},       // Different domain
+		{"http://app.other.com", false},        // Different domain
 		{"http://example.com.evil.com", false}, // Shouldn't match
 	}
 

@@ -110,7 +110,9 @@ func (p *Proxy) createReverseProxy(targetURL string, breaker *middleware.Circuit
 		if err == middleware.ErrCircuitOpen {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte(`{"error":"Service unavailable","message":"Circuit breaker is open for the target service"}`))
+			// The status line is already written, so a failed body write cannot
+			// be turned into a different response; the client has simply gone.
+			_, _ = w.Write([]byte(`{"error":"Service unavailable","message":"Circuit breaker is open for the target service"}`))
 			return
 		}
 
@@ -122,7 +124,7 @@ func (p *Proxy) createReverseProxy(targetURL string, breaker *middleware.Circuit
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
-		w.Write([]byte(`{"error":"Service unavailable","message":"Backend service is not responding"}`))
+		_, _ = w.Write([]byte(`{"error":"Service unavailable","message":"Backend service is not responding"}`))
 	}
 
 	// Modify response if needed (e.g., for logging)
@@ -291,7 +293,7 @@ func (p *Proxy) ProxyRequest(c *gin.Context, targetBaseURL string) {
 		})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Copy response headers
 	for key, values := range resp.Header {
@@ -303,6 +305,13 @@ func (p *Proxy) ProxyRequest(c *gin.Context, targetBaseURL string) {
 	// Set status code
 	c.Writer.WriteHeader(resp.StatusCode)
 
-	// Stream response body
-	io.Copy(c.Writer, resp.Body)
+	// Stream response body. The status line and headers are already committed
+	// at this point, so a copy failure (client hung up, backend truncated the
+	// stream) cannot be turned into an error response -- record it instead.
+	if _, err := io.Copy(c.Writer, resp.Body); err != nil {
+		log.Warn().
+			Err(err).
+			Str("url", targetURL.String()).
+			Msg("Failed to stream backend response body")
+	}
 }

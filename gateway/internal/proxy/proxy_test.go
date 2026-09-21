@@ -44,7 +44,8 @@ func setupMockBackend(t *testing.T) *httptest.Server {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Backend-Header", "test-value")
-		json.NewEncoder(w).Encode(response)
+		// Header is already sent; nothing useful to do with an encode failure.
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 }
 
@@ -83,7 +84,7 @@ func TestProxy_ForwardsPath(t *testing.T) {
 
 	resp, err := http.Get(gateway.URL + "/api/v1/configs/abc123")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 
@@ -110,7 +111,7 @@ func TestProxy_ForwardsQueryParams(t *testing.T) {
 
 	resp, err := http.Get(gateway.URL + "/api/v1/configs?page=2&limit=10")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 
@@ -140,7 +141,7 @@ func TestProxy_ForwardsAuthorizationHeader(t *testing.T) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 
@@ -171,7 +172,7 @@ func TestProxy_ForwardsBody(t *testing.T) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 
@@ -202,7 +203,7 @@ func TestProxy_AddsForwardedHeaders(t *testing.T) {
 
 	resp, err := http.Get(gateway.URL + "/test")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 
@@ -229,7 +230,7 @@ func TestProxy_CopiesResponseHeaders(t *testing.T) {
 
 	resp, err := http.Get(gateway.URL + "/test")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "test-value", resp.Header.Get("X-Backend-Header"))
@@ -247,7 +248,7 @@ func TestProxy_HandlesBackendDown(t *testing.T) {
 
 	resp, err := http.Get(gateway.URL + "/test")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, 502, resp.StatusCode)
 
@@ -272,7 +273,7 @@ func TestProxy_ToIngestionService(t *testing.T) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 
@@ -304,7 +305,7 @@ func TestProxy_ToRAGService(t *testing.T) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 
@@ -344,7 +345,7 @@ func TestProxy_PreservesAllHTTPMethods(t *testing.T) {
 			req, _ := http.NewRequest(tt.method, gateway.URL+tt.path, nil)
 			resp, err := client.Do(req)
 			require.NoError(t, err)
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			require.Equal(t, 200, resp.StatusCode)
 
@@ -372,7 +373,7 @@ func TestProxy_HandlesMultipleQueryParams(t *testing.T) {
 
 	resp, err := http.Get(gateway.URL + "/search?q=test&page=1&sort=desc&filter=active")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 
@@ -408,7 +409,7 @@ func TestProxy_PUT_Method(t *testing.T) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 
@@ -438,7 +439,7 @@ func TestProxy_DELETE_Method(t *testing.T) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, 200, resp.StatusCode)
 
@@ -466,7 +467,7 @@ func TestProxy_SignsRequests(t *testing.T) {
 
 	resp, err := http.Get(gateway.URL + "/test")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var response map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&response)
@@ -481,7 +482,7 @@ func TestProxy_SignsRequests(t *testing.T) {
 func TestProxy_CircuitBreakerOpensAfterRepeatedFailures(t *testing.T) {
 	failingBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"error":"backend unavailable"}`))
+		_, _ = w.Write([]byte(`{"error":"backend unavailable"}`))
 	}))
 	defer failingBackend.Close()
 
@@ -499,13 +500,13 @@ func TestProxy_CircuitBreakerOpensAfterRepeatedFailures(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		resp, err := client.Get(gateway.URL + "/test")
 		require.NoError(t, err)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 	}
 
 	resp, err := client.Get(gateway.URL + "/test")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)

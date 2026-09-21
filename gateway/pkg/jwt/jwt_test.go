@@ -116,7 +116,7 @@ func TestNewValidator_Algorithms(t *testing.T) {
 		{"HS256", "HS256"},
 		{"HS384", "HS384"},
 		{"HS512", "HS512"},
-		{"hs256", "HS256"}, // lowercase
+		{"hs256", "HS256"},   // lowercase
 		{"invalid", "HS256"}, // defaults to HS256
 	}
 

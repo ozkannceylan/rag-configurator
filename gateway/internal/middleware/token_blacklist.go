@@ -109,7 +109,7 @@ func (c *redisClient) Get(ctx context.Context, key string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("connect redis: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	deadline := time.Now().Add(c.ioTimeout)
 	if ctxDeadline, ok := ctx.Deadline(); ok {

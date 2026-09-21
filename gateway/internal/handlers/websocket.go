@@ -39,7 +39,7 @@ func WebSocketProxy(targetURL string, allowedOrigins ...string) gin.HandlerFunc 
 				Msg("Failed to upgrade client connection to WebSocket")
 			return
 		}
-		defer clientConn.Close()
+		defer func() { _ = clientConn.Close() }()
 
 		// Build backend WebSocket URL
 		backendURL, err := buildWebSocketURL(targetURL, c.Request)
@@ -48,7 +48,10 @@ func WebSocketProxy(targetURL string, allowedOrigins ...string) gin.HandlerFunc 
 				Err(err).
 				Str("target_url", targetURL).
 				Msg("Failed to build backend WebSocket URL")
-			clientConn.WriteMessage(websocket.CloseMessage,
+			// The WebSocket handshake already completed, so the HTTP response is
+			// committed: a failed close frame just means the client is gone too,
+			// and we return either way.
+			_ = clientConn.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "Failed to connect to backend"))
 			return
 		}
@@ -71,18 +74,19 @@ func WebSocketProxy(targetURL string, allowedOrigins ...string) gin.HandlerFunc 
 			closeCode := websocket.CloseInternalServerErr
 			closeMessage := "Backend connection failed"
 			if resp != nil {
-				if resp.StatusCode == http.StatusUnauthorized {
+				switch resp.StatusCode {
+				case http.StatusUnauthorized:
 					closeCode = websocket.ClosePolicyViolation
 					closeMessage = "Unauthorized"
-				} else if resp.StatusCode == http.StatusServiceUnavailable {
+				case http.StatusServiceUnavailable:
 					closeMessage = "Backend unavailable"
 				}
 			}
-			clientConn.WriteMessage(websocket.CloseMessage,
+			_ = clientConn.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(closeCode, closeMessage))
 			return
 		}
-		defer backendConn.Close()
+		defer func() { _ = backendConn.Close() }()
 
 		log.Info().
 			Str("client_ip", c.ClientIP()).
@@ -219,8 +223,10 @@ func proxyMessages(src, dst *websocket.Conn, direction string, onClose func()) {
 					Str("direction", direction).
 					Msg("WebSocket read error")
 			}
-			// Send close message to the other end
-			dst.WriteMessage(websocket.CloseMessage,
+			// Send close message to the other end. The pump is terminating
+			// regardless, and the peer may already be gone, so a write failure
+			// here is not actionable.
+			_ = dst.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			return
 		}

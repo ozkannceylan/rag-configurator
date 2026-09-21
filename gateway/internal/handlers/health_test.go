@@ -67,19 +67,19 @@ func TestHealthDetailed_AllHealthy(t *testing.T) {
 	// Create mock backend servers that return healthy
 	configBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		w.Write([]byte(`{"status":"healthy"}`))
+		_, _ = w.Write([]byte(`{"status":"healthy"}`))
 	}))
 	defer configBackend.Close()
 
 	ingestionBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		w.Write([]byte(`{"status":"healthy"}`))
+		_, _ = w.Write([]byte(`{"status":"healthy"}`))
 	}))
 	defer ingestionBackend.Close()
 
 	ragBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		w.Write([]byte(`{"status":"healthy"}`))
+		_, _ = w.Write([]byte(`{"status":"healthy"}`))
 	}))
 	defer ragBackend.Close()
 
@@ -117,7 +117,7 @@ func TestHealthDetailed_SomeDegraded(t *testing.T) {
 	// Create one healthy backend and two unhealthy
 	configBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		w.Write([]byte(`{"status":"healthy"}`))
+		_, _ = w.Write([]byte(`{"status":"healthy"}`))
 	}))
 	defer configBackend.Close()
 
@@ -193,7 +193,7 @@ func TestHealthDetailed_BackendReturnsNon2xx(t *testing.T) {
 	// Create a backend that returns 500
 	unhealthyBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
-		w.Write([]byte(`{"status":"error"}`))
+		_, _ = w.Write([]byte(`{"status":"error"}`))
 	}))
 	defer unhealthyBackend.Close()
 
@@ -227,7 +227,7 @@ func TestHealthDetailed_BackendReturnsNon2xx(t *testing.T) {
 func TestCheckService_Healthy(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		w.Write([]byte(`{"status":"healthy"}`))
+		_, _ = w.Write([]byte(`{"status":"healthy"}`))
 	}))
 	defer backend.Close()
 
@@ -267,7 +267,7 @@ func TestCheckBackends_Concurrent(t *testing.T) {
 	createHealthyBackend := func() *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(200)
-			w.Write([]byte(`{"status":"healthy"}`))
+			_, _ = w.Write([]byte(`{"status":"healthy"}`))
 		}))
 	}
 
