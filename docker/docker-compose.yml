@@ -1,8 +1,6 @@
 # Development Docker Compose
 # Full stack for local development
 
-version: '3.8'
-
 services:
   # ==========================================
   # Infrastructure Services
@@ -80,8 +78,8 @@ services:
   
   config-service:
     build:
-      context: ../services/config-service
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: services/config-service/Dockerfile
     container_name: rag-config-service-dev
     ports:
       - "8001:8001"
@@ -114,8 +112,8 @@ services:
 
   ingestion-service:
     build:
-      context: ../services/ingestion-service
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: services/ingestion-service/Dockerfile
     container_name: rag-ingestion-service-dev
     ports:
       - "8002:8002"
@@ -146,8 +144,8 @@ services:
 
   celery-worker:
     build:
-      context: ../services/ingestion-service
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: services/ingestion-service/Dockerfile
     container_name: rag-celery-worker-dev
     command: celery -A app.core.celery_app worker --loglevel=info
     environment:
@@ -170,8 +168,8 @@ services:
 
   rag-service:
     build:
-      context: ../services/rag-service
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: services/rag-service/Dockerfile
     container_name: rag-rag-service-dev
     ports:
       - "8003:8003"

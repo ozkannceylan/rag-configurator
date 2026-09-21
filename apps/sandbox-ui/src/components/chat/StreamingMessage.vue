@@ -105,7 +105,7 @@ interface Props {
   sources: Source[]
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 
 const showSourcesPanel = ref(false)
 

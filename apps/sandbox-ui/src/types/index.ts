@@ -123,7 +123,7 @@ export interface AgentConfig {
   max_iterations: number
   enable_streaming: boolean
   temperature_override?: number
-  config?: Record<string, any>
+  config?: Record<string, unknown>
 }
 
 export interface PromptsConfig {
@@ -149,6 +149,8 @@ export interface Source {
     folder_path: string
     chunk_index: number
     page?: number
+    /** Rank before reranking, present only when a reranker ran. */
+    original_rank?: number
   }
   source_type: 'vector' | 'keyword' | 'graph'
 }
@@ -158,9 +160,9 @@ export interface DebugStep {
   name: string
   status: 'running' | 'completed' | 'failed'
   duration_ms: number
-  input?: any
-  output?: any
-  metadata?: Record<string, any>
+  input?: unknown
+  output?: unknown
+  metadata?: Record<string, unknown>
   timestamp: Date
 }
 
@@ -177,7 +179,7 @@ export type StreamEventType = 'token' | 'source' | 'step' | 'done' | 'error'
 
 export interface StreamEvent {
   type: StreamEventType
-  content?: string | Source | DebugStep | any
+  content?: string | Source | DebugStep
 }
 
 // Agent response types

@@ -140,13 +140,14 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { configApi, ingestApi } from '@/api/configs'
-import type { RAGConfig } from '@/types'
+import { apiErrorMessage } from '@/api/errors'
+import type { IngestionStatus, RAGConfig } from '@/types'
 
 const router = useRouter()
 const route = useRoute()
 
 const config = ref<RAGConfig | null>(null)
-const ingestionStatus = ref<any>(null)
+const ingestionStatus = ref<IngestionStatus | null>(null)
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 const pollInterval = ref<number | null>(null)
@@ -169,9 +170,9 @@ async function loadConfig() {
   try {
     config.value = await configApi.get(configId)
     await checkIngestionStatus()
-  } catch (err: any) {
+  } catch (err) {
     console.error('Failed to load config:', err)
-    loadError.value = err.response?.data?.message || 'Failed to load configuration'
+    loadError.value = apiErrorMessage(err) ?? 'Failed to load configuration'
   } finally {
     loading.value = false
   }
@@ -193,7 +194,7 @@ async function checkIngestionStatus() {
         pollInterval.value = null
       }
     }
-  } catch (err) {
+  } catch {
     // No ingestion started yet
   }
 }

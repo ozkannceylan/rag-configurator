@@ -122,6 +122,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useWizardStore } from '@/stores/wizard'
+import type { AgentConfig } from '@/types'
 
 const wizardStore = useWizardStore()
 const config = wizardStore.config
@@ -136,11 +137,11 @@ interface ConfigField {
   label: string
   description: string
   type: string
-  default?: any
+  default?: string | number | boolean
 }
 
 interface AgentTemplate {
-  id: string
+  id: AgentConfig['template']
   name: string
   icon: string
   description: string
@@ -260,8 +261,8 @@ const templateConfigFields = computed(() => {
   return selectedTemplate.value?.configFields || []
 })
 
-function selectTemplate(templateId: string) {
-  config.agent.template = templateId as any
+function selectTemplate(templateId: AgentConfig['template']) {
+  config.agent.template = templateId
   
   // Initialize config object if it has fields
   const template = agentTemplates.find(t => t.id === templateId)

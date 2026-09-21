@@ -217,6 +217,7 @@
 import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import apiClient from '@/api/client'
+import type { RAGConfig } from '@/types'
 
 interface TemplateSummary {
   id: string
@@ -230,7 +231,7 @@ interface TemplateSummary {
 }
 
 interface TemplateDetail extends TemplateSummary {
-  config_snapshot: Record<string, any>
+  config_snapshot: Partial<RAGConfig>
 }
 
 const router = useRouter()
@@ -259,7 +260,7 @@ const categories = [
 async function fetchTemplates() {
   loading.value = true
   try {
-    const params: Record<string, any> = {
+    const params: Record<string, string | number> = {
       page: page.value,
       page_size: pageSize,
     }

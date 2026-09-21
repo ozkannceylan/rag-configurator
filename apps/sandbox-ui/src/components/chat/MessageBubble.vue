@@ -89,7 +89,6 @@
       <div
         v-if="message.role === 'assistant'"
         class="flex items-center gap-2 mt-2"
-        :class="message.role === 'user' ? 'justify-end' : ''"
       >
         <button
           @click="copyToClipboard"
@@ -105,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import {
   UserIcon,
   SparklesIcon,

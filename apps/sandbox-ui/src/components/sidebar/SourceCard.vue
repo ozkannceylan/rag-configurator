@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { NCard, NTag, NProgress, NButton, NSpace, NText, NCollapse, NCollapseItem } from 'naive-ui'
-import { ChevronDown, ChevronUp, DocumentText, FileTrayFull, Image, DocumentAttach } from '@vicons/ionicons5'
+import { NCard, NTag, NProgress, NButton, NSpace, NText } from 'naive-ui'
+import type { TagProps } from 'naive-ui'
+import { ChevronDown, ChevronUp } from '@vicons/ionicons5'
 import type { Source } from '@/types'
 
 interface Props {
@@ -32,21 +33,13 @@ const sourceTypeLabel = computed(() => {
   return labels[props.source.source_type] || props.source.source_type
 })
 
-const sourceTypeColor = computed(() => {
-  const colors: Record<string, string> = {
+const sourceTypeColor = computed<TagProps['type']>(() => {
+  const colors: Record<string, TagProps['type']> = {
     vector: 'success',
     keyword: 'warning',
     graph: 'info',
   }
   return colors[props.source.source_type] || 'default'
-})
-
-const fileIcon = computed(() => {
-  const ext = props.source.metadata.file_name.split('.').pop()?.toLowerCase()
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext || '')) return Image
-  if (['pdf'].includes(ext || '')) return DocumentAttach
-  if (['doc', 'docx'].includes(ext || '')) return FileTrayFull
-  return DocumentText
 })
 
 const toggleExpand = () => {
@@ -94,7 +87,7 @@ const getFileName = (path: string) => {
           :percentage="scorePercentage"
           :color="scoreColor"
           :show-indicator="false"
-          height="4"
+          :height="4"
           processing
         />
       </div>

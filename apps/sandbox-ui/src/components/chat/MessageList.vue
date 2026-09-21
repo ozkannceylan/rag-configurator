@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, watch, nextTick, onMounted } from 'vue'
 import { ArrowDownIcon } from '@heroicons/vue/24/outline'
 import type { Message, Source } from '@/types'
 import MessageBubble from './MessageBubble.vue'

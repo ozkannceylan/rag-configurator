@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { configApi } from '@/api/configs'
 import type { RAGConfig, PaginatedResponse } from '@/types'
+import { apiErrorMessage } from '@/api/errors'
 
 export const useConfigStore = defineStore('config', () => {
   // State
@@ -21,8 +22,8 @@ export const useConfigStore = defineStore('config', () => {
       configs.value = response.items
       total.value = response.total
       return response
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch configs'
+    } catch (err) {
+      error.value = apiErrorMessage(err) ?? 'Failed to fetch configs'
       throw err
     } finally {
       loading.value = false
@@ -37,8 +38,8 @@ export const useConfigStore = defineStore('config', () => {
       const config = await configApi.get(id)
       currentConfig.value = config
       return config
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch config'
+    } catch (err) {
+      error.value = apiErrorMessage(err) ?? 'Failed to fetch config'
       throw err
     } finally {
       loading.value = false
@@ -53,8 +54,8 @@ export const useConfigStore = defineStore('config', () => {
       const config = await configApi.create(data)
       configs.value.unshift(config)
       return config
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to create config'
+    } catch (err) {
+      error.value = apiErrorMessage(err) ?? 'Failed to create config'
       throw err
     } finally {
       loading.value = false
@@ -75,8 +76,8 @@ export const useConfigStore = defineStore('config', () => {
         currentConfig.value = config
       }
       return config
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to update config'
+    } catch (err) {
+      error.value = apiErrorMessage(err) ?? 'Failed to update config'
       throw err
     } finally {
       loading.value = false
@@ -93,8 +94,8 @@ export const useConfigStore = defineStore('config', () => {
       if (currentConfig.value?.id === id) {
         currentConfig.value = null
       }
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to delete config'
+    } catch (err) {
+      error.value = apiErrorMessage(err) ?? 'Failed to delete config'
       throw err
     } finally {
       loading.value = false
@@ -109,8 +110,8 @@ export const useConfigStore = defineStore('config', () => {
       const config = await configApi.duplicate(id)
       configs.value.unshift(config)
       return config
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to duplicate config'
+    } catch (err) {
+      error.value = apiErrorMessage(err) ?? 'Failed to duplicate config'
       throw err
     } finally {
       loading.value = false

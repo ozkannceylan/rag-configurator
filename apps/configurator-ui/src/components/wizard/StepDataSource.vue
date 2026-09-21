@@ -215,8 +215,6 @@ import type { FolderStructure, FolderConfig } from '@/types'
 const wizardStore = useWizardStore()
 const config = wizardStore.config
 
-const availableFileTypes = ['pdf', 'txt', 'md', 'docx', 'json', 'csv', 'html']
-
 const basePath = computed({
   get: () => config.data_source?.base_path || '',
   set: (val: string) => {
@@ -256,18 +254,6 @@ function setDataSourceType(type: 'local' | 's3') {
   } else {
     config.data_source.type = type
   }
-  validateStep()
-}
-
-function toggleFileType(type: string) {
-  // File types are now per-folder in the FolderConfig, but we'll keep a simple UI
-  // For now, update all folders' file_patterns
-  const folders = config.data_source.folders || []
-  folders.forEach(folder => {
-    if (!folder.file_patterns) {
-      folder.file_patterns = ['*']
-    }
-  })
   validateStep()
 }
 

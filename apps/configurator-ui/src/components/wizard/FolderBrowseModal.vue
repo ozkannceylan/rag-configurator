@@ -132,6 +132,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { configApi, type BrowseEntry } from '@/api/configs'
+import { errorMessage } from '@/api/errors'
 
 const props = defineProps<{
   show: boolean
@@ -166,9 +167,8 @@ async function navigateTo(path: string) {
     currentPath.value = response.current_path
     parentPath.value = response.parent_path
     entries.value = response.entries
-  } catch (err: any) {
-    const detail = err.response?.data?.detail || err.message || 'Failed to browse'
-    error.value = detail
+  } catch (err) {
+    error.value = errorMessage(err, 'Failed to browse')
     entries.value = []
   } finally {
     loading.value = false

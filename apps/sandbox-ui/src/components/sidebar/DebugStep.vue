@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { NCard, NTag, NSpace, NText, NButton, NCollapse, NCollapseItem, NCode, NIcon } from 'naive-ui'
+import { NCard, NTag, NSpace, NText, NButton, NCode, NIcon } from 'naive-ui'
+import type { TagProps } from 'naive-ui'
 import { ChevronDown, ChevronUp, Time, PlayCircle, CheckmarkCircle, CloseCircle } from '@vicons/ionicons5'
 import type { DebugStep } from '@/types'
 
@@ -14,9 +15,15 @@ const props = defineProps<Props>()
 const isExpanded = ref(false)
 
 const statusConfig = computed(() => {
-  const configs = {
+  const configs: Record<DebugStep['status'], {
+    color: TagProps['type']
+    icon: typeof PlayCircle
+    bgColor: string
+    borderColor: string
+  }> = {
     running: {
-      color: 'processing',
+      // naive-ui has no 'processing' tag type; 'info' is its blue equivalent.
+      color: 'info',
       icon: PlayCircle,
       bgColor: '#e6f7ff',
       borderColor: '#1890ff',
@@ -69,7 +76,7 @@ const toggleExpand = () => {
   isExpanded.value = !isExpanded.value
 }
 
-const formatJSON = (data: any) => {
+const formatJSON = (data: unknown) => {
   return JSON.stringify(data, null, 2)
 }
 </script>

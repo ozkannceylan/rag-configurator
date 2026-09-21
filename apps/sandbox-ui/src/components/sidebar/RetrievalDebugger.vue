@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { NCard, NTag, NProgress, NSpace, NText, NEmpty, NButton, NIcon } from 'naive-ui'
+import { NTag, NProgress, NSpace, NText, NEmpty, NButton, NIcon } from 'naive-ui'
 import { ChevronDown, ChevronUp } from '@vicons/ionicons5'
 import { useChatStore } from '@/stores/chat'
 import type { Source } from '@/types'
@@ -135,7 +135,7 @@ function getFileName(source: Source): string {
               :percentage="Math.round(source.score * 100)"
               :color="scoreColor(source.score)"
               :show-indicator="false"
-              height="6"
+              :height="6"
               :border-radius="3"
             />
           </div>

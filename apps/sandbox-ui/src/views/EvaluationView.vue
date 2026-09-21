@@ -210,6 +210,16 @@ interface QueryScore {
   context_recall: number
 }
 
+/** A per-query score row as the evaluation endpoint sends it. */
+interface RawQueryScore {
+  query?: string
+  question?: string
+  faithfulness?: number
+  answer_relevancy?: number
+  context_precision?: number
+  context_recall?: number
+}
+
 interface EvaluationRun {
   date: string
   faithfulness: number
@@ -275,7 +285,7 @@ async function runEvaluation() {
     if (data.scores || data.results) {
       const scores = data.scores || data.results
       const queryScores: QueryScore[] = Array.isArray(scores)
-        ? scores.map((s: any) => ({
+        ? scores.map((s: RawQueryScore) => ({
             query: s.query || s.question || '',
             faithfulness: s.faithfulness ?? 0,
             answer_relevancy: s.answer_relevancy ?? 0,
@@ -322,7 +332,7 @@ async function runEvaluation() {
         average: (faith + relev + prec + rec) / 4,
       })
     }
-  } catch (err: any) {
+  } catch (err) {
     // If the evaluation endpoint doesn't exist yet, show a mock result
     console.error('Evaluation request failed:', err)
 

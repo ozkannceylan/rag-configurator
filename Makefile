@@ -31,17 +31,17 @@ dev: dev-up
 	@echo "  Redis Commander: http://localhost:8082"
 
 dev-up:
-	docker-compose up -d
+	docker compose up -d
 
 dev-down:
-	docker-compose down
+	docker compose down
 
 dev-logs:
-	docker-compose logs -f
+	docker compose logs -f
 
 # Build
 build:
-	docker-compose build
+	docker compose build
 
 # Testing
 test: test-python test-go test-ui
@@ -117,4 +117,4 @@ clean:
 	find . -type d -name "node_modules" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "dist" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
-	docker-compose down -v --remove-orphans
+	docker compose down -v --remove-orphans

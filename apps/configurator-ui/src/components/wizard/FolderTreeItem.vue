@@ -40,7 +40,7 @@
         :key="child.path"
         :item="child"
         :selected="selected"
-        @toggle="$emit('toggle', $event)"
+        @toggle="(path: string, isSelected: boolean) => $emit('toggle', path, isSelected)"
       />
     </div>
   </div>

@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
@@ -25,5 +26,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+  },
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'lcov'],
+      include: ['src/**/*.{ts,vue}'],
+      exclude: ['src/**/*.{test,spec}.ts', 'src/env.d.ts', 'src/main.ts'],
+    },
   },
 })

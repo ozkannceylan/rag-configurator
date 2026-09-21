@@ -159,7 +159,8 @@ export interface AgentConfig {
   max_iterations: number
   enable_judge?: boolean
   judge_llm?: LLMConfig
-  config?: Record<string, any>
+  temperature_override?: number
+  config?: Record<string, string | number | boolean>
 }
 
 export interface PromptsConfig {
@@ -201,6 +202,11 @@ export interface IngestionStatus {
   status: 'pending' | 'processing' | 'completed' | 'failed'
   progress: number
   current_step: string
+  // Flat counters returned by newer ingestion responses; older ones nest them
+  // under `stats`, which is why the views read both.
+  processed_files?: number
+  failed_files?: number
+  total_chunks?: number
   stats?: {
     files_processed: number
     failed_files?: number
@@ -228,4 +234,27 @@ export interface FolderStructure {
   type: 'folder' | 'file'
   children?: FolderStructure[]
   file_count?: number
+}
+
+/**
+ * The shape the configuration wizard works with.
+ *
+ * `RAGConfig` marks many sections optional because a config coming back from
+ * the API may omit them. The wizard never sees a config in that state: the
+ * store seeds every section from its defaults and merges any loaded config on
+ * top of them (see `hydrateConfig` in `stores/wizard.ts`), so each step can
+ * bind straight to `config.<section>.<field>` without guards.
+ */
+export type WizardConfig = RAGConfig & {
+  rbac: RBACConfig
+  models: ModelsConfig & {
+    document_processing: DocumentProcessingConfig
+  }
+  retrieval: RetrievalConfig & {
+    keyword: NonNullable<RetrievalConfig['keyword']>
+    graph: NonNullable<RetrievalConfig['graph']>
+  }
+  agent: AgentConfig & {
+    config: Record<string, string | number | boolean>
+  }
 }

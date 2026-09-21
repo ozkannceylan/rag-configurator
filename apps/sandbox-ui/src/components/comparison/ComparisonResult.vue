@@ -70,7 +70,7 @@ interface ComparisonResultData {
   sources: Array<{
     content: string
     score: number
-    metadata: Record<string, any>
+    metadata: { file_name?: string;[key: string]: unknown }
   }>
   tokenCount: number | null
   error?: string

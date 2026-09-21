@@ -239,7 +239,7 @@ async function saveDraft() {
       addToast('Configuration saved successfully', 'success')
       router.push('/')
     }
-  } catch (error) {
+  } catch {
     saveError.value = 'Failed to save configuration. Please try again.'
     addToast('Failed to save configuration', 'error')
   }
@@ -254,7 +254,7 @@ async function saveAndRun() {
       addToast('Configuration saved — ingestion started', 'success')
       router.push(`/config/${result.id}`)
     }
-  } catch (error) {
+  } catch {
     saveError.value = 'Failed to save configuration. Please try again.'
     addToast('Failed to save configuration', 'error')
   }

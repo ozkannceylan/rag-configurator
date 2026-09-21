@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useConfigStore } from './config'
-import type { RAGConfig } from '@/types'
+import type { RAGConfig, WizardConfig } from '@/types'
 
-const defaultConfig: Partial<RAGConfig> = {
+const defaultConfig: WizardConfig = {
   name: '',
   description: '',
   data_source: {
@@ -68,6 +68,7 @@ const defaultConfig: Partial<RAGConfig> = {
     template: 'naive_rag',
     max_iterations: 5,
     enable_judge: false,
+    config: {},
   },
   prompts: {
     system_prompt: 'You are a helpful assistant that answers questions based on the provided context.',
@@ -75,11 +76,52 @@ const defaultConfig: Partial<RAGConfig> = {
   },
 }
 
+/**
+ * Merge a (possibly partial) config over the wizard defaults so every section
+ * the steps bind to is present. Saved configs may omit optional sections such
+ * as `rbac` or `retrieval.graph`; without this the steps would bind to
+ * `undefined` and throw on the first keystroke.
+ */
+function hydrateConfig(partial: Partial<RAGConfig> = {}): WizardConfig {
+  const base: WizardConfig = JSON.parse(JSON.stringify(defaultConfig))
+
+  return {
+    ...base,
+    ...partial,
+    data_source: { ...base.data_source, ...partial.data_source },
+    rbac: { ...base.rbac, ...partial.rbac },
+    models: {
+      ...base.models,
+      ...partial.models,
+      llm: { ...base.models.llm, ...partial.models?.llm },
+      embedding: { ...base.models.embedding, ...partial.models?.embedding },
+      document_processing: {
+        ...base.models.document_processing,
+        ...partial.models?.document_processing,
+      },
+    },
+    retrieval: {
+      ...base.retrieval,
+      ...partial.retrieval,
+      vector: { ...base.retrieval.vector, ...partial.retrieval?.vector },
+      keyword: { ...base.retrieval.keyword, ...partial.retrieval?.keyword },
+      graph: { ...base.retrieval.graph, ...partial.retrieval?.graph },
+    },
+    chunking: { ...base.chunking, ...partial.chunking },
+    agent: {
+      ...base.agent,
+      ...partial.agent,
+      config: { ...base.agent.config, ...partial.agent?.config },
+    },
+    prompts: { ...base.prompts, ...partial.prompts },
+  }
+}
+
 export const useWizardStore = defineStore('wizard', () => {
   // State
   const currentStep = ref(0)
   const totalSteps = ref(9)
-  const config = ref<Partial<RAGConfig>>(JSON.parse(JSON.stringify(defaultConfig)))
+  const config = ref<WizardConfig>(hydrateConfig())
   const stepValidation = ref<Record<number, boolean>>({
     0: false, // Data Source
     1: true,  // RBAC (optional)
@@ -128,29 +170,29 @@ export const useWizardStore = defineStore('wizard', () => {
   }
 
   function updateConfig(partial: Partial<RAGConfig>) {
-    config.value = { ...config.value, ...partial }
+    config.value = hydrateConfig({ ...config.value, ...partial })
     validateCurrentStep()
   }
 
   function validateCurrentStep() {
     // Always validate step 0 and 8 since they depend on shared config state
     stepValidation.value[0] = !!(
-      config.value.data_source?.folders?.length > 0 &&
-      config.value.data_source?.base_path
+      config.value.data_source.folders.length > 0 &&
+      config.value.data_source.base_path
     )
     stepValidation.value[8] = !!(config.value.name && config.value.name.trim())
   }
 
   // Re-validate whenever config changes (name, folders, etc.)
   watch(
-    () => [config.value.name, config.value.data_source?.folders?.length, config.value.data_source?.base_path],
+    () => [config.value.name, config.value.data_source.folders.length, config.value.data_source.base_path],
     () => validateCurrentStep(),
     { deep: true }
   )
 
   function resetWizard() {
     currentStep.value = 0
-    config.value = JSON.parse(JSON.stringify(defaultConfig))
+    config.value = hydrateConfig()
     isEditing.value = false
     configId.value = null
     
@@ -167,7 +209,7 @@ export const useWizardStore = defineStore('wizard', () => {
     const existingConfig = await configStore.fetchConfig(id)
     
     if (existingConfig) {
-      config.value = JSON.parse(JSON.stringify(existingConfig))
+      config.value = hydrateConfig(existingConfig)
       configId.value = id
       isEditing.value = true
       currentStep.value = 0

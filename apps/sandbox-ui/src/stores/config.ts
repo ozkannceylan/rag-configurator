@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { RAGConfig, RAGConfigSummary } from '@/types'
 import { configApi } from '@/api/configs'
+import { apiErrorMessage } from '@/api/errors'
 
 export const useConfigStore = defineStore('config', () => {
   // State
@@ -32,8 +33,8 @@ export const useConfigStore = defineStore('config', () => {
       if (lastConfigId) {
         await selectConfigById(lastConfigId)
       }
-    } catch (err: any) {
-      error.value = err.response?.data?.error?.message || 'Failed to load configs'
+    } catch (err) {
+      error.value = apiErrorMessage(err) ?? 'Failed to load configs'
     } finally {
       loading.value = false
     }
@@ -58,7 +59,7 @@ export const useConfigStore = defineStore('config', () => {
     try {
       const fullConfig = await configApi.get(id)
       selectConfig(fullConfig)
-    } catch (err) {
+    } catch {
       // Fallback to summary when full config fails to load
       selectConfig(summary as unknown as RAGConfig)
     }

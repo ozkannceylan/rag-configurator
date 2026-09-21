@@ -314,6 +314,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useWizardStore } from '@/stores/wizard'
+import type { EmbeddingConfig, LLMConfig } from '@/types'
 import axios from 'axios'
 
 const wizardStore = useWizardStore()
@@ -330,8 +331,8 @@ const ollamaEmbError = ref('')
 async function fetchOllamaModels(baseUrl: string): Promise<string[]> {
   const url = baseUrl.replace(/\/+$/, '')
   const response = await axios.get(`${url}/api/tags`)
-  const models = response.data?.models || []
-  return models.map((m: any) => m.name || m.model).filter(Boolean)
+  const models: Array<{ name?: string; model?: string }> = response.data?.models || []
+  return models.map((m) => m.name || m.model).filter((name): name is string => Boolean(name))
 }
 
 async function fetchOllamaLLMModels() {
@@ -364,14 +365,14 @@ async function fetchOllamaEmbeddingModels() {
   }
 }
 
-const llmProviders = [
+const llmProviders: { id: LLMConfig['provider']; name: string; icon: string }[] = [
   { id: 'openai', name: 'OpenAI', icon: '🅾️' },
   { id: 'anthropic', name: 'Anthropic', icon: '🅰️' },
   { id: 'ollama', name: 'Ollama', icon: '🦙' },
   { id: 'vllm', name: 'vLLM', icon: '⚡' },
 ]
 
-const embeddingProviders = [
+const embeddingProviders: { id: EmbeddingConfig['provider']; name: string; icon: string }[] = [
   { id: 'openai', name: 'OpenAI', icon: '🅾️' },
   { id: 'ollama', name: 'Ollama', icon: '🦙' },
   { id: 'huggingface', name: 'HuggingFace', icon: '🤗' },
@@ -396,8 +397,8 @@ const defaultEmbeddingModels: Record<string, string> = {
   jina: 'jina-embeddings-v2-base-en',
 }
 
-function setLLMProvider(provider: string) {
-  config.models.llm.provider = provider as any
+function setLLMProvider(provider: LLMConfig['provider']) {
+  config.models.llm.provider = provider
   config.models.llm.model_name = defaultLLMModels[provider]
   
   // Set provider-specific defaults
@@ -410,8 +411,8 @@ function setLLMProvider(provider: string) {
   }
 }
 
-function setEmbeddingProvider(provider: string) {
-  config.models.embedding.provider = provider as any
+function setEmbeddingProvider(provider: EmbeddingConfig['provider']) {
+  config.models.embedding.provider = provider
   config.models.embedding.model_name = defaultEmbeddingModels[provider]
   
   // Set provider-specific defaults

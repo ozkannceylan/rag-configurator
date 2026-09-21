@@ -121,6 +121,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import apiClient from '@/api/client'
 import ComparisonResult from '@/components/comparison/ComparisonResult.vue'
+import { errorMessage } from '@/api/errors'
 
 interface ComparisonResultData {
   response: string
@@ -128,7 +129,7 @@ interface ComparisonResultData {
   sources: Array<{
     content: string
     score: number
-    metadata: Record<string, any>
+    metadata: { file_name?: string;[key: string]: unknown }
   }>
   tokenCount: number | null
   error?: string
@@ -176,14 +177,14 @@ async function queryConfig(configId: string): Promise<ComparisonResultData> {
       sources: data.sources || [],
       tokenCount: data.metadata?.tokens_used ?? data.debug?.tokens_used ?? null,
     }
-  } catch (err: any) {
+  } catch (err) {
     const elapsed = Math.round(performance.now() - startTime)
     return {
       response: '',
       responseTime: elapsed,
       sources: [],
       tokenCount: null,
-      error: err.response?.data?.detail || err.message || 'Request failed',
+      error: errorMessage(err, 'Request failed'),
     }
   }
 }

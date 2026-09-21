@@ -139,9 +139,17 @@ const streamingSubtitle = computed(() => {
 // Sub-components
 import { h } from 'vue'
 
+interface PipelineNodeProps {
+  icon?: string
+  title?: string
+  subtitle?: string
+  color?: string
+  small?: boolean
+}
+
 const PipelineNode = {
   props: ['icon', 'title', 'subtitle', 'color', 'small'],
-  setup(props: any) {
+  setup(props: PipelineNodeProps) {
     const colorClasses: Record<string, string> = {
       blue: 'bg-blue-100 border-blue-300 text-blue-800',
       purple: 'bg-purple-100 border-purple-300 text-purple-800',
@@ -155,7 +163,7 @@ const PipelineNode = {
     return () => h('div', {
       class: [
         'flex items-center gap-3 px-4 py-3 rounded-lg border-2 min-w-[200px]',
-        colorClasses[props.color] || colorClasses.gray,
+        (props.color && colorClasses[props.color]) || colorClasses.gray,
         props.small ? 'scale-90' : ''
       ]
     }, [

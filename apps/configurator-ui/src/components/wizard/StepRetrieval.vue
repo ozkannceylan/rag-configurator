@@ -212,11 +212,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useWizardStore } from '@/stores/wizard'
+import type { ChunkingConfig, RetrievalConfig } from '@/types'
 
 const wizardStore = useWizardStore()
 const config = wizardStore.config
 
-const chunkingStrategies = [
+const chunkingStrategies: { id: ChunkingConfig['strategy']; name: string; description: string }[] = [
   {
     id: 'recursive',
     name: 'Recursive',
@@ -244,7 +245,7 @@ const chunkingStrategies = [
   },
 ]
 
-const retrievalMethods = [
+const retrievalMethods: { id: RetrievalConfig['method']; name: string; description: string }[] = [
   { 
     id: 'naive', 
     name: 'Vector Only', 
@@ -292,8 +293,8 @@ const usesGraph = computed(() => {
   return ['graph', 'hybrid_graph'].includes(config.retrieval.method)
 })
 
-function setRetrievalMethod(method: string) {
-  config.retrieval.method = method as any
+function setRetrievalMethod(method: RetrievalConfig['method']) {
+  config.retrieval.method = method
   
   // Auto-enable graph if graph method selected
   if (['graph', 'hybrid_graph'].includes(method)) {

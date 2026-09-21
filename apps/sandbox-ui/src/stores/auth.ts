@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User, TokenResponse, LoginRequest } from '@/types'
 import { authApi } from '@/api/auth'
+import { apiErrorMessage } from '@/api/errors'
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -23,8 +24,8 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await authApi.login(credentials)
       setTokens(response)
       return true
-    } catch (err: any) {
-      error.value = err.response?.data?.error?.message || 'Login failed'
+    } catch (err) {
+      error.value = apiErrorMessage(err) ?? 'Login failed'
       return false
     } finally {
       loading.value = false

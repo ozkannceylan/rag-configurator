@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useConfigStore } from '@/stores/config'
-import type { RAGConfigSummary } from '@/types'
 
 const configStore = useConfigStore()
 

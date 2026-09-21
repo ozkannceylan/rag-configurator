@@ -1,4 +1,9 @@
-import axios, { AxiosError, AxiosInstance } from 'axios'
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
+
+/** A request we may replay once after refreshing the access token. */
+interface RetryableRequestConfig extends InternalAxiosRequestConfig {
+  _retry?: boolean
+}
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -47,13 +52,13 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config
+    const originalRequest = error.config as RetryableRequestConfig | undefined
 
     if (error.response?.status === 401 && originalRequest) {
       const refreshToken = localStorage.getItem('refresh_token')
 
-      if (refreshToken && !(originalRequest as any)._retry) {
-        ;(originalRequest as any)._retry = true
+      if (refreshToken && !originalRequest._retry) {
+        originalRequest._retry = true
         try {
           const access_token = await refreshAccessToken()
           originalRequest.headers = originalRequest.headers || {}

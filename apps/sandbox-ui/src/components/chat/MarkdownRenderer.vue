@@ -3,7 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onMounted, ref } from 'vue'
+import { watch, onMounted, ref } from 'vue'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
@@ -22,12 +22,10 @@ const props = withDefaults(defineProps<Props>(), {
 const renderedContent = ref('')
 
 // Configure marked options
+// `headerIds`, `mangle` and `sanitize` were removed in marked v12.
 marked.setOptions({
   breaks: true,
   gfm: true,
-  headerIds: false,
-  mangle: false,
-  sanitize: false,
 })
 
 // Custom renderer to add syntax highlighting and styling

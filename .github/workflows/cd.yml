@@ -18,11 +18,15 @@ env:
   REGISTRY: ghcr.io
   IMAGE_TAG: ${{ github.sha }}
 
+# Least-privilege default for every job; widened per job where needed.
+permissions:
+  contents: read
+
 jobs:
   # ==========================================
   # Build and Push Docker Images
   # ==========================================
-  
+
   build-images:
     name: Build & Push Images
     runs-on: ubuntu-latest
@@ -30,16 +34,21 @@ jobs:
       contents: read
       packages: write
     strategy:
+      fail-fast: false
       matrix:
+        # The three Python service Dockerfiles COPY `shared/python` and
+        # `services/<svc>/...`, so their build context must be the repo root.
+        # gateway/ and apps/*/ Dockerfiles only COPY paths relative to their own
+        # directory, so their context stays that directory.
         include:
           - service: config-service
-            context: services/config-service
+            context: .
             dockerfile: services/config-service/Dockerfile
           - service: ingestion-service
-            context: services/ingestion-service
+            context: .
             dockerfile: services/ingestion-service/Dockerfile
           - service: rag-service
-            context: services/rag-service
+            context: .
             dockerfile: services/rag-service/Dockerfile
           - service: gateway
             context: gateway
@@ -50,10 +59,10 @@ jobs:
           - service: sandbox-ui
             context: apps/sandbox-ui
             dockerfile: apps/sandbox-ui/Dockerfile
-    
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -70,22 +79,23 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
+          # `prefix=` produces the bare commit SHA so that the published tag
+          # matches env.IMAGE_TAG, which scan-images and the deploy jobs use.
           tags: |
-            type=sha,format=long
+            type=sha,format=long,prefix=
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=branch
-            type=ref,event=pr
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           build-args: |
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
@@ -93,7 +103,7 @@ jobs:
   # ==========================================
   # Security Scan Images
   # ==========================================
-  
+
   scan-images:
     name: Security Scan Images
     runs-on: ubuntu-latest
@@ -103,12 +113,22 @@ jobs:
       packages: read
       security-events: write
     strategy:
+      fail-fast: false
       matrix:
         service: [config-service, ingestion-service, rag-service, gateway, configurator-ui, sandbox-ui]
-    
+
     steps:
+      # Images published to GHCR are private by default; Trivy reads the Docker
+      # credential store, so it needs a registry login to pull them.
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:${{ env.IMAGE_TAG }}
           format: 'sarif'
@@ -125,19 +145,23 @@ jobs:
   # ==========================================
   # Deploy to Staging
   # ==========================================
-  
+
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: [build-images, scan-images]
     if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'staging'
+    permissions:
+      contents: read
     environment:
       name: staging
       url: https://staging.rag-configurator.example.com
-    
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -151,16 +175,16 @@ jobs:
         run: |
           # Add host to known hosts
           mkdir -p ~/.ssh
-          ssh-keyscan -H $STAGING_HOST >> ~/.ssh/known_hosts
-          
+          ssh-keyscan -H "$STAGING_HOST" >> ~/.ssh/known_hosts
+
           # Create deployment directory
-          ssh $STAGING_USER@$STAGING_HOST "mkdir -p ~/rag-configurator"
-          
+          ssh "$STAGING_USER@$STAGING_HOST" "mkdir -p ~/rag-configurator"
+
           # Copy deployment files
-          scp -r docker/docker-compose.prod.yml $STAGING_USER@$STAGING_HOST:~/rag-configurator/
-          scp -r docker/nginx $STAGING_USER@$STAGING_HOST:~/rag-configurator/
-          scp -r infrastructure $STAGING_USER@$STAGING_HOST:~/rag-configurator/
-          
+          scp -r docker/docker-compose.prod.yml "$STAGING_USER@$STAGING_HOST:~/rag-configurator/"
+          scp -r docker/nginx "$STAGING_USER@$STAGING_HOST:~/rag-configurator/"
+          scp -r infrastructure "$STAGING_USER@$STAGING_HOST:~/rag-configurator/"
+
           # Create environment file
           cat > .env.staging << EOF
           ENVIRONMENT=staging
@@ -175,25 +199,27 @@ jobs:
           ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
           CORS_ORIGINS=https://staging.rag-configurator.example.com
           EOF
-          
-          scp .env.staging $STAGING_USER@$STAGING_HOST:~/rag-configurator/.env
-          
-          # Deploy
-          ssh $STAGING_USER@$STAGING_HOST << 'EOF'
+
+          scp .env.staging "$STAGING_USER@$STAGING_HOST:~/rag-configurator/.env"
+
+          # Deploy (the docker-compose v1 binary is gone from current Docker
+          # installs - use the `docker compose` plugin everywhere).
+          ssh "$STAGING_USER@$STAGING_HOST" << 'EOF'
+            set -e
             cd ~/rag-configurator
-            
+
             # Login to registry
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
+
             # Pull latest images
-            docker-compose -f docker-compose.prod.yml pull
-            
+            docker compose -f docker-compose.prod.yml pull
+
             # Start services
-            docker-compose -f docker-compose.prod.yml up -d --remove-orphans
-            
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
             # Run migrations if needed
-            docker-compose -f docker-compose.prod.yml exec -T config-service python -m app.db.migrate || true
-            
+            docker compose -f docker-compose.prod.yml exec -T config-service python -m app.db.migrate || true
+
             # Cleanup
             docker system prune -f
           EOF
@@ -202,18 +228,20 @@ jobs:
         run: |
           # Wait for services to start
           sleep 30
-          
+
           # Test health endpoints
           curl -f https://staging.rag-configurator.example.com/health || exit 1
           curl -f https://staging.rag-configurator.example.com/api/health || exit 1
 
       - name: Notify on failure
-        if: failure()
+        # Skipped when the webhook secret is not configured, so a missing
+        # secret cannot turn an otherwise-successful run red.
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1.25.0
         with:
           payload: |
             {
-              "text": "❌ Staging deployment failed for ${{ github.repository }}",
+              "text": "Staging deployment failed for ${{ github.repository }}",
               "blocks": [
                 {
                   "type": "section",
@@ -224,25 +252,27 @@ jobs:
                 }
               ]
             }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   # ==========================================
   # Deploy to Production
   # ==========================================
-  
+
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: deploy-staging
     if: github.event.inputs.environment == 'production'
+    permissions:
+      contents: read
     environment:
       name: production
       url: https://rag-configurator.example.com
-    
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -256,16 +286,16 @@ jobs:
         run: |
           # Add host to known hosts
           mkdir -p ~/.ssh
-          ssh-keyscan -H $PRODUCTION_HOST >> ~/.ssh/known_hosts
-          
+          ssh-keyscan -H "$PRODUCTION_HOST" >> ~/.ssh/known_hosts
+
           # Create deployment directory
-          ssh $PRODUCTION_USER@$PRODUCTION_HOST "mkdir -p ~/rag-configurator"
-          
+          ssh "$PRODUCTION_USER@$PRODUCTION_HOST" "mkdir -p ~/rag-configurator"
+
           # Copy deployment files
-          scp -r docker/docker-compose.prod.yml $PRODUCTION_USER@$PRODUCTION_HOST:~/rag-configurator/
-          scp -r docker/nginx $PRODUCTION_USER@$PRODUCTION_HOST:~/rag-configurator/
-          scp -r infrastructure $PRODUCTION_USER@$PRODUCTION_HOST:~/rag-configurator/
-          
+          scp -r docker/docker-compose.prod.yml "$PRODUCTION_USER@$PRODUCTION_HOST:~/rag-configurator/"
+          scp -r docker/nginx "$PRODUCTION_USER@$PRODUCTION_HOST:~/rag-configurator/"
+          scp -r infrastructure "$PRODUCTION_USER@$PRODUCTION_HOST:~/rag-configurator/"
+
           # Create environment file
           cat > .env.production << EOF
           ENVIRONMENT=production
@@ -282,40 +312,41 @@ jobs:
           RATE_LIMIT_RPS=100
           RATE_LIMIT_BURST=200
           EOF
-          
-          scp .env.production $PRODUCTION_USER@$PRODUCTION_HOST:~/rag-configurator/.env
-          
+
+          scp .env.production "$PRODUCTION_USER@$PRODUCTION_HOST:~/rag-configurator/.env"
+
           # Deploy with zero-downtime
-          ssh $PRODUCTION_USER@$PRODUCTION_HOST << 'EOF'
+          ssh "$PRODUCTION_USER@$PRODUCTION_HOST" << 'EOF'
+            set -e
             cd ~/rag-configurator
-            
+
             # Login to registry
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
+
             # Backup database before deployment
-            docker-compose -f docker-compose.prod.yml exec -T mongodb mongodump --uri="$MONGODB_URI" --out=/data/backup/pre-deploy-$(date +%Y%m%d-%H%M%S) || true
-            
+            docker compose -f docker-compose.prod.yml exec -T mongodb mongodump --uri="$MONGODB_URI" --out=/data/backup/pre-deploy-$(date +%Y%m%d-%H%M%S) || true
+
             # Rolling update - one service at a time
             SERVICES="gateway config-service rag-service ingestion-service"
-            
+
             for SERVICE in $SERVICES; do
               echo "Updating $SERVICE..."
-              docker-compose -f docker-compose.prod.yml pull $SERVICE
-              docker-compose -f docker-compose.prod.yml up -d --no-deps $SERVICE
-              
+              docker compose -f docker-compose.prod.yml pull $SERVICE
+              docker compose -f docker-compose.prod.yml up -d --no-deps $SERVICE
+
               # Wait for health check
               sleep 10
-              
+
               # Verify health
-              if ! docker-compose -f docker-compose.prod.yml ps | grep $SERVICE | grep -q "healthy"; then
-                echo "❌ $SERVICE failed health check, rolling back..."
-                docker-compose -f docker-compose.prod.yml logs $SERVICE
+              if ! docker compose -f docker-compose.prod.yml ps | grep $SERVICE | grep -q "healthy"; then
+                echo "$SERVICE failed health check, rolling back..."
+                docker compose -f docker-compose.prod.yml logs $SERVICE
                 exit 1
               fi
-              
-              echo "✅ $SERVICE updated successfully"
+
+              echo "$SERVICE updated successfully"
             done
-            
+
             # Cleanup
             docker system prune -f
           EOF
@@ -324,24 +355,24 @@ jobs:
         run: |
           # Wait for services
           sleep 30
-          
+
           # Comprehensive health checks
           curl -f https://rag-configurator.example.com/health
           curl -f https://rag-configurator.example.com/api/health
           curl -f https://rag-configurator.example.com/api/v1/health
-          
+
           # Test auth endpoints
           curl -X POST https://rag-configurator.example.com/api/v1/auth/login \
             -H "Content-Type: application/json" \
             -d '{"email":"${{ secrets.TEST_USER_EMAIL }}","password":"${{ secrets.TEST_USER_PASSWORD }}"}'
 
       - name: Notify success
-        if: success()
+        if: success() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1.25.0
         with:
           payload: |
             {
-              "text": "✅ Production deployment successful for ${{ github.repository }}",
+              "text": "Production deployment successful for ${{ github.repository }}",
               "blocks": [
                 {
                   "type": "section",
@@ -352,16 +383,14 @@ jobs:
                 }
               ]
             }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Notify on failure
-        if: failure()
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1.25.0
         with:
           payload: |
             {
-              "text": "🚨 Production deployment failed for ${{ github.repository }}",
+              "text": "Production deployment failed for ${{ github.repository }}",
               "blocks": [
                 {
                   "type": "section",
@@ -372,33 +401,50 @@ jobs:
                 }
               ]
             }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   # ==========================================
   # Update Deployment Status
   # ==========================================
-  
+
   update-status:
     name: Update Deployment Status
     runs-on: ubuntu-latest
     needs: [deploy-staging, deploy-production]
     if: always()
-    
+    # repos.createCommitStatus needs `statuses: write`; without it the call
+    # fails with "Resource not accessible by integration".
+    permissions:
+      contents: read
+      statuses: write
+
     steps:
       - name: Create deployment record
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+          STAGING_RESULT: ${{ needs.deploy-staging.result }}
+          PRODUCTION_RESULT: ${{ needs.deploy-production.result }}
         with:
           script: |
-            const sha = context.sha;
-            const env = '${{ github.event.inputs.environment }}' || 'staging';
-            const status = '${{ needs.deploy-production.result }}' || '${{ needs.deploy-staging.result }}';
-            
-            github.rest.repos.createCommitStatus({
+            const deployEnv = process.env.DEPLOY_ENVIRONMENT;
+            const staging = process.env.STAGING_RESULT;
+            const production = process.env.PRODUCTION_RESULT;
+
+            // Production is skipped on ordinary pushes to main; fall back to
+            // the staging result rather than reporting a bogus failure.
+            const result =
+              production && production !== 'skipped' ? production : staging;
+
+            if (!result || result === 'skipped') {
+              core.info('No deployment ran; not creating a commit status.');
+              return;
+            }
+
+            await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              sha: sha,
-              state: status === 'success' ? 'success' : 'failure',
-              context: `Deploy to ${env}`,
-              description: `Deployment to ${env} ${status}`,
+              sha: context.sha,
+              state: result === 'success' ? 'success' : 'failure',
+              context: `Deploy to ${deployEnv}`,
+              description: `Deployment to ${deployEnv} ${result}`,
             });

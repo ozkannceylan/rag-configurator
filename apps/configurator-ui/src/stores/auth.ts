@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import type { User, TokenResponse } from '@/types'
+import { errorMessage, errorStatus, isNetworkError } from '@/api/errors'
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -31,15 +32,11 @@ export const useAuthStore = defineStore('auth', () => {
       await loadUser()
       
       return true
-    } catch (err: any) {
-      if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
+    } catch (err) {
+      if (isNetworkError(err)) {
         error.value = 'Cannot connect to server. Make sure the Gateway and Config Service are running.'
-      } else if (err.response?.data?.error?.message) {
-        error.value = err.response.data.error.message
-      } else if (err.response?.data?.message) {
-        error.value = err.response.data.message
       } else {
-        error.value = err.message || 'Login failed'
+        error.value = errorMessage(err, 'Login failed')
       }
       return false
     } finally {
@@ -62,15 +59,11 @@ export const useAuthStore = defineStore('auth', () => {
       await loadUser()
       
       return true
-    } catch (err: any) {
-      if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
+    } catch (err) {
+      if (isNetworkError(err)) {
         error.value = 'Cannot connect to server. Make sure the Gateway and Config Service are running.'
-      } else if (err.response?.data?.error?.message) {
-        error.value = err.response.data.error.message
-      } else if (err.response?.data?.message) {
-        error.value = err.response.data.message
       } else {
-        error.value = err.message || 'Registration failed'
+        error.value = errorMessage(err, 'Registration failed')
       }
       return false
     } finally {
@@ -81,7 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     try {
       await authApi.logout()
-    } catch (err) {
+    } catch {
       // Ignore errors on logout
     } finally {
       clearAuth()
@@ -105,9 +98,9 @@ export const useAuthStore = defineStore('auth', () => {
     
     try {
       user.value = await authApi.getMe()
-    } catch (err: any) {
+    } catch (err) {
       // If /me endpoint doesn't exist (404), don't clear auth
-      if (err.response?.status !== 404) {
+      if (errorStatus(err) !== 404) {
         clearAuth()
       }
     }
@@ -125,7 +118,7 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('refresh_token', response.refresh_token)
       
       return true
-    } catch (err) {
+    } catch {
       clearAuth()
       return false
     }
