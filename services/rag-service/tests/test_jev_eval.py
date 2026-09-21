@@ -168,6 +168,100 @@ class TestLLMParse:
         assert result.metadata["quality_1_5"] == 5.0
 
 
+class TestOllamaCloudJudge:
+    def test_no_key_returns_none(self):
+        from app.evaluation.ollama_cloud import build_ollama_cloud_llm
+
+        assert build_ollama_cloud_llm({}) is None
+
+    def test_local_base_url_still_uses_cloud_openai_compat(self):
+        from app.evaluation.ollama_cloud import (
+            DEFAULT_OLLAMA_CLOUD_OPENAI_BASE,
+            build_ollama_cloud_llm,
+        )
+        from app.llm.ollama import OllamaLLM
+        from app.llm.openai import OpenAILLM
+
+        llm = build_ollama_cloud_llm(
+            {
+                "OLLAMA_API_KEY": "ollama-test-key",
+                "OLLAMA_BASE_URL": "http://localhost:11434",
+            }
+        )
+        assert isinstance(llm, OpenAILLM)
+        assert not isinstance(llm, OllamaLLM)
+        assert llm.config.base_url == DEFAULT_OLLAMA_CLOUD_OPENAI_BASE
+        assert llm.config.model == "gpt-oss:20b"
+        assert llm.config.api_key == "ollama-test-key"
+
+    def test_ollama_com_rewritten_to_v1_not_api_v1(self):
+        from app.evaluation.ollama_cloud import normalize_openai_compat_base
+
+        assert (
+            normalize_openai_compat_base("https://ollama.com")
+            == "https://ollama.com/v1"
+        )
+        assert (
+            normalize_openai_compat_base("https://ollama.com/api/v1")
+            == "https://ollama.com/v1"
+        )
+        assert (
+            normalize_openai_compat_base("https://ollama.com/v1")
+            == "https://ollama.com/v1"
+        )
+
+    def test_override_base_and_model(self):
+        from app.evaluation.ollama_cloud import build_ollama_cloud_llm
+
+        llm = build_ollama_cloud_llm(
+            {
+                "OLLAMA_API_KEY": "k",
+                "OLLAMA_BASE_URL": "http://localhost:11434",
+                "JEV_EVAL_LLM_BASE_URL": "https://ollama.com",
+                "JEV_EVAL_LLM_MODEL": "kimi-k2:1t",
+            }
+        )
+        assert llm.config.base_url == "https://ollama.com/v1"
+        assert llm.config.model == "kimi-k2:1t"
+
+    def test_non_local_ollama_base_used(self):
+        from app.evaluation.ollama_cloud import build_ollama_cloud_llm
+
+        llm = build_ollama_cloud_llm(
+            {
+                "OLLAMA_API_KEY": "k",
+                "OLLAMA_BASE_URL": "https://ollama.com",
+            }
+        )
+        assert llm.config.base_url == "https://ollama.com/v1"
+
+    def test_host_docker_internal_is_local(self):
+        from app.evaluation.ollama_cloud import (
+            is_local_ollama_url,
+            resolve_ollama_cloud_openai_base,
+        )
+
+        assert is_local_ollama_url("http://host.docker.internal:11434")
+        assert (
+            resolve_ollama_cloud_openai_base(
+                api_key="k",
+                ollama_base_url="http://host.docker.internal:11434",
+            )
+            == "https://ollama.com/v1"
+        )
+
+    def test_quality_evaluator_prefers_ollama_cloud(self, monkeypatch):
+        from app.api.v1.evaluation import _build_evaluator
+        from app.evaluation.quality_judge import QualityJudge
+        from app.llm.openai import OpenAILLM
+
+        monkeypatch.setenv("OLLAMA_API_KEY", "ollama-test-key")
+        judge = _build_evaluator("quality", [])
+        assert isinstance(judge, QualityJudge)
+        assert isinstance(judge.llm, OpenAILLM)
+        assert judge.llm.config.base_url == "https://ollama.com/v1"
+
+
 class TestFixtures:
     def test_committed_cases_meet_minimum(self):
         cases = load_eval_cases(default_cases_path())

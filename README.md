@@ -391,7 +391,8 @@ All settings are managed through `.env`. Key variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Ollama endpoint for local LLM |
+| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Native local Ollama (`/api/chat`) |
+| `OLLAMA_API_KEY` | — | Ollama Cloud key for live LLM-as-judge (`https://ollama.com/v1`) |
 | `LOCAL_DATA_PATH` | `.` | Host folder mounted into containers for browsing |
 | `OPENAI_API_KEY` | — | OpenAI API key (if using OpenAI models) |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key (if using Claude) |

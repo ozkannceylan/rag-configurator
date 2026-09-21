@@ -58,16 +58,23 @@ Writes:
 
 ### Live compare (optional)
 
-Requires `TYPESAFE_API_KEY` and either `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Hard-stops when the USD **cost proxy** hits the cap (default `$2.00`).
+Requires `TYPESAFE_API_KEY` and **Ollama Cloud** (`OLLAMA_API_KEY`). The LLM-as-judge baseline uses the OpenAI-compatible Chat Completions API at `https://ollama.com/v1` — **not** OpenAI/Anthropic direct, and **not** native local Ollama (`POST /api/chat` on `:11434`). Hard-stops when the USD **cost proxy** hits the cap (default `$2.00`).
 
 ```bash
 export TYPESAFE_API_KEY=...
-export OPENAI_API_KEY=...
+export OLLAMA_API_KEY=...           # Ollama Cloud
+# Optional:
+# export OLLAMA_BASE_URL=https://ollama.com          # rewritten to /v1 for the judge
+# export OLLAMA_OPENAI_BASE_URL=https://ollama.com/v1
+# export JEV_EVAL_LLM_BASE_URL=https://ollama.com/v1  # highest-priority override
+# export JEV_EVAL_LLM_MODEL=gpt-oss:20b               # default cloud model
 export JEV_EVAL_LIVE=1
 export JEV_EVAL_REPEATS=10          # default 10
 export JEV_EVAL_USD_CAP=2.0         # default 2.0
 make jev-eval-compare-live
 ```
+
+If `OLLAMA_API_KEY` is set and `OLLAMA_BASE_URL` is still the local default (`http://localhost:11434`), the live judge still calls **Ollama Cloud** at `https://ollama.com/v1`. A local `:11434` URL is native Ollama and is ignored for this baseline.
 
 If keys are missing, the script falls back to mock/demo and labels the report accordingly.
 

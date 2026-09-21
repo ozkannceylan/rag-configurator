@@ -28,7 +28,10 @@ from app.evaluation.compare import (  # noqa: E402
     run_compare,
     write_artifacts,
 )
-from app.evaluation.mock_judges import SimulatedLLMJudge, recorded_jev_judge  # noqa: E402
+from app.evaluation.mock_judges import (
+    SimulatedLLMJudge,
+    recorded_jev_judge,
+)  # noqa: E402
 
 
 def _env_flag(name: str) -> bool:
@@ -50,37 +53,10 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _build_live_llm_judge():
-    from app.core.settings import settings
-    from app.evaluation.quality_judge import QualityJudge
-    from app.llm.base import LLMConfig
-    from app.llm.factory import LLMProvider, get_llm
+    """LLM baseline for live compare: Ollama Cloud OpenAI-compat, not OpenAI/Anthropic."""
+    from app.evaluation.ollama_cloud import build_ollama_cloud_quality_judge
 
-    provider_str = os.environ.get("JEV_EVAL_LLM_PROVIDER") or settings.default_llm_provider
-    try:
-        provider = LLMProvider(provider_str.lower())
-    except ValueError:
-        provider = LLMProvider.OPENAI
-    model = os.environ.get("JEV_EVAL_LLM_MODEL") or settings.default_llm_model
-    if provider == LLMProvider.OPENAI and not settings.openai_api_key:
-        return None
-    if provider == LLMProvider.ANTHROPIC and not settings.anthropic_api_key:
-        return None
-    api_key = (
-        settings.openai_api_key
-        if provider == LLMProvider.OPENAI
-        else settings.anthropic_api_key
-    )
-    llm = get_llm(
-        provider=provider,
-        config=LLMConfig(
-            model=model,
-            temperature=0.0,
-            max_tokens=256,
-            api_key=api_key,
-            base_url=settings.ollama_base_url if provider == LLMProvider.OLLAMA else None,
-        ),
-    )
-    return QualityJudge(llm=llm, judge_name="llm")
+    return build_ollama_cloud_quality_judge()
 
 
 def _build_live_jev_judge():
@@ -96,7 +72,11 @@ async def _main_async(args: argparse.Namespace) -> int:
     cases = load_eval_cases(cases_path)
     live = bool(args.live) or _env_flag("JEV_EVAL_LIVE")
     repeats = args.repeats or _env_int("JEV_EVAL_REPEATS", 10)
-    usd_cap = args.usd_cap if args.usd_cap is not None else _env_float("JEV_EVAL_USD_CAP", 2.0)
+    usd_cap = (
+        args.usd_cap
+        if args.usd_cap is not None
+        else _env_float("JEV_EVAL_USD_CAP", 2.0)
+    )
     out_dir = Path(args.out_dir) if args.out_dir else ROOT / "artifacts" / "jev-eval"
 
     judges = {}
@@ -108,7 +88,7 @@ async def _main_async(args: argparse.Namespace) -> int:
         if jev is None:
             missing.append("TYPESAFE_API_KEY")
         if llm is None:
-            missing.append("OPENAI_API_KEY or ANTHROPIC_API_KEY")
+            missing.append("OLLAMA_API_KEY (Ollama Cloud OpenAI-compat)")
         if missing:
             print(
                 "Live compare requested but missing: "
@@ -138,7 +118,9 @@ async def _main_async(args: argparse.Namespace) -> int:
         mode=mode,
     )
     paths = write_artifacts(result, out_dir)
-    print(f"mode={result.mode} cases={len(cases)} repeats={repeats} cost=${result.total_cost_usd:.6f}")
+    print(
+        f"mode={result.mode} cases={len(cases)} repeats={repeats} cost=${result.total_cost_usd:.6f}"
+    )
     for name, summary in result.summaries.items():
         print(
             f"{name}: agreement={summary.agreement:.3f} "
@@ -160,8 +142,12 @@ def main() -> int:
         "--cases",
         help="Path to rag_eval_cases.json (default: rag-service test fixtures)",
     )
-    parser.add_argument("--repeats", type=int, default=None, help="K repeats (default 10)")
-    parser.add_argument("--usd-cap", type=float, default=None, help="Hard USD cost proxy cap")
+    parser.add_argument(
+        "--repeats", type=int, default=None, help="K repeats (default 10)"
+    )
+    parser.add_argument(
+        "--usd-cap", type=float, default=None, help="Hard USD cost proxy cap"
+    )
     parser.add_argument(
         "--out-dir",
         help="Artifact directory (default: artifacts/jev-eval)",

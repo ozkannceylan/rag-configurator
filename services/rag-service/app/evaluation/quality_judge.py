@@ -28,6 +28,9 @@ DEFAULT_LLM_PRICING = {
     "claude-3-5-haiku-20241022": (0.80, 4.00),
     "claude-3-5-sonnet-20241022": (3.00, 15.00),
     "claude-3-haiku-20240307": (0.25, 1.25),
+    # Ollama Cloud published-ish proxies (not an invoice)
+    "gpt-oss:20b": (0.07, 0.30),
+    "gpt-oss:120b": (0.15, 0.60),
 }
 DEFAULT_INPUT_USD_PER_MILLION = 0.15
 DEFAULT_OUTPUT_USD_PER_MILLION = 0.60

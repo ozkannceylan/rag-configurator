@@ -194,6 +194,12 @@ def _build_evaluator(evaluator_type: str, metrics: List[str]):
             base_url=settings.typesafe_base_url,
             model=settings.typesafe_model,
         )
+    if kind == "quality":
+        from app.evaluation.ollama_cloud import build_ollama_cloud_quality_judge
+
+        cloud = build_ollama_cloud_quality_judge(max_tokens=1024)
+        if cloud is not None:
+            return cloud
 
     provider_str = settings.default_llm_provider
     try:

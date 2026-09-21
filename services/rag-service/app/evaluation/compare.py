@@ -470,9 +470,7 @@ def render_compare_report(result: CompareResult) -> str:
     lines.append("# Offline mock/demo (no API keys)")
     lines.append("make jev-eval-compare")
     lines.append("")
-    lines.append(
-        "# Live (requires TYPESAFE_API_KEY + OPENAI_API_KEY or ANTHROPIC_API_KEY)"
-    )
+    lines.append("# Live (requires TYPESAFE_API_KEY + OLLAMA_API_KEY for Ollama Cloud)")
     lines.append("JEV_EVAL_LIVE=1 JEV_EVAL_USD_CAP=2.0 make jev-eval-compare-live")
     lines.append("```")
     lines.append("")

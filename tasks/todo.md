@@ -20,10 +20,13 @@ Integrate TypeSafe Jev as a judge into rag-configurator and compare it to an LLM
 - No Obsidian vault found in this environment; proceeding from the repo.
 - Do not rewrite agent architectures. LangSmith is optional and not required.
 - Live TypeSafe/OpenAI keys may be unavailable; ship mock path + recorded fixtures.
+- Live LLM baseline is Ollama Cloud OpenAI-compat (`OLLAMA_API_KEY`, `https://ollama.com/v1`), not OpenAI/Anthropic direct.
 - Claims are observational for this RAG fixture set — no ASIL/safety overclaims.
 
 ## Review
 
-- Offline `tests/test_jev_eval.py` + existing `tests/test_evaluation.py`: 63 passed.
+- Offline `tests/test_jev_eval.py` + existing `tests/test_evaluation.py`: 70 passed.
 - Mock compare: Jev agreement 1.000 / signal 1.000 vs LLM 0.814 / 0.677 on 7 frozen Naive RAG cases × 10 repeats.
 - Graphify rebuild skipped (`graphify` not installed in this environment).
+- Live LLM baseline now prefers Ollama Cloud OpenAI-compat (`OLLAMA_API_KEY` → `https://ollama.com/v1`).
+- PR #1 CI is red for the same pre-existing reasons as `main` (docker context, gateway errcheck in untouched websocket files, eslint missing, config-service ruff). No new CI failures introduced.

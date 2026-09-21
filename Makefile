@@ -14,7 +14,7 @@ help:
 	@echo "  build        Build all Docker images"
 	@echo "  test         Run all tests"
 	@echo "  jev-eval-compare  Jev vs LLM-as-judge on frozen RAG traces (mock/demo)"
-	@echo "  jev-eval-compare-live  Same compare with live TypeSafe + LLM keys"
+	@echo "  jev-eval-compare-live  Same compare with live TypeSafe + Ollama Cloud keys"
 	@echo "  lint         Run linters"
 	@echo "  clean        Clean up generated files"
 	@echo "  install      Install all dependencies"

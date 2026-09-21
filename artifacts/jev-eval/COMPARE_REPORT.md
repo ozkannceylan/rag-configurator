@@ -3,7 +3,7 @@
 Side-by-side comparison of TypeSafe Jev (System One) and an LLM-as-judge baseline on **fixed Naive RAG traces**. Inspired by LangChain’s [Jev-as-a-Judge for Agent Evals](https://www.langchain.com/blog/jev-agent-evals-langsmith) ([experiment repo](https://github.com/danielgshea/jev-as-a-judge)).
 
 - **Mode:** `mock/demo`
-- **Generated at:** 2026-09-21T07:11:59.579485+00:00
+- **Generated at:** 2026-09-21T08:17:33.923390+00:00
 - **Cases:** 7
 - **Repeats requested:** 10
 - **USD cap:** $2.00
@@ -54,7 +54,7 @@ Numbers below are observational for this fixture set. They are **not** a general
 # Offline mock/demo (no API keys)
 make jev-eval-compare
 
-# Live (requires TYPESAFE_API_KEY + OPENAI_API_KEY or ANTHROPIC_API_KEY)
+# Live (requires TYPESAFE_API_KEY + OLLAMA_API_KEY for Ollama Cloud)
 JEV_EVAL_LIVE=1 JEV_EVAL_USD_CAP=2.0 make jev-eval-compare-live
 ```
 

@@ -68,11 +68,12 @@ class Settings(BaseSettings):
     # Anthropic Configuration
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
 
-    # Ollama Configuration (local models)
+    # Ollama Configuration (local native /api/chat, or Cloud via OLLAMA_API_KEY)
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         alias="OLLAMA_BASE_URL",
     )
+    ollama_api_key: Optional[str] = Field(default=None, alias="OLLAMA_API_KEY")
     ollama_default_model: str = Field(
         default="llama3.2",
         alias="OLLAMA_DEFAULT_MODEL",
